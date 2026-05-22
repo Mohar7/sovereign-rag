@@ -1,0 +1,94 @@
+[project]
+name = "sovereign-rag"
+version = "0.1.0"
+description = "Fully self-hosted GraphRAG: Milvus hybrid (dense+BM25) retrieval + Neo4j knowledge-graph local-search + cross-encoder reranking + contextual retrieval, powered end-to-end by Ollama. Web ingestion via Crawl4AI/SearXNG. Zero paid APIs."
+requires-python = ">=3.12,<3.14"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Muhriddin", email = "wg.super.statist@gmail.com" }]
+
+dependencies = [
+    # ---- LangChain core (splitters, document model) ----
+    "langchain>=1.0,<2.0",
+    "langchain-core>=1.0,<2.0",
+    "langchain-text-splitters>=1.0,<2.0",
+
+    # ---- Document parsing: Docling (IBM) — layout-aware PDF/DOCX → markdown ----
+    "docling>=2.0,<3.0",
+
+    # ---- Ollama: LLM + embeddings, fully local ----
+    "langchain-ollama>=0.2,<1.0",
+    "ollama>=0.3,<1.0",
+
+    # ---- Vector DB: Milvus (dense + native BM25 hybrid) ----
+    "pymilvus>=2.6,<3.0",
+
+    # ---- Knowledge graph: Neo4j Community ----
+    "neo4j>=5.20,<6.0",
+    "neo4j-graphrag>=1.0,<2.0",
+
+    # ---- Reranking: cross-encoder, CPU-friendly ----
+    "flashrank>=0.2.9,<1.0",
+
+    # ---- Web ingestion ----
+    "crawl4ai>=0.7,<0.9",
+    "ddgs>=9.0,<10.0",           # SearXNG fallback search
+    "httpx>=0.27,<0.29",
+
+    # ---- API ----
+    "fastapi>=0.115,<0.116",
+    "uvicorn[standard]>=0.32,<0.33",
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.4,<3.0",
+    "python-multipart>=0.0.9,<0.1",  # file upload
+
+    # ---- Observability ----
+    "langfuse>=3.0,<4.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6,<0.7",
+    "mypy>=1.11,<2.0",
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<0.25",
+    "pytest-cov>=5.0,<6.0",
+    "pytest-mock>=3.14,<4.0",
+    "respx>=0.21,<0.22",
+    "ragas>=0.2,<0.3",          # eval (dev/CI only)
+    "pre-commit>=3.8,<4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sovereign_rag"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "RUF", "ASYNC", "G", "T20", "S"]
+ignore = ["E501", "S101", "B008", "S105", "S104"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S", "T20"]
+"eval/**/*.py" = ["T20"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+disallow_untyped_decorators = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "integration: tests that need Milvus/Neo4j/Ollama running",
+    "unit: pure unit tests",
+]

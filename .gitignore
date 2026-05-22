@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+junit.xml
+htmlcov/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local model caches / artifacts
+.flashrank_cache/
+*.onnx
+models/
+
+# Docling / crawl4ai caches
+.docling_cache/
+.crawl4ai/
+
+# SearXNG generated secret
+deploy/searxng/settings.yml
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
