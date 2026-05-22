@@ -112,8 +112,70 @@ def test_chunk_to_param_flattens() -> None:
         "raw_text": "r",
         "position": 2,
         "page": 1,
+        "title": "",
+        "source_uri": "",
         "embedding": [0.1, 0.2, 0.3],
     }
+
+
+def test_chunk_to_param_carries_title_and_source_uri_from_metadata() -> None:
+    """Regression: title/source_uri must flow Chunk.metadata → Cypher params,
+    otherwise graph-retrieved citations come back with empty title/source_uri
+    and a graph result outranking a Milvus result on the same chunk_id ends
+    up shadowing the Milvus metadata at dedup time."""
+    chunk = Chunk(
+        doc_id="d",
+        text="t",
+        raw_text="r",
+        position=0,
+        chunk_id="cid",
+        metadata={"title": "My Doc", "source_uri": "smoke://test"},
+    )
+    param = _chunk_to_param(chunk, [0.0])
+    assert param["title"] == "My Doc"
+    assert param["source_uri"] == "smoke://test"
+
+
+def test_row_to_retrieved_chunk_populates_metadata_from_title_and_source_uri() -> None:
+    """Regression: the other half of the round-trip. The local_search Cypher
+    RETURNs c.title / c.source_uri, and the row mapper must fold them back
+    into Chunk.metadata so the citation builder finds them."""
+    row: dict[str, Any] = {
+        "chunk_id": "c1",
+        "doc_id": "d1",
+        "text": "t",
+        "raw_text": "body",
+        "position": 0,
+        "page": None,
+        "title": "My Doc",
+        "source_uri": "smoke://test",
+        "score": 0.9,
+        "facts": None,
+    }
+    rc = _row_to_retrieved_chunk(row)
+    assert rc.chunk.metadata["title"] == "My Doc"
+    assert rc.chunk.metadata["source_uri"] == "smoke://test"
+
+
+def test_row_to_retrieved_chunk_omits_empty_title_and_source_uri() -> None:
+    """Empty / None title/source_uri should leave metadata empty, not pollute
+    it with empty-string keys (lets the citation builder fall back to ""s
+    via dict.get with default)."""
+    row: dict[str, Any] = {
+        "chunk_id": "c1",
+        "doc_id": "d1",
+        "text": "t",
+        "raw_text": "body",
+        "position": 0,
+        "page": None,
+        "title": "",
+        "source_uri": None,
+        "score": 1.0,
+        "facts": None,
+    }
+    rc = _row_to_retrieved_chunk(row)
+    assert "title" not in rc.chunk.metadata
+    assert "source_uri" not in rc.chunk.metadata
 
 
 def test_extraction_to_params_shapes_lists() -> None:

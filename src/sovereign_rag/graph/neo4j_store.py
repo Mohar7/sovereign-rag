@@ -179,11 +179,19 @@ def _row_to_retrieved_chunk(row: dict[str, Any]) -> RetrievedChunk:
     """Map a ``local_search`` Cypher result row to a :class:`RetrievedChunk`.
 
     Expected keys: ``chunk_id``, ``doc_id``, ``text``, ``raw_text``,
-    ``position``, ``page``, ``score``, ``facts`` (list[str]).
+    ``position``, ``page``, ``title``, ``source_uri``, ``score``,
+    ``facts`` (list[str]).
     """
     raw_text: str = row["raw_text"]
     facts: list[str] = row.get("facts") or []
     enriched = _enrich_chunk_text(raw_text, facts)
+    metadata: dict[str, Any] = {}
+    title = row.get("title")
+    source_uri = row.get("source_uri")
+    if title:
+        metadata["title"] = title
+    if source_uri:
+        metadata["source_uri"] = source_uri
     chunk = Chunk(
         doc_id=row["doc_id"],
         text=enriched,
@@ -191,12 +199,14 @@ def _row_to_retrieved_chunk(row: dict[str, Any]) -> RetrievedChunk:
         position=int(row.get("position") or 0),
         page=row.get("page"),
         chunk_id=row["chunk_id"],
+        metadata=metadata,
     )
     return RetrievedChunk(chunk=chunk, score=float(row["score"]), source="graph")
 
 
 def _chunk_to_param(chunk: Chunk, embedding: list[float]) -> dict[str, Any]:
     """Flatten a chunk + its embedding into a Cypher parameter map."""
+    meta = chunk.metadata or {}
     return {
         "chunk_id": chunk.chunk_id,
         "doc_id": chunk.doc_id,
@@ -204,6 +214,8 @@ def _chunk_to_param(chunk: Chunk, embedding: list[float]) -> dict[str, Any]:
         "raw_text": chunk.raw_text,
         "position": chunk.position,
         "page": chunk.page,
+        "title": str(meta.get("title", "")),
+        "source_uri": str(meta.get("source_uri", "")),
         "embedding": embedding,
     }
 
@@ -350,8 +362,10 @@ class Neo4jGraphStore:
                     c.raw_text = ch.raw_text,
                     c.position = ch.position,
                     c.page = ch.page,
+                    c.title = ch.title,
+                    c.source_uri = ch.source_uri,
                     c.embedding = ch.embedding
-                """,
+""",
                 chunks=batch,
                 database_=self._database,
             )
@@ -450,6 +464,8 @@ class Neo4jGraphStore:
                    c.raw_text   AS raw_text,
                    c.position   AS position,
                    c.page       AS page,
+                   c.title      AS title,
+                   c.source_uri AS source_uri,
                    score        AS score,
                    facts        AS facts
             ORDER BY score DESC
