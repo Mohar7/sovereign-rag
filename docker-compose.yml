@@ -58,8 +58,8 @@ services:
       timeout: 20s
       retries: 3
     ports:
-      - "19530:19530"  # gRPC client
-      - "9091:9091"    # health/metrics
+      - "${MILVUS_HOST_PORT:-19530}:19530"          # gRPC client
+      - "${MILVUS_HEALTH_HOST_PORT:-9091}:9091"     # health/metrics
     depends_on:
       - milvus-etcd
       - milvus-minio
@@ -75,8 +75,8 @@ services:
     volumes:
       - neo4j-data:/data
     ports:
-      - "7474:7474"  # browser UI
-      - "7687:7687"  # bolt
+      - "${NEO4J_HTTP_HOST_PORT:-7474}:7474"   # browser UI
+      - "${NEO4J_BOLT_HOST_PORT:-7687}:7687"   # bolt
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
       interval: 15s
@@ -94,8 +94,9 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
-      # Host port 5433 to coexist with any system Postgres on 5432.
-      - "5433:5432"
+      # Default host port 5433 (5432 is often already in use). CI overrides
+      # via env to coexist with a parallel dev stack on the same host.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sovereign -d sovereign_lg"]
       interval: 10s
@@ -111,7 +112,7 @@ services:
     volumes:
       - ./deploy/searxng:/etc/searxng:rw
     ports:
-      - "8082:8080"
+      - "${SEARXNG_HOST_PORT:-8082}:8080"
     networks: [sovereign]
 
   # ---------- The API (opt-in via `--profile app`) ----------

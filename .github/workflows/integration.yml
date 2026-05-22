@@ -44,13 +44,22 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_EMBED_MODEL: text-embedding-3-large
       EMBED_DIM: "3072"
-      # Local services.
-      MILVUS_URI: http://localhost:19530
-      NEO4J_URI: neo4j://localhost:7687
-      SEARXNG_URL: http://localhost:8082
-      # LangGraph checkpoint store — compose publishes Postgres on host 5433.
+      # Host ports — bumped off the defaults so CI coexists with any local
+      # dev stack on the same self-hosted runner (sovereign-rag uses
+      # 19530/9091/7474/7687/8082/5433 by default). docker-compose.yml
+      # reads these via `${MILVUS_HOST_PORT:-19530}` etc.
+      MILVUS_HOST_PORT: "19531"
+      MILVUS_HEALTH_HOST_PORT: "9092"
+      NEO4J_HTTP_HOST_PORT: "7475"
+      NEO4J_BOLT_HOST_PORT: "7688"
+      POSTGRES_HOST_PORT: "5434"
+      SEARXNG_HOST_PORT: "8083"
+      # In-process URIs that match the host ports above.
+      MILVUS_URI: http://localhost:19531
+      NEO4J_URI: neo4j://localhost:7688
+      SEARXNG_URL: http://localhost:8083
       POSTGRES_PASSWORD: sovereign-ci-pw
-      LANGGRAPH_PG_URI: postgresql://sovereign:sovereign-ci-pw@localhost:5433/sovereign_lg
+      LANGGRAPH_PG_URI: postgresql://sovereign:sovereign-ci-pw@localhost:5434/sovereign_lg
       # Opt-in flags the integration tests gate on.
       RUN_NEO4J_IT: "1"
       RUN_INGESTION_IT: "1"
@@ -75,7 +84,7 @@ jobs:
       - name: Wait for Milvus health
         run: |
           for i in $(seq 1 60); do
-            if curl -sf http://localhost:9091/healthz >/dev/null; then
+            if curl -sf "http://localhost:${MILVUS_HEALTH_HOST_PORT}/healthz" >/dev/null; then
               echo "Milvus healthy"; exit 0
             fi
             echo "waiting for Milvus ($i)..."; sleep 5
@@ -85,7 +94,7 @@ jobs:
       - name: Wait for Neo4j health
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:7474 >/dev/null; then
+            if curl -sf "http://localhost:${NEO4J_HTTP_HOST_PORT}" >/dev/null; then
               echo "Neo4j healthy"; exit 0
             fi
             echo "waiting for Neo4j ($i)..."; sleep 5
