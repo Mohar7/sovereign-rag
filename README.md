@@ -218,7 +218,7 @@ Tests that need Milvus/Neo4j/Ollama are marked `@pytest.mark.integration` and sk
 
 The integration tier needs Docker + browser deps + LLM + embeddings. The Mac Mini runner can't reasonably host a local Ollama daemon, and **Ollama Cloud does not expose an embeddings endpoint** — so the CI tier uses:
 
-- **LLM**: Ollama Cloud `deepseek-v4-pro` (`OLLAMA_API_KEY` secret)
+- **LLM**: Ollama Cloud `kimi-k2.6` (`OLLAMA_API_KEY` secret)
 - **Embeddings**: OpenAI `text-embedding-3-large` at 3072-dim (`OPENAI_API_KEY` secret) — `EMBED_PROVIDER=openai` flips the dispatcher
 - **Vector store / graph / search**: local containers on the runner (compose stack)
 
