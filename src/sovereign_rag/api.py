@@ -20,6 +20,7 @@ import logging
 import tempfile
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -111,7 +112,7 @@ class AskResponse(BaseModel):
 def _to_ask_response(result: AnswerResult) -> AskResponse:
     return AskResponse(
         answer=result.answer,
-        citations=[CitationModel(**vars(c)) for c in result.citations],
+        citations=[CitationModel(**asdict(c)) for c in result.citations],
         retrieved=result.retrieved,
         used=result.used,
     )
