@@ -1,0 +1,74 @@
+[
+  {
+    "question": "What is the asyncio event loop and how many tasks run at once?",
+    "ground_truth": "The event loop is the single-threaded core of an asyncio application that runs asynchronous tasks and callbacks and performs IO. Exactly one task runs at any given moment; concurrency comes from interleaving tasks at await points, not from parallel threads.",
+    "relevant_doc_ids": ["asyncio-event-loop"],
+    "relevant_substrings": ["single-threaded", "exactly one task is running"]
+  },
+  {
+    "question": "How do you get the currently running event loop inside a coroutine?",
+    "ground_truth": "Use asyncio.get_running_loop(), which returns the running loop and raises RuntimeError if no loop is running. The older asyncio.get_event_loop() is discouraged inside coroutines.",
+    "relevant_doc_ids": ["asyncio-event-loop"],
+    "relevant_substrings": ["asyncio.get_running_loop()", "raises a `RuntimeError`"]
+  },
+  {
+    "question": "What is the recommended high-level way to run an asyncio program?",
+    "ground_truth": "asyncio.run(coro) is the recommended entry point. It creates a new event loop, runs the coroutine to completion, and closes the loop. It should be called only once per program and not while another loop is already running.",
+    "relevant_doc_ids": ["asyncio-event-loop"],
+    "relevant_substrings": ["asyncio.run(coro)` is the recommended", "called only once per program"]
+  },
+  {
+    "question": "What happens if a coroutine performs a long blocking call without awaiting?",
+    "ground_truth": "It starves every other task on the loop, because the single-threaded event loop cannot preempt running code; control is only yielded at await points.",
+    "relevant_doc_ids": ["asyncio-event-loop"],
+    "relevant_substrings": ["will starve every", "loop cannot preempt running code"]
+  },
+  {
+    "question": "Does calling an async def function run it immediately?",
+    "ground_truth": "No. Calling a coroutine function returns a coroutine object that does nothing until it is awaited or scheduled on the event loop. Discarding it produces a 'coroutine was never awaited' warning.",
+    "relevant_doc_ids": ["asyncio-tasks"],
+    "relevant_substrings": ["returns a coroutine object that does nothing until it is awaited", "coroutine was never awaited"]
+  },
+  {
+    "question": "What does asyncio.create_task do?",
+    "ground_truth": "asyncio.create_task(coro) wraps a coroutine in a Task and schedules it to run concurrently on the event loop. The task starts making progress soon after creation, before you await it; awaiting it later returns its result or re-raises its exception.",
+    "relevant_doc_ids": ["asyncio-tasks"],
+    "relevant_substrings": ["wraps a coroutine in a `Task`", "schedules it to\nrun on the event loop concurrently"]
+  },
+  {
+    "question": "How does asyncio.gather handle ordering and exceptions?",
+    "ground_truth": "asyncio.gather runs awaitables concurrently and returns their results in the same order they were passed. By default it propagates the first exception immediately; with return_exceptions=True it collects exceptions into the result list instead of raising.",
+    "relevant_doc_ids": ["asyncio-tasks"],
+    "relevant_substrings": ["returns a\nlist of their results in the same order", "return_exceptions=True"]
+  },
+  {
+    "question": "What is asyncio.TaskGroup and what does it do on exit?",
+    "ground_truth": "asyncio.TaskGroup, added in Python 3.11, is a context manager for structured concurrency. When the async with block exits it waits for all tasks created in it; if any task raises, it cancels the rest and propagates the errors as an ExceptionGroup.",
+    "relevant_doc_ids": ["asyncio-tasks"],
+    "relevant_substrings": ["structured\nconcurrency", "propagates the errors as an `ExceptionGroup`"]
+  },
+  {
+    "question": "Why is time.sleep a problem in an asyncio program, and what should you use instead?",
+    "ground_truth": "Because the event loop is single-threaded, time.sleep() blocks the whole loop and prevents every other task from running. The asyncio-friendly alternative is await asyncio.sleep(seconds), which yields control back to the loop instead of blocking the thread.",
+    "relevant_doc_ids": ["asyncio-blocking"],
+    "relevant_substrings": ["A call to `time.sleep()`", "await asyncio.sleep(seconds)`, which yields control"]
+  },
+  {
+    "question": "How can you run blocking or CPU-bound code without freezing the event loop?",
+    "ground_truth": "Run it in an executor. loop.run_in_executor(None, func, ...) runs func in the default thread pool, and the higher-level asyncio.to_thread(func, ...) (Python 3.9+) does the same with a simpler interface and is preferred for offloading blocking IO.",
+    "relevant_doc_ids": ["asyncio-blocking"],
+    "relevant_substrings": ["run_in_executor(None, func", "asyncio.to_thread(func"]
+  },
+  {
+    "question": "Is asyncio.Lock thread-safe?",
+    "ground_truth": "No. asyncio.Lock is not thread-safe; it only coordinates coroutines running on the same event loop and must be awaited. It should never be shared across threads.",
+    "relevant_doc_ids": ["asyncio-blocking"],
+    "relevant_substrings": ["`asyncio.Lock` is not thread-safe", "never be shared across threads"]
+  },
+  {
+    "question": "What happens when an asyncio task is cancelled?",
+    "ground_truth": "task.cancel() raises asyncio.CancelledError inside the coroutine at its next suspension point. Code may catch it to clean up, but should re-raise CancelledError so cancellation actually takes effect rather than being silently swallowed.",
+    "relevant_doc_ids": ["asyncio-tasks"],
+    "relevant_substrings": ["raises `asyncio.CancelledError`", "re-raise it"]
+  }
+]

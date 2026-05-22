@@ -1,0 +1,154 @@
+# sovereign-rag
+
+> Fully self-hosted **GraphRAG**: Milvus hybrid retrieval (dense + BM25) plus Neo4j knowledge-graph local-search, then cross-encoder reranking, with Anthropic-style contextual retrieval — powered **end-to-end by Ollama**. Web ingestion via Docling / Crawl4AI / SearXNG. **Zero paid APIs.**
+
+[![CI](https://github.com/Mohar7/sovereign-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohar7/sovereign-rag/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Milvus 2.6](https://img.shields.io/badge/Milvus-2.6-00a1ea.svg)](https://milvus.io/)
+[![Neo4j 5](https://img.shields.io/badge/Neo4j-5%20Community-008cc1.svg)](https://neo4j.com/)
+[![Ollama](https://img.shields.io/badge/LLM-Ollama-black.svg)](https://ollama.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+Everything runs on your own machine. No OpenAI/Anthropic/Cohere keys — the LLM, the embeddings, the reranker, the vector DB, the graph DB, and web search are all local or self-hosted.
+
+## Why this exists
+
+"Naive RAG" (embed -> cosine search -> stuff the prompt) loses to current best-practice on real corpora. This project implements the 2025/26 stack a senior reviewer expects, and **measures** each layer:
+
+| Technique | What it buys | Here |
+|---|---|---|
+| **Hybrid search** (dense + BM25, RRF) | BM25 catches exact tokens (codes, names, IDs) dense embeddings miss | Native in Milvus 2.6 — one `hybrid_search` call, server-side BM25 |
+| **Cross-encoder reranking** | Biggest quality-per-line jump; re-scores top-50 -> top-5 | FlashRank (CPU, ONNX) — no GPU, no API |
+| **Contextual Retrieval** (Anthropic, 2024) | Prepends chunk-situating context before indexing; ~-35% retrieval failures | Local LLM generates the prefix |
+| **GraphRAG local-search** | Multi-hop questions vector search can't answer | Neo4j entity graph: vector-seed -> 1-hop traverse |
+| **Evaluation harness** | Proves the above instead of cargo-culting it | RAGAS (Ollama judge) + retrieval precision@k |
+
+## Architecture
+
+```
+  Ingestion ----------------------------------------------------------------+
+   Docling (PDF/DOCX->md) . Crawl4AI (web->md) . SearXNG (search) . text     |
+                                   |                                         |
+                                   v                                         |
+   chunk (recursive ~400tok/15%) -> contextualize (Ollama prefix)            |
+                                   |                                         |
+                +------------------+-------------------+                     |
+                v                                      v                     |
+   +------------------------+           +---------------------------+        |
+   | Milvus 2.6             |           | Neo4j 5 Community          |        |
+   |  dense (HNSW/COSINE)   |           |  Chunk + Entity graph      |        |
+   |  + sparse BM25 (native)|           |  native vector index       |        |
+   |  hybrid_search + RRF   |           |  LLM entity extraction      |        |
+   +-----------+------------+           +-------------+--------------+        |
+               |  top-50                 local-search |  seeds + 1 hop        |
+               +---------------+----------------------+                       |
+                               v                                             |
+                  dedup -> FlashRank cross-encoder rerank -> top-5            |
+                               v                                             |
+                   Ollama LLM -> cited answer  <-----------------------------+
+
+  Eval: RAGAS (faithfulness / context-precision, Ollama judge) + precision@k
+  Obs:  Langfuse (optional)
+```
+
+**Stack.** Python 3.12 · LangChain 1.x (splitters/contracts) · **Milvus 2.6** (`pymilvus`, AsyncMilvusClient) · **Neo4j 5 Community** (`neo4j-graphrag`) · **Ollama** (`langchain-ollama`; qwen2.5:7b + bge-m3) · **FlashRank** reranker · **Docling** (IBM, layout-aware parsing) · **Crawl4AI** + **SearXNG** ingestion · **RAGAS** eval · FastAPI · uv · ruff/mypy/pytest.
+
+## Quick start
+
+```bash
+# 1. Models (host Ollama)
+ollama serve &
+ollama pull qwen2.5:7b
+ollama pull bge-m3
+
+# 2. Infra (Milvus + Neo4j + SearXNG)
+cp .env.example .env          # set NEO4J_PASSWORD
+docker compose up -d          # etcd+minio+milvus, neo4j, searxng
+
+# 3. App
+uv sync
+uv run uvicorn sovereign_rag.api:app --reload
+# http://localhost:8000/docs
+```
+
+> This is a heavy stack: Milvus standalone is 3 containers, Neo4j wants ~2 GB, and Docling/Crawl4AI pull torch + Chromium. Intended to run on a workstation or a sandbox VM, not a 1 GB box.
+
+### Use it
+
+```bash
+# Index a PDF (Docling)
+curl -F "file=@paper.pdf" http://localhost:8000/documents/file
+
+# Index a web page (Crawl4AI)
+curl -X POST http://localhost:8000/documents/url \
+  -H 'Content-Type: application/json' -d '{"url":"https://example.com/article"}'
+
+# Search the web (SearXNG) + ingest top hits
+curl -X POST http://localhost:8000/ingest/search \
+  -H 'Content-Type: application/json' -d '{"query":"milvus hybrid search","max_results":3}'
+
+# Ask — hybrid + graph retrieval, reranked, cited
+curl -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' -d '{"question":"How does BM25 fusion work here?"}'
+# -> {"answer":"...[1][2]...","citations":[{chunk_id,title,source_uri,page,score,snippet}],...}
+```
+
+## How retrieval works
+
+1. **Index** — a `SourceDocument` (from Docling/Crawl4AI/text) is recursively chunked, each chunk gets an LLM-generated contextual prefix (Anthropic's technique), then it's written to **both** Milvus (dense + BM25) and Neo4j (chunk node + extracted entity graph).
+2. **Retrieve** — the query hits Milvus `hybrid_search` (dense ANN + server-side BM25, fused with `RRFRanker`) **and** Neo4j `local_search` (vector-seed chunks -> traverse mentioned entities 1 hop -> append relation facts) concurrently.
+3. **Rerank** — the union is deduped by chunk and re-scored by a FlashRank cross-encoder; top-5 survive.
+4. **Answer** — the local LLM answers using only the numbered passages, citing `[n]` inline; the API returns structured citations.
+
+Every layer is toggle-able via env (`ENABLE_GRAPH_RETRIEVAL`, `ENABLE_CONTEXTUAL_RETRIEVAL`) so you can A/B their contribution in the eval harness.
+
+## Evaluation
+
+```bash
+uv run python eval/evaluate.py
+```
+
+Loads `eval/qa_pairs.json` (a golden set over a self-contained corpus in `eval/corpus/`), runs retrieval for each question, and reports **retrieval precision@k / recall@k / MRR / NDCG** plus **RAGAS** (faithfulness, answer relevancy, context precision/recall) — with the **Ollama** model as judge, no OpenAI. Without services running it degrades to an offline IR demo over the bundled corpus and says so.
+
+## Project layout
+
+```
+src/sovereign_rag/
+  documents.py        # SourceDocument / Chunk / RetrievedChunk contracts
+  config.py           # pydantic-settings, local-by-default
+  providers/
+    ollama.py         # ChatOllama + OllamaEmbeddings
+    reranker.py       # FlashRank cross-encoder
+  chunking.py         # recursive split + contextual-retrieval prefixing
+  ingestion/          # docling (pdf) . crawl4ai (web) . searxng (search)
+  vectorstore/
+    milvus_store.py   # dense + native BM25 hybrid, RRF
+  graph/
+    neo4j_store.py    # LLM entity extraction + vector-seed graph traverse
+  retrieval/
+    pipeline.py       # orchestrates index -> retrieve -> rerank -> answer
+  api.py              # FastAPI
+eval/                 # golden set + RAGAS + IR metrics
+tests/                # 94 unit tests (services mocked); integration marked + skipped
+```
+
+## Testing
+
+```bash
+uv run pytest -m "not integration"   # 94 unit tests, no services, ~5s
+uv run ruff check src/ tests/ eval/
+uv run mypy src/
+```
+
+Tests that need Milvus/Neo4j/Ollama are marked `@pytest.mark.integration` and skipped unless the services are reachable (gated by `RUN_*_IT=1` env flags) — so CI and contributors run the full unit suite offline. Live/integration runs belong in a sandbox VM with the full stack up, not on a dev laptop.
+
+## Roadmap
+
+- [ ] **Semantic chunking** — replace fixed recursive splitting with embedding-similarity breakpoint chunking; A/B against recursive in the eval harness.
+- [ ] **Camoufox** ingestion tier for anti-bot sites (lazy-imported hook already in `ingestion/web.py`).
+- [ ] Community-detection global-search (Leiden) on the graph for "dataset-wide" questions.
+- [ ] Parent-document retrieval (small-to-large) on the Milvus side.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
