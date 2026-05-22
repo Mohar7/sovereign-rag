@@ -1,17 +1,22 @@
-# NOTE: This file must be moved to `.github/workflows/ci.yml`.
-# It was written to the repo root because a local security hook blocked
-# writing directly into `.github/workflows/`. Move it with:
-#     mkdir -p .github/workflows && git mv ci-workflow.yml .github/workflows/ci.yml
-# The workflow itself uses no untrusted event input in run: steps (only the
-# safe `github.workflow` / `github.ref` context in the concurrency group).
+# Fast feedback CI — runs on every push and PR to main.
+# Hard-enforced: ruff (lint + format) and mypy. Unit tests with coverage.
+# Heavy live-stack tests live in integration.yml.
 
 name: CI
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - "docs/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - "docs/**"
 
 # A newer push to the same ref cancels the older in-flight run.
 concurrency:
@@ -28,6 +33,7 @@ jobs:
   lint:
     name: Lint (ruff + mypy)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -36,9 +42,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-
-      - name: Set up Python 3.12
-        run: uv python install 3.12
+          python-version: "3.12"
 
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
@@ -49,14 +53,16 @@ jobs:
       - name: ruff format --check
         run: uv run ruff format --check src/ tests/ eval/
 
-      # Type-checking is advisory in CI for now (parallel-built modules may lag).
-      - name: mypy
-        continue-on-error: true
-        run: uv run mypy src/ tests/ eval/
+      # Strict on production code (src/); tests/eval kept loose because their
+      # ad-hoc dict literals don't survive mypy's dict-invariance pedantry and
+      # pinning them helps no real reader.
+      - name: mypy (production code)
+        run: uv run mypy src/
 
   test:
     name: Test (pytest + coverage)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -65,15 +71,13 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-
-      - name: Set up Python 3.12
-        run: uv python install 3.12
+          python-version: "3.12"
 
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
 
       # Integration tests need Milvus / Neo4j / Ollama, which are not provisioned
-      # in CI — exclude them and run only the service-free suite with coverage.
+      # here — exclude them and run only the service-free suite with coverage.
       - name: Run unit tests with coverage
         run: >-
           uv run pytest -m "not integration"

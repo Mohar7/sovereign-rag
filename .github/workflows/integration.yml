@@ -1,33 +1,50 @@
-# Integration tests against the LIVE stack (Milvus + Neo4j + SearXNG),
-# executed on a self-hosted runner (a Mac Mini with Docker).
+# Integration tests against the LIVE stack (Milvus + Neo4j + Postgres + SearXNG),
+# executed on a self-hosted Mac Mini.
 #
-# Why self-hosted: GitHub-hosted runners can't run the full Milvus standalone
-# stack within job limits. The Mac Mini runs the compose stack locally.
+# Triggers:
+#   - push to main          → ONLY `pytest -m integration` (~3 min). Validates
+#                             that the live stack still works after a merge.
+#   - workflow_dispatch     → same + optionally `eval/evaluate.py` if the
+#                             `run_eval` input is set. Use for ad-hoc benchmarks.
+#   - schedule (nightly)    → same + eval, so we have a daily quality trend.
 #
-# Models: the LLM runs on Ollama Cloud (https://ollama.com) and embeddings run
-# on OpenAI — Ollama Cloud does not expose an embeddings endpoint. Both are
-# supplied as repo secrets (OLLAMA_API_KEY, OPENAI_API_KEY).
+# The eval step is gated behind a separate condition because it makes 50+
+# sequential Ollama Cloud / OpenAI calls (RAGAS metrics × 12 questions) and
+# can take 10–20 min — that would dominate every-push feedback.
 #
-# SECURITY: triggers are limited to push-to-main and manual dispatch. Fork
-# pull requests do NOT run here — a self-hosted runner must never execute
-# untrusted PR code. Keep "Require approval for outside collaborators" on in
-# repo Settings -> Actions as defense in depth.
+# Models: LLM on Ollama Cloud (`kimi-k2.6`); embeddings on OpenAI
+# `text-embedding-3-large` (3072-dim) because Ollama Cloud has no embeddings
+# endpoint. Both are repo secrets.
+#
+# SECURITY: triggers exclude `pull_request` — a self-hosted runner must never
+# execute untrusted fork code. Keep "Require approval for outside collaborators"
+# enabled in repo Settings → Actions as defense in depth.
 
 name: Integration (self-hosted)
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - "docs/**"
   workflow_dispatch:
+    inputs:
+      run_eval:
+        description: "Also run the live eval harness (RAGAS, ~15 min)"
+        type: boolean
+        default: false
+  schedule:
+    # Nightly quality benchmark — 03:17 UTC ≈ 06:17 Asia/Tashkent.
+    # Avoids the top-of-hour API-load spikes.
+    - cron: "17 3 * * *"
 
-concurrency:
-  group: integration-${{ github.ref }}
-  cancel-in-progress: true
+# Self-hosted runner serializes jobs anyway, so we don't cancel in-flight —
+# we'd rather see every push's signal than chase mid-run cancellations.
 
 jobs:
   integration:
-    # Runner must be registered with these labels on the Mac Mini:
-    #   ./config.sh --labels self-hosted,macOS,sovereign
     runs-on: [self-hosted, macOS, sovereign]
     timeout-minutes: 40
     env:
@@ -112,9 +129,15 @@ jobs:
           echo "Postgres did not become healthy"; docker compose logs postgres; exit 1
 
       - name: Run integration tests
+        timeout-minutes: 10
         run: uv run pytest -m integration -v
 
-      - name: Run live eval harness (precision@k + RAGAS on Ollama)
+      # Eval is the expensive bit (RAGAS × 12 questions on cloud LLM). Skip on
+      # plain pushes — they only need to validate that the stack works —
+      # and run it on schedule / manual dispatch where wall time is fine.
+      - name: Run live eval harness (precision@k + RAGAS)
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_eval)
+        timeout-minutes: 25
         run: uv run python eval/evaluate.py
 
       - name: Tear down infra
