@@ -1,0 +1,91 @@
+# NOTE: This file must be moved to `.github/workflows/ci.yml`.
+# It was written to the repo root because a local security hook blocked
+# writing directly into `.github/workflows/`. Move it with:
+#     mkdir -p .github/workflows && git mv ci-workflow.yml .github/workflows/ci.yml
+# The workflow itself uses no untrusted event input in run: steps (only the
+# safe `github.workflow` / `github.ref` context in the concurrency group).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same ref cancels the older in-flight run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  lint:
+    name: Lint (ruff + mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras --dev
+
+      - name: ruff check
+        run: uv run ruff check src/ tests/ eval/
+
+      - name: ruff format --check
+        run: uv run ruff format --check src/ tests/ eval/
+
+      # Type-checking is advisory in CI for now (parallel-built modules may lag).
+      - name: mypy
+        continue-on-error: true
+        run: uv run mypy src/ tests/ eval/
+
+  test:
+    name: Test (pytest + coverage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras --dev
+
+      # Integration tests need Milvus / Neo4j / Ollama, which are not provisioned
+      # in CI — exclude them and run only the service-free suite with coverage.
+      - name: Run unit tests with coverage
+        run: >-
+          uv run pytest -m "not integration"
+          --cov=src/sovereign_rag
+          --cov=eval
+          --cov-report=xml
+          --cov-report=term-missing
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: warn
