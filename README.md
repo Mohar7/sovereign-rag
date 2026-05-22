@@ -10,7 +10,7 @@
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-black.svg)](https://ollama.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Local-dev (default).** Everything runs on your own machine — the LLM (Ollama), the embeddings (Ollama `bge-m3`), the reranker (FlashRank, CPU), the vector DB (Milvus), the graph DB (Neo4j), and web search (SearXNG) are all local or self-hosted. No paid keys required. The defaults in `config.py` reflect this.
+**Local-dev (default).** Everything runs on your own machine — the LLM (Ollama), the embeddings (Ollama `bge-m3`), the reranker (`BAAI/bge-reranker-v2-m3` cross-encoder, runs on MPS / CUDA / CPU), the vector DB (Milvus), the graph DB (Neo4j), and web search (SearXNG) are all local or self-hosted. No paid keys required. The defaults in `config.py` reflect this.
 
 **Honest caveat.** The CI integration tier on a self-hosted Mac Mini runner swaps the LLM to **Ollama Cloud** and embeddings to **OpenAI** — the Mac Mini can't reasonably host a local Ollama daemon, and Ollama Cloud doesn't expose an embeddings endpoint. So "sovereign-rag" is the *architecture* and the *local-dev path*; the CI integration job is not. Details in [Two-tier CI](#two-tier-ci).
 
@@ -21,7 +21,7 @@
 | Technique | What it buys | Here |
 |---|---|---|
 | **Hybrid search** (dense + BM25, RRF) | BM25 catches exact tokens (codes, names, IDs) dense embeddings miss | Native in Milvus 2.6 — one `hybrid_search` call, server-side BM25 |
-| **Cross-encoder reranking** | Biggest quality-per-line jump; re-scores top-50 -> top-5 | FlashRank (CPU, ONNX) — no GPU, no API |
+| **Cross-encoder reranking** | Biggest quality-per-line jump; re-scores top-50 -> top-5 | `BAAI/bge-reranker-v2-m3` via sentence-transformers — multilingual, ~568M params, MPS/CUDA/CPU, no API |
 | **Contextual Retrieval** (Anthropic, 2024) | Prepends chunk-situating context before indexing; ~-35% retrieval failures | Local LLM generates the prefix |
 | **GraphRAG local-search** | Multi-hop questions vector search can't answer | Neo4j entity graph: vector-seed -> 1-hop traverse |
 | **Evaluation harness** | Proves the above instead of cargo-culting it | RAGAS (Ollama judge) + retrieval precision@k |
@@ -46,7 +46,7 @@
                |  top-50                 local-search |  seeds + 1 hop        |
                +---------------+----------------------+                       |
                                v                                             |
-                  dedup -> FlashRank cross-encoder rerank -> top-5            |
+                  dedup -> bge-reranker-v2-m3 cross-encoder rerank -> top-5            |
                                v                                             |
                    Ollama LLM -> cited answer  <-----------------------------+
 
@@ -54,7 +54,7 @@
   Obs:  Langfuse (optional)
 ```
 
-**Stack.** Python 3.12 · LangChain 1.x (splitters/contracts) · **Milvus 2.6** (`pymilvus`, AsyncMilvusClient) · **Neo4j 5 Community** (`neo4j-graphrag`) · **Ollama** (`langchain-ollama`; qwen2.5:7b + bge-m3) · **FlashRank** reranker · **Docling** (IBM, layout-aware parsing) · **Crawl4AI** + **SearXNG** ingestion · **RAGAS** eval · FastAPI · uv · ruff/mypy/pytest.
+**Stack.** Python 3.12 · LangChain 1.x (splitters/contracts) · **Milvus 2.6** (`pymilvus`, AsyncMilvusClient) · **Neo4j 5 Community** (`neo4j-graphrag`) · **Ollama** (`langchain-ollama`; qwen2.5:7b + bge-m3) · **`BAAI/bge-reranker-v2-m3`** cross-encoder via sentence-transformers · **Docling** (IBM, layout-aware parsing) · **Crawl4AI** + **SearXNG** ingestion · **RAGAS** eval · FastAPI · uv · ruff/mypy/pytest.
 
 ## Quick start
 
@@ -100,7 +100,7 @@ curl -X POST http://localhost:8000/ask \
 
 1. **Index** — a `SourceDocument` (from Docling/Crawl4AI/text) is recursively chunked, each chunk gets an LLM-generated contextual prefix (Anthropic's technique), then it's written to **both** Milvus (dense + BM25) and Neo4j (chunk node + extracted entity graph).
 2. **Retrieve** — the query hits Milvus `hybrid_search` (dense ANN + server-side BM25, fused with `RRFRanker`) **and** Neo4j `local_search` (vector-seed chunks -> traverse mentioned entities 1 hop -> append relation facts) concurrently.
-3. **Rerank** — the union is deduped by chunk and re-scored by a FlashRank cross-encoder; top-5 survive.
+3. **Rerank** — the union is deduped by chunk and re-scored by the `BAAI/bge-reranker-v2-m3` cross-encoder; top-5 survive.
 4. **Answer** — the local LLM answers using only the numbered passages, citing `[n]` inline; the API returns structured citations.
 
 Every layer is toggle-able via env (`ENABLE_GRAPH_RETRIEVAL`, `ENABLE_CONTEXTUAL_RETRIEVAL`) so you can A/B their contribution in the eval harness.
@@ -121,7 +121,7 @@ src/sovereign_rag/
   config.py           # pydantic-settings, local-by-default
   providers/
     ollama.py         # ChatOllama + OllamaEmbeddings
-    reranker.py       # FlashRank cross-encoder
+    reranker.py       # bge-reranker-v2-m3 via sentence-transformers (MPS/CUDA/CPU)
   chunking.py         # recursive split + contextual-retrieval prefixing
   ingestion/          # docling (pdf) . crawl4ai (web) . searxng (search)
   vectorstore/

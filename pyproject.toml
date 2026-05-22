@@ -30,8 +30,10 @@ dependencies = [
     "neo4j>=5.20,<6.0",
     "neo4j-graphrag>=1.0,<2.0",
 
-    # ---- Reranking: cross-encoder, CPU-friendly ----
-    "flashrank>=0.2.9,<1.0",
+    # ---- Reranking: cross-encoder via sentence-transformers ----
+    # Default model is BAAI/bge-reranker-v2-m3 — SOTA-grade open cross-encoder,
+    # multilingual, ~568M params. Runs on MPS / CUDA / CPU.
+    "sentence-transformers>=3.0,<6.0",
 
     # ---- Web ingestion ----
     "crawl4ai>=0.7,<0.9",

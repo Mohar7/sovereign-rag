@@ -58,7 +58,11 @@ class Settings(BaseSettings):
     rrf_k: int = 60  # Reciprocal Rank Fusion constant
     enable_contextual_retrieval: bool = True
     enable_graph_retrieval: bool = True
-    reranker_model: str = "ms-marco-MiniLM-L-12-v2"  # FlashRank default, CPU-friendly
+    # Cross-encoder via sentence-transformers. bge-reranker-v2-m3 is multilingual
+    # and SOTA among open rerankers; on Mac Mini / Apple Silicon it picks MPS,
+    # on CUDA boxes it picks GPU, else CPU.
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    reranker_device: str = "auto"  # auto | mps | cuda | cpu
 
     # ---- Observability ----
     enable_langfuse: bool = False
