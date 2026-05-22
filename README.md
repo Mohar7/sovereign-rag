@@ -140,7 +140,25 @@ uv run ruff check src/ tests/ eval/
 uv run mypy src/
 ```
 
-Tests that need Milvus/Neo4j/Ollama are marked `@pytest.mark.integration` and skipped unless the services are reachable (gated by `RUN_*_IT=1` env flags) — so CI and contributors run the full unit suite offline. Live/integration runs belong in a sandbox VM with the full stack up, not on a dev laptop.
+Tests that need Milvus/Neo4j/Ollama are marked `@pytest.mark.integration` and skipped unless the services are reachable (gated by `RUN_*_IT=1` env flags) — so CI and contributors run the full unit suite offline. Live/integration runs belong on a machine with the full stack up, not on a dev laptop or a GitHub-hosted runner.
+
+### Two-tier CI
+
+| Workflow | Runner | What runs |
+|---|---|---|
+| `ci.yml` | GitHub-hosted `ubuntu-latest` | ruff + mypy + unit tests (no services) — fast, on every push/PR |
+| `integration.yml` | **self-hosted** `[self-hosted, macOS, sovereign]` | brings up the compose stack, pulls Ollama models, runs `pytest -m integration` + the live eval harness — on push-to-main / manual dispatch only |
+
+The integration tier needs Ollama + Docker, which GitHub-hosted runners can't provide. It runs on a self-hosted runner (e.g. a Mac Mini reachable over Tailscale for management). Register the runner with:
+
+```bash
+# on the Mac Mini, from the repo's Settings -> Actions -> Runners -> New
+./config.sh --url https://github.com/Mohar7/sovereign-rag --token <TOKEN> \
+            --labels self-hosted,macOS,sovereign
+./svc.sh install && ./svc.sh start    # run as a background service
+```
+
+**Security:** `integration.yml` triggers only on `push` to `main` and `workflow_dispatch` — never on pull requests. A self-hosted runner must not execute untrusted fork code. Keep "Require approval for all outside collaborators" enabled in repo Settings.
 
 ## Roadmap
 
