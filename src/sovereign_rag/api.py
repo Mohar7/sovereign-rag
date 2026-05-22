@@ -185,7 +185,11 @@ def _build_response(thread_id: str, state: dict[str, Any]) -> AskResponse:
     if interrupt_payload:
         # LangGraph wraps interrupts in an Interrupt object; pull the value
         # from the first one (we only have a single interrupt node).
-        first = interrupt_payload[0] if isinstance(interrupt_payload, list | tuple) else interrupt_payload
+        first = (
+            interrupt_payload[0]
+            if isinstance(interrupt_payload, list | tuple)
+            else interrupt_payload
+        )
         value = getattr(first, "value", first)
         candidate_urls = value.get("candidate_urls", []) if isinstance(value, dict) else []
         return AskResponse(

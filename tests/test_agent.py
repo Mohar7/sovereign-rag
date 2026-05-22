@@ -37,27 +37,21 @@ def _rc(chunk_id: str, score: float = 0.5, source: str = "milvus_hybrid") -> Ret
 # decide_after_local
 # ---------------------------------------------------------------------------
 class TestDecideAfterLocal:
-    def test_enough_candidates_goes_to_rerank(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_enough_candidates_goes_to_rerank(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from sovereign_rag.config import get_settings
 
         monkeypatch.setattr(get_settings(), "web_fallback_min_chunks", 3)
         state = {"candidates": [_rc("a"), _rc("b"), _rc("c")]}
         assert agent_nodes.decide_after_local(state) == "rerank"
 
-    def test_few_candidates_triggers_fallback(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_few_candidates_triggers_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from sovereign_rag.config import get_settings
 
         monkeypatch.setattr(get_settings(), "web_fallback_min_chunks", 3)
         state = {"candidates": [_rc("a")]}
         assert agent_nodes.decide_after_local(state) == "web_fallback"
 
-    def test_already_attempted_short_circuits(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_already_attempted_short_circuits(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Once web_fallback has fired, the conditional edge must not loop."""
         from sovereign_rag.config import get_settings
 
@@ -65,9 +59,7 @@ class TestDecideAfterLocal:
         state = {"candidates": [], "web_fallback_attempted": True}
         assert agent_nodes.decide_after_local(state) == "rerank"
 
-    def test_zero_threshold_disables_fallback(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_zero_threshold_disables_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """WEB_FALLBACK_MIN_CHUNKS=0 means 'never fall back', even with nothing."""
         from sovereign_rag.config import get_settings
 
@@ -80,9 +72,7 @@ class TestDecideAfterLocal:
 # do_rerank
 # ---------------------------------------------------------------------------
 class TestDoRerank:
-    async def test_calls_rerank_with_candidates(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_calls_rerank_with_candidates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, Any] = {}
 
         def fake_rerank(
@@ -100,9 +90,7 @@ class TestDoRerank:
         assert isinstance(out["reranked"], list)
         assert out["retrieved"] == 1
 
-    async def test_empty_candidates_no_rerank_call(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_empty_candidates_no_rerank_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
         sentinel = MagicMock(side_effect=AssertionError("rerank shouldn't be called"))
         monkeypatch.setattr(agent_nodes, "rerank", sentinel)
         out = await agent_nodes.do_rerank({"question": "q", "candidates": []})
@@ -113,9 +101,7 @@ class TestDoRerank:
 # generate
 # ---------------------------------------------------------------------------
 class TestGenerate:
-    async def test_calls_llm_and_returns_citations(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_calls_llm_and_returns_citations(self, monkeypatch: pytest.MonkeyPatch) -> None:
         chunk = Chunk(
             doc_id="d",
             text="enriched",
@@ -130,9 +116,7 @@ class TestGenerate:
         fake_llm.ainvoke.return_value = MagicMock(content="The codeword is FERRET [1].")
         monkeypatch.setattr(agent_nodes, "get_llm", lambda: fake_llm)
 
-        out = await agent_nodes.generate(
-            {"question": "What's the codeword?", "reranked": reranked}
-        )
+        out = await agent_nodes.generate({"question": "What's the codeword?", "reranked": reranked})
 
         assert out["answer"] == "The codeword is FERRET [1]."
         assert out["used"] == 1
@@ -143,9 +127,7 @@ class TestGenerate:
         assert len(args) == 2
         assert "[1]" in args[1].content
 
-    async def test_no_reranked_returns_default_no_op(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_no_reranked_returns_default_no_op(self, monkeypatch: pytest.MonkeyPatch) -> None:
         sentinel = MagicMock(side_effect=AssertionError("LLM shouldn't be called"))
         monkeypatch.setattr(agent_nodes, "get_llm", sentinel)
 

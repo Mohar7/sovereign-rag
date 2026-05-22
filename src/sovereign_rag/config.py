@@ -56,9 +56,7 @@ class Settings(BaseSettings):
     # Postgres URI for the AsyncPostgresSaver checkpoint store. Default
     # matches the `postgres` service in docker-compose.yml (host port 5433,
     # since 5432 is often already in use by other dev stacks).
-    langgraph_pg_uri: str = (
-        "postgresql://sovereign:sovereign-dev-pw@localhost:5433/sovereign_lg"
-    )
+    langgraph_pg_uri: str = "postgresql://sovereign:sovereign-dev-pw@localhost:5433/sovereign_lg"
     # Web fallback fires when the local hybrid+graph retrieval returns fewer
     # than this many candidates (deduped, pre-rerank). Set 0 to disable.
     web_fallback_min_chunks: int = 3

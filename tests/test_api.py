@@ -57,9 +57,7 @@ def test_build_response_handles_slotted_citation_dataclasses() -> None:
 
 def test_build_response_empty_citations() -> None:
     """An answer with no citations should still serialize cleanly."""
-    resp = _build_response(
-        "t1", {"answer": "no idea", "citations": [], "retrieved": 0, "used": 0}
-    )
+    resp = _build_response("t1", {"answer": "no idea", "citations": [], "retrieved": 0, "used": 0})
     assert resp.status == "ok"
     assert resp.answer == "no idea"
     assert resp.citations == []
