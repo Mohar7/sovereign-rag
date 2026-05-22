@@ -13,6 +13,17 @@ dependencies = [
     "langchain-core>=1.0,<2.0",
     "langchain-text-splitters>=1.0,<2.0",
 
+    # ---- LangGraph: control-plane orchestration (StateGraph, conditional
+    # edges, HITL interrupt, persistent state via checkpointer). The data
+    # plane (Milvus/Neo4j async clients) stays direct — LangChain wrappers
+    # don't expose Milvus's native BM25 hybrid or Neo4j GraphRAG local-search.
+    "langgraph>=1.0,<2.0",
+    # Postgres-backed checkpointer (production-grade; SQLite-backed exists
+    # but we want the same shape locally and in CI).
+    "langgraph-checkpoint-postgres>=2.0,<3.0",
+    "psycopg[binary,pool]>=3.2,<4.0",
+    "langgraph-cli[inmem]>=0.2,<1.0",   # provides `langgraph dev` + Studio
+
     # ---- Document parsing: Docling (IBM) — layout-aware PDF/DOCX → markdown ----
     "docling>=2.0,<3.0",
 

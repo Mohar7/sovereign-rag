@@ -25,36 +25,69 @@
 | **Contextual Retrieval** (Anthropic, 2024) | Prepends chunk-situating context before indexing; ~-35% retrieval failures | Local LLM generates the prefix |
 | **GraphRAG local-search** | Multi-hop questions vector search can't answer | Neo4j entity graph: vector-seed -> 1-hop traverse |
 | **Evaluation harness** | Proves the above instead of cargo-culting it | RAGAS (Ollama judge) + retrieval precision@k |
+| **LangGraph orchestration** | Branching (web fallback when local hits are thin), HITL approval on crawl, persistent threads | `StateGraph` + conditional edges + `AsyncPostgresSaver` checkpointer |
 
 ## Architecture
+
+**Control plane** — LangGraph QA graph (`src/sovereign_rag/agent/`):
+
+```
+                              START
+                                |
+                                v
+                       +-----------------+
+                       |  retrieve_local |   Milvus hybrid + Neo4j graph + dedup
+                       +--------+--------+
+                                |
+                  candidates < N|   else
+                                v
+            +------------------- decide ------------------+
+            v                                             v
+   +-----------------+   user approves                    |
+   |  web_fallback   |--- SearXNG -> interrupt()  -+      |
+   |                 |                             |      |
+   +--------+--------+   resume w/ approved URLs   |      |
+            |                                      |      |
+            +-- Crawl4AI -> index -> re-retrieve --+      |
+                                |                         |
+                                v                         |
+                          +-----------+                   |
+                          |  rerank   |<------------------+   bge-reranker-v2-m3 (MPS/CUDA/CPU)
+                          +-----+-----+
+                                |
+                                v
+                          +-----------+
+                          | generate  |     LLM with [n] citations
+                          +-----+-----+
+                                |
+                                v
+                               END
+```
+
+**Data plane** — Milvus + Neo4j + ingestion (the bits LangChain's wrappers don't expose: RRF hybrid, GraphRAG local-search, contextual prefixing):
 
 ```
   Ingestion ----------------------------------------------------------------+
    Docling (PDF/DOCX->md) . Crawl4AI (web->md) . SearXNG (search) . text     |
                                    |                                         |
                                    v                                         |
-   chunk (recursive ~400tok/15%) -> contextualize (Ollama prefix)            |
+   chunk (recursive ~400tok/15%) -> contextualize (LLM prefix)               |
                                    |                                         |
                 +------------------+-------------------+                     |
                 v                                      v                     |
    +------------------------+           +---------------------------+        |
-   | Milvus 2.6             |           | Neo4j 5 Community          |        |
-   |  dense (HNSW/COSINE)   |           |  Chunk + Entity graph      |        |
-   |  + sparse BM25 (native)|           |  native vector index       |        |
-   |  hybrid_search + RRF   |           |  LLM entity extraction      |        |
-   +-----------+------------+           +-------------+--------------+        |
-               |  top-50                 local-search |  seeds + 1 hop        |
-               +---------------+----------------------+                       |
-                               v                                             |
-                  dedup -> bge-reranker-v2-m3 cross-encoder rerank -> top-5            |
-                               v                                             |
-                   Ollama LLM -> cited answer  <-----------------------------+
-
-  Eval: RAGAS (faithfulness / context-precision, Ollama judge) + precision@k
-  Obs:  Langfuse (optional)
+   | Milvus 2.6             |           | Neo4j 5 Community         |        |
+   |  dense (HNSW/COSINE)   |           |  Chunk + Entity graph     |        |
+   |  + sparse BM25 (native)|           |  native vector index      |        |
+   |  hybrid_search + RRF   |           |  LLM entity extraction    |        |
+   +------------------------+           +---------------------------+        |
+                                                                              |
+  Eval: RAGAS (faithfulness / context-precision) + precision@k                |
+  Obs:  Langfuse (optional)                                                   |
+  State: Postgres (LangGraph checkpoints, threads, interrupt resumes)         |
 ```
 
-**Stack.** Python 3.12 · LangChain 1.x (splitters/contracts) · **Milvus 2.6** (`pymilvus`, AsyncMilvusClient) · **Neo4j 5 Community** (`neo4j-graphrag`) · **Ollama** (`langchain-ollama`; qwen2.5:7b + bge-m3) · **`BAAI/bge-reranker-v2-m3`** cross-encoder via sentence-transformers · **Docling** (IBM, layout-aware parsing) · **Crawl4AI** + **SearXNG** ingestion · **RAGAS** eval · FastAPI · uv · ruff/mypy/pytest.
+**Stack.** Python 3.12 · **LangGraph 1.x** (StateGraph, conditional edges, HITL, AsyncPostgresSaver) · LangChain 1.x (splitters/contracts) · **Milvus 2.6** (`pymilvus`, AsyncMilvusClient) · **Neo4j 5 Community** (`neo4j-graphrag`) · **Postgres 16** (LangGraph checkpoints) · **Ollama** (`langchain-ollama`; qwen2.5:7b + bge-m3) · **`BAAI/bge-reranker-v2-m3`** cross-encoder via sentence-transformers · **Docling** (IBM, layout-aware parsing) · **Crawl4AI** + **SearXNG** ingestion · **RAGAS** eval · FastAPI · uv · ruff/mypy/pytest.
 
 ## Quick start
 
@@ -64,14 +97,18 @@ ollama serve &
 ollama pull qwen2.5:7b
 ollama pull bge-m3
 
-# 2. Infra (Milvus + Neo4j + SearXNG)
-cp .env.example .env          # set NEO4J_PASSWORD
-docker compose up -d          # etcd+minio+milvus, neo4j, searxng
+# 2. Infra (Milvus + Neo4j + Postgres + SearXNG)
+cp .env.example .env          # set NEO4J_PASSWORD / POSTGRES_PASSWORD
+docker compose up -d          # etcd+minio+milvus, neo4j, postgres, searxng
 
 # 3. App
 uv sync
 uv run uvicorn sovereign_rag.api:app --reload
 # http://localhost:8000/docs
+
+# 4. (Optional) LangGraph dev server + Studio UI
+uv run langgraph dev
+# → http://127.0.0.1:2024 + Studio link in the terminal
 ```
 
 > This is a heavy stack: Milvus standalone is 3 containers, Neo4j wants ~2 GB, and Docling/Crawl4AI pull torch + Chromium. Intended to run on a workstation or a sandbox VM, not a 1 GB box.
@@ -90,20 +127,42 @@ curl -X POST http://localhost:8000/documents/url \
 curl -X POST http://localhost:8000/ingest/search \
   -H 'Content-Type: application/json' -d '{"query":"milvus hybrid search","max_results":3}'
 
-# Ask — hybrid + graph retrieval, reranked, cited
+# Ask — hybrid + graph retrieval, reranked, cited.
+# If local hits are thin (< WEB_FALLBACK_MIN_CHUNKS), the LangGraph QA
+# graph pauses at the web_fallback node and returns an interrupt with
+# candidate URLs from SearXNG. The client approves a subset and POSTs
+# /ask/resume with the same thread_id.
 curl -X POST http://localhost:8000/ask \
   -H 'Content-Type: application/json' -d '{"question":"How does BM25 fusion work here?"}'
-# -> {"answer":"...[1][2]...","citations":[{chunk_id,title,source_uri,page,score,snippet}],...}
+# -> {"thread_id":"...","status":"ok","answer":"...[1][2]...","citations":[...]}
+# or
+# -> {"thread_id":"...","status":"interrupted","interrupt":{"reason":"approve_urls","candidate_urls":[...]}}
+curl -X POST http://localhost:8000/ask/resume \
+  -H 'Content-Type: application/json' \
+  -d '{"thread_id":"<above>","approved_urls":["https://example.com/article"]}'
 ```
 
 ## How retrieval works
 
-1. **Index** — a `SourceDocument` (from Docling/Crawl4AI/text) is recursively chunked, each chunk gets an LLM-generated contextual prefix (Anthropic's technique), then it's written to **both** Milvus (dense + BM25) and Neo4j (chunk node + extracted entity graph).
-2. **Retrieve** — the query hits Milvus `hybrid_search` (dense ANN + server-side BM25, fused with `RRFRanker`) **and** Neo4j `local_search` (vector-seed chunks -> traverse mentioned entities 1 hop -> append relation facts) concurrently.
-3. **Rerank** — the union is deduped by chunk and re-scored by the `BAAI/bge-reranker-v2-m3` cross-encoder; top-5 survive.
-4. **Answer** — the local LLM answers using only the numbered passages, citing `[n]` inline; the API returns structured citations.
+The QA path is a LangGraph `StateGraph` (see `src/sovereign_rag/agent/`):
 
-Every layer is toggle-able via env (`ENABLE_GRAPH_RETRIEVAL`, `ENABLE_CONTEXTUAL_RETRIEVAL`) so you can A/B their contribution in the eval harness.
+1. **`retrieve_local`** — Milvus `hybrid_search` (dense ANN + native BM25, fused with `RRFRanker`) and Neo4j `local_search` (vector-seed chunks → traverse `MENTIONS` edges 1 hop → append relation facts) run concurrently and get deduped by `chunk_id`.
+2. **Conditional edge** — if the deduped candidate count is below `WEB_FALLBACK_MIN_CHUNKS` and we haven't already tried, the graph routes through `web_fallback`; otherwise straight to `rerank`.
+3. **`web_fallback` (HITL)** — searches SearXNG, then `interrupt()`s with the candidate URLs. The client resumes with `approved_urls` via `/ask/resume`; the node crawls those, indexes them via `RAGPipeline.index_document`, re-runs local retrieval, and continues.
+4. **`rerank`** — `BAAI/bge-reranker-v2-m3` cross-encoder (sentence-transformers) re-scores the union and keeps top-`RERANK_TOP_K` on MPS / CUDA / CPU.
+5. **`generate`** — the LLM answers using only the numbered passages, citing `[n]` inline; the API returns structured citations.
+
+Each thread is checkpointed in Postgres (`AsyncPostgresSaver`), so interrupted runs survive restarts and can be resumed from a different request. Every layer is toggle-able via env (`ENABLE_GRAPH_RETRIEVAL`, `ENABLE_CONTEXTUAL_RETRIEVAL`, `WEB_FALLBACK_MIN_CHUNKS=0` to disable fallback) so the eval harness can A/B their contribution.
+
+### LangGraph dev / Studio
+
+```bash
+uv run langgraph dev   # serves the graph on http://127.0.0.1:2024
+# Open the Studio link the CLI prints to inspect state, replay, and
+# step through interrupts interactively.
+```
+
+`langgraph.json` declares the uncompiled graph (`sovereign_rag.agent.graph:graph`); the CLI attaches its own in-memory checkpointer, so you don't need Postgres for dev-server play. FastAPI in production uses the Postgres-backed checkpointer.
 
 ## Evaluation
 
@@ -129,16 +188,21 @@ src/sovereign_rag/
   graph/
     neo4j_store.py    # LLM entity extraction + vector-seed graph traverse
   retrieval/
-    pipeline.py       # orchestrates index -> retrieve -> rerank -> answer
-  api.py              # FastAPI
+    pipeline.py       # RAGPipeline (index_document path + shared helpers)
+  agent/              # LangGraph QA orchestration
+    state.py          # RAGState TypedDict
+    nodes.py          # retrieve_local / web_fallback (HITL) / rerank / generate
+    graph.py          # StateGraph build + compile-with-checkpointer
+  api.py              # FastAPI (graph.ainvoke + /ask/resume)
+langgraph.json        # langgraph dev / Studio entry point
 eval/                 # golden set + RAGAS + IR metrics
-tests/                # 94 unit tests (services mocked); integration marked + skipped
+tests/                # 106 unit tests (services mocked); integration marked + skipped
 ```
 
 ## Testing
 
 ```bash
-uv run pytest -m "not integration"   # 94 unit tests, no services, ~5s
+uv run pytest -m "not integration"   # 106 unit tests, no services, ~5s
 uv run ruff check src/ tests/ eval/
 uv run mypy src/
 ```

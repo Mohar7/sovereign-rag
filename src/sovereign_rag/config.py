@@ -52,6 +52,19 @@ class Settings(BaseSettings):
     searxng_url: str = "http://localhost:8080"
     crawl_timeout_s: float = 30.0
 
+    # ---- LangGraph orchestration ----
+    # Postgres URI for the AsyncPostgresSaver checkpoint store. Default
+    # matches the `postgres` service in docker-compose.yml (host port 5433,
+    # since 5432 is often already in use by other dev stacks).
+    langgraph_pg_uri: str = (
+        "postgresql://sovereign:sovereign-dev-pw@localhost:5433/sovereign_lg"
+    )
+    # Web fallback fires when the local hybrid+graph retrieval returns fewer
+    # than this many candidates (deduped, pre-rerank). Set 0 to disable.
+    web_fallback_min_chunks: int = 3
+    # Cap on URLs fetched per web fallback round (latency control).
+    web_fallback_max_urls: int = 3
+
     # ---- Retrieval knobs ----
     retrieve_top_k: int = 50  # candidates before rerank
     rerank_top_k: int = 5  # final chunks to the LLM

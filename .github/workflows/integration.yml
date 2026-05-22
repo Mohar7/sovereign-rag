@@ -48,6 +48,9 @@ jobs:
       MILVUS_URI: http://localhost:19530
       NEO4J_URI: neo4j://localhost:7687
       SEARXNG_URL: http://localhost:8082
+      # LangGraph checkpoint store — compose publishes Postgres on host 5433.
+      POSTGRES_PASSWORD: sovereign-ci-pw
+      LANGGRAPH_PG_URI: postgresql://sovereign:sovereign-ci-pw@localhost:5433/sovereign_lg
       # Opt-in flags the integration tests gate on.
       RUN_NEO4J_IT: "1"
       RUN_INGESTION_IT: "1"
@@ -66,8 +69,8 @@ jobs:
       - name: Install Playwright browser (Crawl4AI live crawl test)
         run: uv run playwright install chromium
 
-      - name: Bring up infra (Milvus + Neo4j + SearXNG)
-        run: docker compose up -d milvus neo4j searxng
+      - name: Bring up infra (Milvus + Neo4j + Postgres + SearXNG)
+        run: docker compose up -d milvus neo4j postgres searxng
 
       - name: Wait for Milvus health
         run: |
@@ -88,6 +91,16 @@ jobs:
             echo "waiting for Neo4j ($i)..."; sleep 5
           done
           echo "Neo4j did not become healthy"; docker compose logs neo4j; exit 1
+
+      - name: Wait for Postgres health
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T postgres pg_isready -U sovereign -d sovereign_lg >/dev/null 2>&1; then
+              echo "Postgres healthy"; exit 0
+            fi
+            echo "waiting for Postgres ($i)..."; sleep 2
+          done
+          echo "Postgres did not become healthy"; docker compose logs postgres; exit 1
 
       - name: Run integration tests
         run: uv run pytest -m integration -v

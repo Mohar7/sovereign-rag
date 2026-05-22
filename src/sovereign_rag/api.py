@@ -1,66 +1,90 @@
-"""FastAPI wrapper around the RAG pipeline.
+"""FastAPI surface in front of the LangGraph QA orchestrator.
 
 Endpoints:
+- POST /documents/text   — index raw text (Docling/Crawl4AI not needed)
 - POST /documents/file   — upload a PDF/DOCX, parse with Docling, index
 - POST /documents/url    — crawl a URL with Crawl4AI, index
-- POST /documents/text   — index raw text
 - POST /ingest/search    — web-search (SearXNG) + crawl top hits + index
-- POST /ask              — retrieve (hybrid + graph) → rerank → cited answer
+- POST /ask              — run the QA graph; may return an HITL interrupt
+                           (candidate URLs to approve for web fallback)
+- POST /ask/resume       — resume an interrupted /ask with approved URLs
 - GET  /health
+- GET  /                 — banner
 
-The pipeline (Milvus + Neo4j clients) is built once in the lifespan and
-reused. Ollama, Milvus, Neo4j, SearXNG are all expected to be reachable
-per `config.Settings` — bring them up with `docker compose up` + a host
-`ollama serve`. None of this requires a paid API key.
+Architecture: the control plane is a LangGraph ``StateGraph`` with a
+Postgres-backed checkpointer (``AsyncPostgresSaver``) — runs can pause
+at human-approval steps and resume across requests. The data plane
+(Milvus / Neo4j / Ollama / SearXNG / Docling / Crawl4AI) is direct
+async calls because LangChain's wrappers don't expose what we need
+(RRF hybrid, GraphRAG local search, contextual prefixing).
 """
 
 from __future__ import annotations
 
 import logging
 import tempfile
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from sovereign_rag.agent import (
+    INTERRUPT_REASON_APPROVE_URLS,
+    build_graph,
+    set_pipeline,
+)
+from sovereign_rag.config import get_settings
 from sovereign_rag.documents import SourceDocument, SourceType
 from sovereign_rag.ingestion import crawl_url, parse_file, search_and_crawl
-from sovereign_rag.retrieval.pipeline import AnswerResult, RAGPipeline
+from sovereign_rag.retrieval.pipeline import RAGPipeline
 
 logger = logging.getLogger(__name__)
 
-_pipeline: RAGPipeline | None = None
+
+# ---------- lifespan ----------
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global _pipeline
+    """Open the Postgres checkpointer, build the pipeline + compiled graph.
+
+    The ``async with`` keeps the Postgres connection pool alive for the
+    lifetime of the server; on shutdown it closes cleanly.
+    """
     logging.basicConfig(level=logging.INFO)
-    _pipeline = RAGPipeline()
-    logger.info("sovereign-rag pipeline ready")
-    try:
-        yield
-    finally:
-        if _pipeline is not None:
-            await _pipeline.aclose()
+    s = get_settings()
+
+    pipeline = RAGPipeline()
+    set_pipeline(pipeline)
+
+    async with AsyncPostgresSaver.from_conn_string(s.langgraph_pg_uri) as checkpointer:
+        # Idempotent: creates checkpoint tables on first boot.
+        await checkpointer.setup()
+        app.state.graph = build_graph(checkpointer=checkpointer)
+        logger.info("sovereign-rag pipeline + LangGraph ready")
+        try:
+            yield
+        finally:
+            await pipeline.aclose()
+            set_pipeline(None)
 
 
 app = FastAPI(
     title="sovereign-rag",
-    description="Self-hosted GraphRAG: Milvus hybrid + Neo4j graph + rerank, all on Ollama.",
+    description=(
+        "Local-first GraphRAG orchestrated with LangGraph (Postgres checkpointer, "
+        "HITL on web fallback). Milvus hybrid + Neo4j graph + bge-reranker-v2-m3."
+    ),
     version="0.1.0",
     lifespan=lifespan,
 )
-
-
-def _pipe() -> RAGPipeline:
-    if _pipeline is None:
-        raise HTTPException(503, "Pipeline not initialized")
-    return _pipeline
 
 
 # ---------- schemas ----------
@@ -84,6 +108,14 @@ class SearchIngestRequest(BaseModel):
 class AskRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     doc_id: str | None = None
+    # If supplied, the run is associated with this thread (for resumes /
+    # multi-turn). Otherwise a fresh UUID is minted per call.
+    thread_id: str | None = None
+
+
+class AskResumeRequest(BaseModel):
+    thread_id: str
+    approved_urls: list[str] = Field(default_factory=list)
 
 
 class IngestResponse(BaseModel):
@@ -102,19 +134,80 @@ class CitationModel(BaseModel):
     snippet: str
 
 
+class CandidateUrlModel(BaseModel):
+    url: str
+    title: str
+    snippet: str
+
+
+class AskInterrupt(BaseModel):
+    reason: str
+    candidate_urls: list[CandidateUrlModel]
+
+
 class AskResponse(BaseModel):
-    answer: str
-    citations: list[CitationModel]
-    retrieved: int
-    used: int
+    thread_id: str
+    status: Literal["ok", "interrupted"]
+    # Set when status == "ok":
+    answer: str | None = None
+    citations: list[CitationModel] = Field(default_factory=list)
+    retrieved: int = 0
+    used: int = 0
+    fallback_used: bool = False
+    # Set when status == "interrupted":
+    interrupt: AskInterrupt | None = None
 
 
-def _to_ask_response(result: AnswerResult) -> AskResponse:
+def _graph() -> Any:
+    g = getattr(app.state, "graph", None)
+    if g is None:
+        raise HTTPException(503, "Graph not initialized")
+    return g
+
+
+def _pipe() -> RAGPipeline:
+    """Direct pipeline access for non-graph endpoints (/documents/*)."""
+    from sovereign_rag.agent import get_pipeline
+
+    try:
+        return get_pipeline()
+    except RuntimeError as exc:
+        raise HTTPException(503, "Pipeline not initialized") from exc
+
+
+def _build_response(thread_id: str, state: dict[str, Any]) -> AskResponse:
+    """Convert a compiled-graph result dict into the API response.
+
+    The presence of an ``__interrupt__`` field on the result means the run
+    paused inside a node; otherwise the final state carries the answer.
+    """
+    interrupt_payload = state.get("__interrupt__")
+    if interrupt_payload:
+        # LangGraph wraps interrupts in an Interrupt object; pull the value
+        # from the first one (we only have a single interrupt node).
+        first = interrupt_payload[0] if isinstance(interrupt_payload, list | tuple) else interrupt_payload
+        value = getattr(first, "value", first)
+        candidate_urls = value.get("candidate_urls", []) if isinstance(value, dict) else []
+        return AskResponse(
+            thread_id=thread_id,
+            status="interrupted",
+            interrupt=AskInterrupt(
+                reason=str(value.get("reason", INTERRUPT_REASON_APPROVE_URLS))
+                if isinstance(value, dict)
+                else INTERRUPT_REASON_APPROVE_URLS,
+                candidate_urls=[CandidateUrlModel(**c) for c in candidate_urls],
+            ),
+        )
+
+    citations = state.get("citations") or []
     return AskResponse(
-        answer=result.answer,
-        citations=[CitationModel(**asdict(c)) for c in result.citations],
-        retrieved=result.retrieved,
-        used=result.used,
+        thread_id=thread_id,
+        status="ok",
+        answer=state.get("answer"),
+        citations=[CitationModel(**asdict(c)) for c in citations],
+        retrieved=int(state.get("retrieved", 0)),
+        used=int(state.get("used", 0)),
+        fallback_used=bool(state.get("fallback_used", False)),
     )
 
 
@@ -172,8 +265,34 @@ async def ingest_search(req: SearchIngestRequest) -> dict[str, Any]:
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest) -> AskResponse:
-    result = await _pipe().answer(req.question, doc_id=req.doc_id)
-    return _to_ask_response(result)
+    """Run the QA graph. May return an HITL interrupt for web fallback."""
+    thread_id = req.thread_id or str(uuid.uuid4())
+    config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+    initial = {"question": req.question, "doc_id": req.doc_id}
+
+    try:
+        state = await _graph().ainvoke(initial, config=config)
+    except Exception as exc:
+        logger.exception("graph invocation failed")
+        raise HTTPException(500, f"Graph failed: {exc}") from exc
+
+    return _build_response(thread_id, state)
+
+
+@app.post("/ask/resume", response_model=AskResponse)
+async def ask_resume(req: AskResumeRequest) -> AskResponse:
+    """Resume an interrupted run with the user's approved URLs."""
+    config: dict[str, Any] = {"configurable": {"thread_id": req.thread_id}}
+    try:
+        state = await _graph().ainvoke(
+            Command(resume={"approved_urls": req.approved_urls}),
+            config=config,
+        )
+    except Exception as exc:
+        logger.exception("graph resume failed")
+        raise HTTPException(500, f"Graph resume failed: {exc}") from exc
+
+    return _build_response(req.thread_id, state)
 
 
 @app.get("/health")

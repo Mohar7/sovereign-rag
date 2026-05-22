@@ -88,6 +88,26 @@ services:
       retries: 5
     networks: [sovereign]
 
+  # ---------- Postgres (LangGraph checkpoint store) ----------
+  postgres:
+    image: postgres:16-alpine
+    container_name: sovereign-postgres
+    environment:
+      POSTGRES_USER: sovereign
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sovereign-dev-pw}
+      POSTGRES_DB: sovereign_lg
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      # Host port 5433 to coexist with any system Postgres on 5432.
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sovereign -d sovereign_lg"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [sovereign]
+
   # ---------- SearXNG (self-hosted metasearch, no API key) ----------
   searxng:
     image: searxng/searxng:latest
@@ -114,6 +134,7 @@ services:
       NEO4J_URI: neo4j://neo4j:7687
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
       SEARXNG_URL: http://searxng:8080
+      LANGGRAPH_PG_URI: postgresql://sovereign:${POSTGRES_PASSWORD:-sovereign-dev-pw}@postgres:5432/sovereign_lg
     ports:
       - "8000:8000"
     extra_hosts:
@@ -123,6 +144,8 @@ services:
         condition: service_healthy
       neo4j:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks: [sovereign]
 
 volumes:
@@ -130,6 +153,7 @@ volumes:
   minio-data:
   milvus-data:
   neo4j-data:
+  postgres-data:
 
 networks:
   sovereign:
