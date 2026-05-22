@@ -1,7 +1,7 @@
 [project]
 name = "sovereign-rag"
 version = "0.1.0"
-description = "Fully self-hosted GraphRAG: Milvus hybrid (dense+BM25) retrieval + Neo4j knowledge-graph local-search + cross-encoder reranking + contextual retrieval, powered end-to-end by Ollama. Web ingestion via Crawl4AI/SearXNG. Zero paid APIs."
+description = "Local-first GraphRAG: Milvus hybrid (dense+BM25) retrieval + Neo4j knowledge-graph local-search + cross-encoder reranking + contextual retrieval. Local-dev runs entirely on Ollama with no paid APIs; the CI integration tier swaps in Ollama Cloud + OpenAI embeddings. Web ingestion via Docling / Crawl4AI / SearXNG."
 requires-python = ">=3.12,<3.14"
 readme = "README.md"
 license = { file = "LICENSE" }
