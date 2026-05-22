@@ -55,7 +55,7 @@ def _ranker() -> CrossEncoder:
     return CrossEncoder(  # type: ignore[no-any-return]
         s.reranker_model,
         device=_pick_device(s.reranker_device),
-        max_seq_length=512,  # renamed from max_length in sentence-transformers 5.x
+        max_length=512,
     )
 
 
