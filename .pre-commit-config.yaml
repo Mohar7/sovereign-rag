@@ -1,0 +1,26 @@
+# Run `uv run pre-commit install` once after cloning to wire these hooks.
+# CI also runs `ruff format --check` (see .github/workflows/ci.yml), so a
+# missed local install will be caught — but at "Lint" job time, not at
+# `git commit` time.
+
+repos:
+  # Ruff — lint + format (replaces black, isort, flake8, pyupgrade, etc.)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Catch the most common foot-guns before they reach review.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
