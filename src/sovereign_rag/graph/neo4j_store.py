@@ -76,8 +76,7 @@ class ExtractedEntity(BaseModel):
 
     name: str = Field(description="The canonical surface name of the entity.")
     type: str = Field(
-        description="The entity category, e.g. one of: "
-        + ", ".join(DEFAULT_ENTITY_TYPES)
+        description="The entity category, e.g. one of: " + ", ".join(DEFAULT_ENTITY_TYPES)
     )
     description: str = Field(
         default="",
@@ -334,9 +333,7 @@ class Neo4jGraphStore:
         # 1. Embed all chunk texts in one batched call.
         embeddings = await embed_texts([c.text for c in chunks])
         if len(embeddings) != len(chunks):
-            raise ValueError(
-                f"Embedding count mismatch: {len(embeddings)} != {len(chunks)} chunks"
-            )
+            raise ValueError(f"Embedding count mismatch: {len(embeddings)} != {len(chunks)} chunks")
 
         # 2. MERGE chunk nodes (with embeddings) in batches.
         chunk_params = [
@@ -413,9 +410,7 @@ class Neo4jGraphStore:
         )
 
     # -- retrieval ---------------------------------------------------------
-    async def local_search(
-        self, query: str, top_k: int | None = None
-    ) -> list[RetrievedChunk]:
+    async def local_search(self, query: str, top_k: int | None = None) -> list[RetrievedChunk]:
         """GraphRAG local search.
 
         Embed the query, vector-search seed chunks, then for each seed gather

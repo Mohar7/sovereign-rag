@@ -43,7 +43,9 @@ def test_format_related_facts_empty() -> None:
 
 
 def test_format_related_facts_dedupes_and_orders() -> None:
-    out = _format_related_facts(["Alice WORKS_FOR Acme", "Alice WORKS_FOR Acme", "Bob LIVES_IN NYC"])
+    out = _format_related_facts(
+        ["Alice WORKS_FOR Acme", "Alice WORKS_FOR Acme", "Bob LIVES_IN NYC"]
+    )
     assert out == "Related facts:\n- Alice WORKS_FOR Acme\n- Bob LIVES_IN NYC"
 
 
@@ -125,9 +127,7 @@ def test_extraction_to_params_shapes_lists() -> None:
     )
     params = _extraction_to_params("c1", extraction)
     assert params["chunk_id"] == "c1"
-    assert params["entities"] == [
-        {"name": "Alice", "type": "Person", "description": "An engineer"}
-    ]
+    assert params["entities"] == [{"name": "Alice", "type": "Person", "description": "An engineer"}]
     assert params["relations"] == [
         {
             "source": "Alice",
@@ -223,9 +223,7 @@ async def test_extract_parses_structured_output(
     structured_llm.ainvoke = AsyncMock(return_value=canned)
     fake_llm = MagicMock()
     fake_llm.with_structured_output.return_value = structured_llm
-    monkeypatch.setattr(
-        "sovereign_rag.graph.neo4j_store.get_llm", lambda: fake_llm
-    )
+    monkeypatch.setattr("sovereign_rag.graph.neo4j_store.get_llm", lambda: fake_llm)
 
     result = await patched_store._extract("Ada Lovelace worked on the Analytical Engine.")
 

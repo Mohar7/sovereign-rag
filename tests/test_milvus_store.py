@@ -247,9 +247,7 @@ async def test_ensure_collection_creates_and_loads(
 
 
 @pytest.mark.unit
-async def test_ensure_collection_idempotent(
-    mock_client: MagicMock, settings: Settings
-) -> None:
+async def test_ensure_collection_idempotent(mock_client: MagicMock, settings: Settings) -> None:
     store = _store(mock_client, settings)
     await store.ensure_collection()
     await store.ensure_collection()
@@ -297,9 +295,7 @@ async def test_add_chunks_embeds_text_and_inserts_rows(
 
 
 @pytest.mark.unit
-async def test_add_chunks_empty_is_noop(
-    mock_client: MagicMock, settings: Settings
-) -> None:
+async def test_add_chunks_empty_is_noop(mock_client: MagicMock, settings: Settings) -> None:
     store = _store(mock_client, settings)
     with patch(
         "sovereign_rag.vectorstore.milvus_store.embed_texts",
@@ -376,9 +372,7 @@ async def test_hybrid_search_builds_two_legs_and_uses_rrf(
 
 
 @pytest.mark.unit
-async def test_hybrid_search_default_top_k(
-    mock_client: MagicMock, settings: Settings
-) -> None:
+async def test_hybrid_search_default_top_k(mock_client: MagicMock, settings: Settings) -> None:
     store = _store(mock_client, settings)
     with patch(
         "sovereign_rag.vectorstore.milvus_store.embed_query",
@@ -443,9 +437,7 @@ async def test_bm25_search_passes_raw_query_string(
 
 
 @pytest.mark.unit
-async def test_delete_document_uses_filter(
-    mock_client: MagicMock, settings: Settings
-) -> None:
+async def test_delete_document_uses_filter(mock_client: MagicMock, settings: Settings) -> None:
     mock_client.delete = AsyncMock(return_value={"delete_count": 3})
     store = _store(mock_client, settings)
     deleted = await store.delete_document("doc-x")
@@ -455,9 +447,7 @@ async def test_delete_document_uses_filter(
 
 
 @pytest.mark.unit
-async def test_close_awaits_client_close(
-    mock_client: MagicMock, settings: Settings
-) -> None:
+async def test_close_awaits_client_close(mock_client: MagicMock, settings: Settings) -> None:
     store = _store(mock_client, settings)
     await store.close()
     mock_client.close.assert_awaited_once()

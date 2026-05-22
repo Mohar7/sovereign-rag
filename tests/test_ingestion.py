@@ -77,8 +77,7 @@ async def test_search_searxng_respects_max_results() -> None:
     """max_results truncates the SearXNG result list."""
     payload = {
         "results": [
-            {"title": f"r{i}", "url": f"https://{i}.example", "content": f"c{i}"}
-            for i in range(10)
+            {"title": f"r{i}", "url": f"https://{i}.example", "content": f"c{i}"} for i in range(10)
         ]
     }
     with patch.object(
@@ -268,9 +267,7 @@ async def test_parse_file_maps_to_source_document(tmp_path: Path) -> None:
     fake_converter = MagicMock()
     fake_converter.convert.return_value = fake_result
 
-    with patch(
-        "sovereign_rag.ingestion.pdf.DocumentConverter", return_value=fake_converter
-    ):
+    with patch("sovereign_rag.ingestion.pdf.DocumentConverter", return_value=fake_converter):
         doc = await parse_file(pdf_path)
 
     assert isinstance(doc, SourceDocument)
@@ -298,9 +295,7 @@ async def test_parse_file_docx_source_type(tmp_path: Path) -> None:
     fake_converter = MagicMock()
     fake_converter.convert.return_value = fake_result
 
-    with patch(
-        "sovereign_rag.ingestion.pdf.DocumentConverter", return_value=fake_converter
-    ):
+    with patch("sovereign_rag.ingestion.pdf.DocumentConverter", return_value=fake_converter):
         doc = await parse_file(docx_path)
 
     assert doc.source_type is SourceType.DOCX

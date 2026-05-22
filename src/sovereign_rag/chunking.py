@@ -88,9 +88,7 @@ async def contextualize(doc: SourceDocument, chunks: list[Chunk]) -> list[Chunk]
             try:
                 resp = await llm.ainvoke(prompt)
                 prefix = (
-                    resp.content
-                    if isinstance(resp.content, str)
-                    else str(resp.content)
+                    resp.content if isinstance(resp.content, str) else str(resp.content)
                 ).strip()
             except Exception:
                 logger.warning("contextualize failed for chunk %s", chunk.chunk_id, exc_info=True)

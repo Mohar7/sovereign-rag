@@ -42,9 +42,7 @@ def rerank(
 
     from flashrank import RerankRequest
 
-    passages = [
-        {"id": i, "text": c.chunk.text, "meta": {}} for i, c in enumerate(candidates)
-    ]
+    passages = [{"id": i, "text": c.chunk.text, "meta": {}} for i, c in enumerate(candidates)]
     ranked = _ranker().rerank(RerankRequest(query=query, passages=passages))
 
     out: list[RetrievedChunk] = []

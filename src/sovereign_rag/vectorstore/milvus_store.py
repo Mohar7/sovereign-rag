@@ -189,9 +189,7 @@ class MilvusHybridStore:
             auto_id=False,
             description="sovereign-rag hybrid (dense + BM25) chunks",
         )
-        schema.add_field(
-            _F_CHUNK_ID, DataType.VARCHAR, is_primary=True, max_length=64
-        )
+        schema.add_field(_F_CHUNK_ID, DataType.VARCHAR, is_primary=True, max_length=64)
         # enable_analyzer=True is REQUIRED for the BM25 function to tokenize.
         schema.add_field(
             _F_TEXT, DataType.VARCHAR, max_length=_TEXT_MAX_LENGTH, enable_analyzer=True
@@ -254,13 +252,11 @@ class MilvusHybridStore:
         dense_vectors = await embed_texts([c.text for c in chunks])
         if len(dense_vectors) != len(chunks):
             raise ValueError(
-                f"embed_texts returned {len(dense_vectors)} vectors "
-                f"for {len(chunks)} chunks"
+                f"embed_texts returned {len(dense_vectors)} vectors " f"for {len(chunks)} chunks"
             )
 
         rows = [
-            chunk_to_row(chunk, dense)
-            for chunk, dense in zip(chunks, dense_vectors, strict=True)
+            chunk_to_row(chunk, dense) for chunk, dense in zip(chunks, dense_vectors, strict=True)
         ]
         result = await self._client.insert(collection_name=self._collection, data=rows)
         inserted = _insert_count(result, fallback=len(rows))

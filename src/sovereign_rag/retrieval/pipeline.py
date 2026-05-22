@@ -82,9 +82,7 @@ class RAGPipeline:
         self._milvus = milvus or MilvusHybridStore(settings=self._s)
         if graph is _UNSET:
             # Not provided → honor config.
-            self._graph = (
-                Neo4jGraphStore() if self._s.enable_graph_retrieval else None
-            )
+            self._graph = Neo4jGraphStore() if self._s.enable_graph_retrieval else None
         else:
             # Explicitly provided (including None to disable).
             self._graph = graph  # type: ignore[assignment]
@@ -110,9 +108,7 @@ class RAGPipeline:
 
     # ---------- retrieval ----------
 
-    async def retrieve(
-        self, query: str, *, doc_id: str | None = None
-    ) -> list[RetrievedChunk]:
+    async def retrieve(self, query: str, *, doc_id: str | None = None) -> list[RetrievedChunk]:
         """Hybrid (Milvus) + graph (Neo4j) → dedup → rerank → top-k."""
         coros = [self._milvus.hybrid_search(query, doc_id=doc_id)]
         if self._graph is not None:
@@ -150,9 +146,7 @@ class RAGPipeline:
         resp = await llm.ainvoke(
             [
                 SystemMessage(content=_ANSWER_SYSTEM),
-                HumanMessage(
-                    content=f"Context passages:\n{context_block}\n\nQuestion: {query}"
-                ),
+                HumanMessage(content=f"Context passages:\n{context_block}\n\nQuestion: {query}"),
             ]
         )
         answer_text = resp.content if isinstance(resp.content, str) else str(resp.content)

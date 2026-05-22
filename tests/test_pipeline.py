@@ -18,7 +18,9 @@ from sovereign_rag.retrieval.pipeline import (
 )
 
 
-def _rc(chunk_id: str, score: float, text: str = "body", source: str = "milvus_hybrid") -> RetrievedChunk:
+def _rc(
+    chunk_id: str, score: float, text: str = "body", source: str = "milvus_hybrid"
+) -> RetrievedChunk:
     return RetrievedChunk(
         chunk=Chunk(
             doc_id="d1",
