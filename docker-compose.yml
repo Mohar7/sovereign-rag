@@ -13,7 +13,6 @@ services:
   # ---------- Milvus standalone (etcd + minio + milvus) ----------
   milvus-etcd:
     image: quay.io/coreos/etcd:v3.5.25
-    container_name: sovereign-etcd
     environment:
       - ETCD_AUTO_COMPACTION_MODE=revision
       - ETCD_AUTO_COMPACTION_RETENTION=1000
@@ -31,7 +30,6 @@ services:
 
   milvus-minio:
     image: minio/minio:RELEASE.2024-05-28T17-19-04Z
-    container_name: sovereign-minio
     environment:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
@@ -47,7 +45,6 @@ services:
 
   milvus:
     image: milvusdb/milvus:v2.6.16
-    container_name: sovereign-milvus
     command: ["milvus", "run", "standalone"]
     environment:
       ETCD_ENDPOINTS: milvus-etcd:2379
@@ -71,7 +68,6 @@ services:
   # ---------- Neo4j Community (has native vector index) ----------
   neo4j:
     image: neo4j:5-community
-    container_name: sovereign-neo4j
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
       NEO4J_PLUGINS: '["apoc"]'
@@ -91,7 +87,6 @@ services:
   # ---------- Postgres (LangGraph checkpoint store) ----------
   postgres:
     image: postgres:16-alpine
-    container_name: sovereign-postgres
     environment:
       POSTGRES_USER: sovereign
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sovereign-dev-pw}
@@ -111,7 +106,6 @@ services:
   # ---------- SearXNG (self-hosted metasearch, no API key) ----------
   searxng:
     image: searxng/searxng:latest
-    container_name: sovereign-searxng
     environment:
       SEARXNG_BASE_URL: http://localhost:8080/
     volumes:
@@ -126,7 +120,6 @@ services:
       context: .
       dockerfile: Dockerfile
     image: sovereign-rag:latest
-    container_name: sovereign-api
     profiles: [app]
     environment:
       OLLAMA_BASE_URL: http://host.docker.internal:11434
