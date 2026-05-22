@@ -32,8 +32,11 @@ models/
 .docling_cache/
 .crawl4ai/
 
-# SearXNG generated secret
-deploy/searxng/settings.yml
+# SearXNG runtime state — limiter db, uwsgi caches, etc. Our committed
+# settings.yml stays tracked (small overrides on top of upstream defaults).
+deploy/searxng/limiter.toml
+deploy/searxng/*.db
+deploy/searxng/uwsgi.ini
 
 # IDE / OS
 .idea/

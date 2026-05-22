@@ -28,6 +28,7 @@ checkout need.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -41,7 +42,7 @@ for _p in (str(_REPO_ROOT), str(_SRC)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from sovereign_rag.documents import Chunk, RetrievedChunk  # noqa: E402
+from sovereign_rag.documents import Chunk, RetrievedChunk, SourceDocument, SourceType  # noqa: E402
 
 try:  # works both as a module (`python -m eval.evaluate`) and as a script
     from eval.ragas_eval import RAGAS_METRIC_NAMES, run_ragas
@@ -188,13 +189,26 @@ async def _run_live(
 
     try:
         pipeline = RAGPipeline()
-        await pipeline.ingest_corpus(corpus)  # type: ignore[attr-defined]
+        # Index every corpus doc as a SourceDocument. We use a stable
+        # `corpus://<doc_id>` URI so re-runs over the same corpus don't
+        # produce duplicate Milvus rows on a wiped collection.
+        for doc_id, text in corpus.items():
+            doc = SourceDocument(
+                title=doc_id,
+                source_uri=f"corpus://{doc_id}",
+                source_type=SourceType.TEXT,
+                markdown=text,
+            )
+            await pipeline.index_document(doc)
 
         retrieval_rows: list[dict[str, Any]] = []
         ragas_samples: list[dict[str, Any]] = []
         for item in qa_pairs:
-            result = await pipeline.answer(item["question"])  # type: ignore[attr-defined]
-            retrieved: list[RetrievedChunk] = list(result.chunks)
+            # Run retrieve + answer as separate calls so we can measure IR
+            # metrics on the actual rerank output, and so the RAGAS sample
+            # carries both the answer and the contexts that backed it.
+            retrieved: list[RetrievedChunk] = await pipeline.retrieve(item["question"])
+            result = await pipeline.answer(item["question"])
             retrieval_rows.append(
                 _retrieval_row(item["question"], retrieved, item["relevant_substrings"], k)
             )
@@ -209,6 +223,9 @@ async def _run_live(
     except Exception as exc:
         print(f"  live pipeline present but not usable ({exc}); falling back.")
         return None
+    finally:
+        with contextlib.suppress(Exception):
+            await pipeline.aclose()
 
     ragas_result = await run_ragas(ragas_samples)
     return {

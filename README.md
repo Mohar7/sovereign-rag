@@ -243,7 +243,6 @@ Repo secrets required for the integration job: `OLLAMA_API_KEY`, `OPENAI_API_KEY
 - [ ] **Camoufox** ingestion tier for anti-bot sites (lazy-imported hook already in `ingestion/web.py`).
 - [ ] Community-detection global-search (Leiden) on the graph for "dataset-wide" questions.
 - [ ] Parent-document retrieval (small-to-large) on the Milvus side.
-- [ ] `eval/evaluate.py` live RAGAS path: calls a `RAGPipeline.ingest_corpus()` that doesn't exist on the pipeline (which exposes `index_document`). The harness silently falls back to its OFFLINE demo. Wire the live path properly.
 
 ## License
 

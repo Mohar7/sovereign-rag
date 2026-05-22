@@ -1,0 +1,41 @@
+# Minimal SearXNG settings — layered on top of the upstream defaults.
+#
+# The "use_default_settings: true" line below tells SearXNG to start
+# from its bundled defaults and apply only the overrides we set here.
+# That way we don't have to mirror the upstream ~1700-line file and
+# we still pick up new engines / fixes when we bump the image.
+#
+# Only override things that actually matter to sovereign-rag:
+#
+# - search.formats: the project's ingestion layer calls
+#   `?format=json` for machine-readable results; the upstream default
+#   ships ONLY html, so the call comes back 403 and we fall back to ddgs.
+# - server.limiter: disable rate limiting for local-dev / self-hosted
+#   single-tenant use. Re-enable + tune in deployments serving humans.
+
+use_default_settings: true
+
+server:
+  # SearXNG refuses to start with a placeholder secret in production, but
+  # this image is intended for a single-tenant self-hosted runner. Override
+  # via the SEARXNG_SECRET env var if exposing publicly.
+  secret_key: "sovereign-rag-dev-only-replace-when-publicly-exposed"
+  limiter: false
+  image_proxy: false
+
+search:
+  formats:
+    - html
+    - json
+  safe_search: 0
+
+# Slightly trim the noisier engines for cleaner backend results.
+engines:
+  - name: wikipedia
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
