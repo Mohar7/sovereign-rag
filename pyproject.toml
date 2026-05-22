@@ -20,6 +20,9 @@ dependencies = [
     "langchain-ollama>=0.2,<1.0",
     "ollama>=0.3,<1.0",
 
+    # ---- OpenAI embeddings (CI runner: Ollama Cloud has no embeddings endpoint) ----
+    "langchain-openai>=1.0,<2.0",
+
     # ---- Vector DB: Milvus (dense + native BM25 hybrid) ----
     "pymilvus>=2.6,<3.0",
 

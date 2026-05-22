@@ -1,9 +1,12 @@
-# Integration tests against the LIVE stack (Milvus + Neo4j + SearXNG + Ollama),
-# executed on a self-hosted runner (a Mac Mini with Docker + Ollama).
+# Integration tests against the LIVE stack (Milvus + Neo4j + SearXNG),
+# executed on a self-hosted runner (a Mac Mini with Docker).
 #
-# Why self-hosted: GitHub-hosted runners can't run Ollama or the full Milvus
-# standalone stack within job limits. The Mac Mini already has Ollama with the
-# models pulled and can run the compose stack.
+# Why self-hosted: GitHub-hosted runners can't run the full Milvus standalone
+# stack within job limits. The Mac Mini runs the compose stack locally.
+#
+# Models: the LLM runs on Ollama Cloud (https://ollama.com) and embeddings run
+# on OpenAI — Ollama Cloud does not expose an embeddings endpoint. Both are
+# supplied as repo secrets (OLLAMA_API_KEY, OPENAI_API_KEY).
 #
 # SECURITY: triggers are limited to push-to-main and manual dispatch. Fork
 # pull requests do NOT run here — a self-hosted runner must never execute
@@ -28,12 +31,23 @@ jobs:
     runs-on: [self-hosted, macOS, sovereign]
     timeout-minutes: 40
     env:
+      # Isolate CI's docker resources so `down -v` can never touch a local
+      # `sovereign-rag` checkout's containers/volumes on this shared runner host.
+      COMPOSE_PROJECT_NAME: sovereign-ci
       NEO4J_PASSWORD: sovereign-ci-pw
-      # Point the test client at the locally-running services.
-      OLLAMA_BASE_URL: http://localhost:11434
+      # LLM on Ollama Cloud.
+      OLLAMA_BASE_URL: https://ollama.com
+      OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+      LLM_MODEL: deepseek-v4-pro
+      # Embeddings on OpenAI (Ollama Cloud has no embeddings API).
+      EMBED_PROVIDER: openai
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_EMBED_MODEL: text-embedding-3-large
+      EMBED_DIM: "3072"
+      # Local services.
       MILVUS_URI: http://localhost:19530
       NEO4J_URI: neo4j://localhost:7687
-      SEARXNG_URL: http://localhost:8080
+      SEARXNG_URL: http://localhost:8082
       # Opt-in flags the integration tests gate on.
       RUN_NEO4J_IT: "1"
       RUN_INGESTION_IT: "1"
@@ -49,10 +63,8 @@ jobs:
       - name: Sync deps
         run: uv sync --frozen
 
-      - name: Ensure Ollama models present
-        run: |
-          ollama pull qwen2.5:7b
-          ollama pull bge-m3
+      - name: Install Playwright browser (Crawl4AI live crawl test)
+        run: uv run playwright install chromium
 
       - name: Bring up infra (Milvus + Neo4j + SearXNG)
         run: docker compose up -d milvus neo4j searxng

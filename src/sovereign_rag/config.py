@@ -19,16 +19,24 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ---- Ollama ----
+    # ---- Ollama (LLM; optionally Ollama Cloud) ----
     ollama_base_url: str = "http://localhost:11434"
+    # Set for Ollama Cloud (https://ollama.com); sent as a Bearer header.
+    ollama_api_key: str = ""
     llm_model: str = "qwen2.5:7b"
-    embed_model: str = "bge-m3"
-    # bge-m3 produces 1024-dim dense vectors. If you change embed_model,
-    # change this to match — the Milvus collection schema is built from it.
-    embed_dim: int = 1024
     llm_temperature: float = 0.0
     # Generous context for contextual-retrieval prefixing of long docs.
     llm_num_ctx: int = 8192
+
+    # ---- Embeddings ----
+    # "ollama" (local bge-m3) or "openai" (Ollama Cloud has no embeddings API).
+    embed_provider: str = "ollama"
+    embed_model: str = "bge-m3"  # used when embed_provider == "ollama"
+    openai_api_key: str = ""
+    openai_embed_model: str = "text-embedding-3-large"
+    # Dense vector width. The Milvus collection schema is built from this, so it
+    # MUST match the active embedder's output (bge-m3 → 1024; OpenAI 3-large → 3072).
+    embed_dim: int = 1024
 
     # ---- Milvus ----
     milvus_uri: str = "http://localhost:19530"
