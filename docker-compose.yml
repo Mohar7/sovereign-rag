@@ -97,7 +97,7 @@ services:
     volumes:
       - ./deploy/searxng:/etc/searxng:rw
     ports:
-      - "8080:8080"
+      - "8082:8080"
     networks: [sovereign]
 
   # ---------- The API (opt-in via `--profile app`) ----------
