@@ -13,13 +13,17 @@ CPU in tens of ms per query, so it adds quality without a GPU dependency.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from sovereign_rag.config import get_settings
 from sovereign_rag.documents import RetrievedChunk
 
+if TYPE_CHECKING:
+    from flashrank import Ranker
+
 
 @lru_cache(maxsize=1)
-def _ranker():
+def _ranker() -> Ranker:
     # Imported lazily so importing this module doesn't pull in onnxruntime
     # until reranking is actually used (keeps test import time low).
     from flashrank import Ranker
