@@ -1,6 +1,6 @@
 # sovereign-rag
 
-> Fully self-hosted **GraphRAG**: Milvus hybrid retrieval (dense + BM25) plus Neo4j knowledge-graph local-search, then cross-encoder reranking, with Anthropic-style contextual retrieval — powered **end-to-end by Ollama**. Web ingestion via Docling / Crawl4AI / SearXNG. **Zero paid APIs.**
+> Self-hosted **GraphRAG**: Milvus hybrid retrieval (dense + BM25) plus Neo4j knowledge-graph local-search, then cross-encoder reranking, with Anthropic-style contextual retrieval — powered by **Ollama** for local-dev. Web ingestion via Docling / Crawl4AI / SearXNG. **Local development needs no paid APIs.** (See [CI providers](#two-tier-ci) for one runner-environment caveat.)
 
 [![CI](https://github.com/Mohar7/sovereign-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohar7/sovereign-rag/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
@@ -9,7 +9,9 @@
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-black.svg)](https://ollama.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Everything runs on your own machine. No OpenAI/Anthropic/Cohere keys — the LLM, the embeddings, the reranker, the vector DB, the graph DB, and web search are all local or self-hosted.
+For local development, everything runs on your own machine — the LLM (Ollama), the embeddings (Ollama bge-m3), the reranker (FlashRank, CPU), the vector DB (Milvus), the graph DB (Neo4j), and web search (SearXNG) are all local or self-hosted. No paid keys required.
+
+Honest caveat: the CI integration tier swaps in cloud providers (Ollama Cloud for the LLM, OpenAI for embeddings) because the self-hosted Mac Mini runner can't host a local Ollama daemon and Ollama Cloud has no embeddings endpoint. Details in [Two-tier CI](#two-tier-ci). The defaults in `config.py` stay local-first.
 
 ## Why this exists
 
@@ -147,9 +149,17 @@ Tests that need Milvus/Neo4j/Ollama are marked `@pytest.mark.integration` and sk
 | Workflow | Runner | What runs |
 |---|---|---|
 | `ci.yml` | GitHub-hosted `ubuntu-latest` | ruff + mypy + unit tests (no services) — fast, on every push/PR |
-| `integration.yml` | **self-hosted** `[self-hosted, macOS, sovereign]` | brings up the compose stack, pulls Ollama models, runs `pytest -m integration` + the live eval harness — on push-to-main / manual dispatch only |
+| `integration.yml` | **self-hosted** `[self-hosted, macOS, sovereign]` | brings up the compose stack (Milvus + Neo4j + SearXNG), runs `pytest -m integration` + the live eval harness — on push-to-main / manual dispatch only |
 
-The integration tier needs Ollama + Docker, which GitHub-hosted runners can't provide. It runs on a self-hosted runner (e.g. a Mac Mini reachable over Tailscale for management). Register the runner with:
+The integration tier needs Docker + browser deps + LLM + embeddings. The Mac Mini runner can't reasonably host a local Ollama daemon, and **Ollama Cloud does not expose an embeddings endpoint** — so the CI tier uses:
+
+- **LLM**: Ollama Cloud `deepseek-v4-pro` (`OLLAMA_API_KEY` secret)
+- **Embeddings**: OpenAI `text-embedding-3-large` at 3072-dim (`OPENAI_API_KEY` secret) — `EMBED_PROVIDER=openai` flips the dispatcher
+- **Vector store / graph / search**: local containers on the runner (compose stack)
+
+This is the only place the project depends on paid APIs, and it's documented honestly. The defaults in `config.py` and the local-dev path stay 100% local. Per-run cost on the golden set is in cents.
+
+Register the runner with:
 
 ```bash
 # on the Mac Mini, from the repo's Settings -> Actions -> Runners -> New
@@ -157,6 +167,8 @@ The integration tier needs Ollama + Docker, which GitHub-hosted runners can't pr
             --labels self-hosted,macOS,sovereign
 ./svc.sh install && ./svc.sh start    # run as a background service
 ```
+
+Repo secrets required for the integration job: `OLLAMA_API_KEY`, `OPENAI_API_KEY`.
 
 **Security:** `integration.yml` triggers only on `push` to `main` and `workflow_dispatch` — never on pull requests. A self-hosted runner must not execute untrusted fork code. Keep "Require approval for all outside collaborators" enabled in repo Settings.
 
@@ -166,6 +178,7 @@ The integration tier needs Ollama + Docker, which GitHub-hosted runners can't pr
 - [ ] **Camoufox** ingestion tier for anti-bot sites (lazy-imported hook already in `ingestion/web.py`).
 - [ ] Community-detection global-search (Leiden) on the graph for "dataset-wide" questions.
 - [ ] Parent-document retrieval (small-to-large) on the Milvus side.
+- [ ] `eval/evaluate.py` live RAGAS path: calls a `RAGPipeline.ingest_corpus()` that doesn't exist on the pipeline (which exposes `index_document`). The harness silently falls back to its OFFLINE demo. Wire the live path properly.
 
 ## License
 
