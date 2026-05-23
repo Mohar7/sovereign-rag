@@ -1,13 +1,13 @@
 // ⌘K command palette — modal overlay with three sections:
-//   - Threads (filter against the user's threads)
-//   - Documents (filter against indexed corpus)
-//   - Actions (open settings, re-run last query, ingest URL, …)
+//   - Threads     (filter against the live threads list)
+//   - Documents   (filter via /api/documents/search, debounced)
+//   - Actions     (open settings, re-run last query, ingest URL, …)
 //
-// Threads is wired to the live threads list. Documents + Actions are
-// mocked because we don't yet have a /corpus/search endpoint. Selecting
-// a thread jumps to it; selecting an action fires its handler.
+// Selecting a thread jumps to it; selecting a document opens the source
+// drawer (TODO); selecting an action fires its handler.
 
 import { useEffect, useState } from "react";
+import { api, type DocumentSummary } from "../lib/api";
 import type { ThreadSummary } from "../lib/types";
 
 interface Action {
@@ -41,16 +41,31 @@ export function CommandPalette({
     : threads
   ).slice(0, 5);
 
-  // Mock documents (until /corpus/search). Filtered cheaply by title.
-  const MOCK_DOCS = [
-    { title: "rrf-paper.pdf", sub: "Cormack et al. 2009 · 18 chunks", icon: "📄" },
-    { title: "milvus.io/docs/hybrid-search.md", sub: "23 chunks · 3m ago", icon: "📄" },
-    { title: "notes/hybrid-retrieval.md", sub: "internal · 4 chunks", icon: "∽" },
-    { title: "trec-dl-2023.pdf", sub: "mentions RRF · 12 chunks", icon: "📄" },
-  ];
-  const matchingDocs = lowered
-    ? MOCK_DOCS.filter((d) => d.title.toLowerCase().includes(lowered))
-    : MOCK_DOCS.slice(0, 3);
+  // Live documents from /api/documents/search, debounced 200ms.
+  const [docs, setDocs] = useState<DocumentSummary[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const id = window.setTimeout(() => {
+      api
+        .documentsSearch(lowered, 6)
+        .then((r) => {
+          if (!cancelled) setDocs(r);
+        })
+        .catch(() => {
+          if (!cancelled) setDocs([]);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [lowered]);
+
+  const iconFor = (uri: string) => {
+    if (uri.startsWith("http")) return "🌐";
+    if (uri.includes(".pdf")) return "📄";
+    return "∽";
+  };
 
   const actions: Action[] = [
     {
@@ -81,11 +96,11 @@ export function CommandPalette({
 
   type Row =
     | { kind: "thread"; t: ThreadSummary }
-    | { kind: "doc"; d: (typeof MOCK_DOCS)[number] }
+    | { kind: "doc"; d: DocumentSummary }
     | { kind: "action"; a: Action };
   const rows: Row[] = [
     ...matchingThreads.map((t) => ({ kind: "thread" as const, t })),
-    ...matchingDocs.map((d) => ({ kind: "doc" as const, d })),
+    ...docs.map((d) => ({ kind: "doc" as const, d })),
     ...actions.map((a) => ({ kind: "action" as const, a })),
   ];
 
@@ -195,26 +210,32 @@ export function CommandPalette({
           </>
         )}
 
-        {matchingDocs.length > 0 && (
+        {docs.length > 0 && (
           <>
             <div className="palette-section">
-              Documents <span className="count">· {matchingDocs.length} match{matchingDocs.length === 1 ? "" : "es"}</span>
+              Documents <span className="count">· {docs.length} match{docs.length === 1 ? "" : "es"}</span>
             </div>
-            {matchingDocs.map((d) => {
+            {docs.map((d) => {
               i += 1;
               const idx = i;
               const isActive = idx === activeIdx;
               return (
                 <div
-                  key={d.title}
+                  key={d.doc_id}
                   className={`palette-row ${isActive ? "active" : ""}`}
                   onMouseEnter={() => setActiveIdx(idx)}
                   onClick={() => activate(idx)}
                 >
-                  <span className="ic doc">{d.icon}</span>
+                  <span className="ic doc">{iconFor(d.source_uri)}</span>
                   <span>
                     <span className="lab">
-                      {d.title} <span className="sub">— {d.sub}</span>
+                      {d.title || "untitled"}{" "}
+                      <span className="sub">
+                        — {d.chunks} chunk{d.chunks === 1 ? "" : "s"} ·{" "}
+                        {d.source_uri.length > 40
+                          ? d.source_uri.slice(0, 40) + "…"
+                          : d.source_uri}
+                      </span>
                     </span>
                   </span>
                   <span className="kbd">↗</span>

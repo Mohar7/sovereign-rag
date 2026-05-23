@@ -4,40 +4,90 @@
 // (route to PATCH /settings or store thread-scoped overrides via the
 //  LangGraph thread metadata).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { KnobRow } from "../components/controls/KnobRow";
 import { NumInput } from "../components/controls/NumInput";
 import { PillSelect } from "../components/controls/PillSelect";
 import { Segmented } from "../components/controls/Segmented";
 import { Slider } from "../components/controls/Slider";
 import { Toggle } from "../components/controls/Toggle";
+import type { Settings, SettingsPatch } from "../lib/api";
 
 const TABS = ["Retrieval", "Model", "Indexing", "Web fallback", "Services"] as const;
 type Tab = (typeof TABS)[number];
 
 interface Props {
+  /** Live settings from GET /api/settings; null while loading. */
+  settings: Settings | null;
+  /** PATCH /api/settings to persist (in-process) changes. */
+  onPatch: (patch: Partial<Settings>) => Promise<Settings>;
   onClose: () => void;
 }
 
-export function SettingsPanel({ onClose }: Props) {
+export function SettingsPanel({ settings, onPatch, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("Retrieval");
   const [scope, setScope] = useState<"thread" | "global">("thread");
 
-  // Local knob state — visual until we have a /settings endpoint to PATCH.
+  // Local draft state — initialised from live settings, mutated by the
+  // sliders/toggles, persisted on Apply.
+  const [draft, setDraft] = useState<Settings | null>(settings);
+  useEffect(() => {
+    // When the parent re-fetches settings (e.g. after the panel re-opens
+    // mid-session), re-sync the draft so we don't show stale knob values.
+    if (settings) setDraft(settings);
+  }, [settings]);
+
   const [dense, setDense] = useState(true);
   const [sparse, setSparse] = useState(true);
-  const [graph, setGraph] = useState(true);
-  const [kRet, setKRet] = useState(50);
-  const [kRer, setKRer] = useState(5);
-  const [rrfK, setRrfK] = useState(60);
   const [strategy, setStrategy] = useState<"RRF" | "Weighted" | "Borda">("RRF");
   const [wGraph, setWGraph] = useState(40);
   const [wVector, setWVector] = useState(60);
   const [scoreFloor, setScoreFloor] = useState(0.5);
   const [adaptiveK, setAdaptiveK] = useState(false);
-  const [fbScoreFloor, setFbScoreFloor] = useState(0.5);
-  const [fbMinChunks, setFbMinChunks] = useState(3);
-  const [urlBudget, setUrlBudget] = useState(3);
+
+  const setIn = <K extends keyof Settings>(field: K, value: Settings[K]) => {
+    setDraft((d) => (d ? { ...d, [field]: value } : d));
+  };
+
+  const apply = async () => {
+    if (!draft) {
+      onClose();
+      return;
+    }
+    const patch: SettingsPatch = {
+      retrieve_top_k: draft.retrieve_top_k,
+      rerank_top_k: draft.rerank_top_k,
+      rrf_k: draft.rrf_k,
+      enable_graph_retrieval: draft.enable_graph_retrieval,
+      enable_contextual_retrieval: draft.enable_contextual_retrieval,
+      web_fallback_min_chunks: draft.web_fallback_min_chunks,
+      web_fallback_max_urls: draft.web_fallback_max_urls,
+    };
+    try {
+      await onPatch(patch);
+    } catch (err) {
+      console.error("patch settings failed", err);
+    }
+    onClose();
+  };
+
+  // While loading, fall back to design defaults for the controls so the
+  // panel renders without flicker.
+  const d = draft ?? {
+    llm_model: "kimi-k2.6",
+    embed_provider: "openai",
+    embed_model: "bge-m3",
+    embed_dim: 3072,
+    retrieve_top_k: 50,
+    rerank_top_k: 5,
+    rrf_k: 60,
+    enable_graph_retrieval: true,
+    enable_contextual_retrieval: true,
+    reranker_model: "BAAI/bge-reranker-v2-m3",
+    reranker_device: "auto",
+    web_fallback_min_chunks: 3,
+    web_fallback_max_urls: 3,
+  } satisfies Settings;
 
   return (
     <>
@@ -73,8 +123,10 @@ export function SettingsPanel({ onClose }: Props) {
                 <KnobRow label="Dense (vector)" help="Milvus ANN over bge-m3 1024-dim embeddings.">
                   <Toggle on={dense} onChange={setDense} />
                   <span style={{ color: "var(--muted)", fontSize: "10.5px" }}>
-                    milvus.collection{" "}
-                    <span style={{ color: "var(--text-dim)" }}>sr_chunks_v3</span>
+                    {d.embed_provider} <span style={{ color: "var(--dim)" }}>·</span>{" "}
+                    <span style={{ color: "var(--text-dim)" }}>{d.embed_model}</span>{" "}
+                    <span style={{ color: "var(--dim)" }}>·</span>{" "}
+                    <span style={{ color: "var(--text-dim)" }}>{d.embed_dim}-dim</span>
                   </span>
                 </KnobRow>
                 <KnobRow label="Sparse (BM25)" help="Native to Milvus 2.6 — no separate index.">
@@ -87,7 +139,10 @@ export function SettingsPanel({ onClose }: Props) {
                   label="Graph traversal"
                   help="Neo4j community plugin · BFS from entity-linked seeds."
                 >
-                  <Toggle on={graph} onChange={setGraph} />
+                  <Toggle
+                    on={d.enable_graph_retrieval}
+                    onChange={(on) => setIn("enable_graph_retrieval", on)}
+                  />
                   <PillSelect k="depth" v="2 hops" />
                   <PillSelect k="max nodes" v="60" />
                 </KnobRow>
@@ -95,19 +150,29 @@ export function SettingsPanel({ onClose }: Props) {
                   label="k_retrieve"
                   help="How many candidates each retriever returns before fusion."
                 >
-                  <Slider min={10} max={200} value={kRet} onChange={setKRet} />
+                  <Slider
+                    min={10}
+                    max={200}
+                    value={d.retrieve_top_k}
+                    onChange={(v) => setIn("retrieve_top_k", v)}
+                  />
                 </KnobRow>
                 <KnobRow
                   label="k_rerank"
                   help="How many fused candidates pass the cross-encoder reranker."
                 >
-                  <Slider min={1} max={20} value={kRer} onChange={setKRer} />
+                  <Slider
+                    min={1}
+                    max={20}
+                    value={d.rerank_top_k}
+                    onChange={(v) => setIn("rerank_top_k", v)}
+                  />
                 </KnobRow>
               </div>
 
               <div className="drawer-section">
                 <div className="h">
-                  ◗ fusion <span className="right">RRF · k={rrfK}</span>
+                  ◗ fusion <span className="right">RRF · k={d.rrf_k}</span>
                 </div>
                 <KnobRow
                   label="Strategy"
@@ -123,7 +188,13 @@ export function SettingsPanel({ onClose }: Props) {
                   label="RRF constant k"
                   help="Lower → top-rank dominance · higher → softer blend."
                 >
-                  <Slider min={10} max={120} value={rrfK} ticks={6} onChange={setRrfK} />
+                  <Slider
+                    min={10}
+                    max={120}
+                    value={d.rrf_k}
+                    ticks={6}
+                    onChange={(v) => setIn("rrf_k", v)}
+                  />
                 </KnobRow>
                 <KnobRow
                   label="Per-retriever weights"
@@ -172,10 +243,10 @@ export function SettingsPanel({ onClose }: Props) {
 
               <div className="drawer-section">
                 <div className="h">◗ reranker</div>
-                <KnobRow label="Model" help="Cross-encoder · runs on Ollama / CUDA fallback.">
-                  <PillSelect v="bge-reranker-v2-m3" />
+                <KnobRow label="Model" help="Cross-encoder · runs on MPS / CUDA / CPU.">
+                  <PillSelect v={d.reranker_model.replace(/^BAAI\//, "")} />
                   <span style={{ color: "var(--muted)", fontSize: "10.5px" }}>
-                    <span style={{ color: "var(--ok)" }}>●</span> warm · 248ms p50
+                    device <span style={{ color: "var(--text-dim)" }}>{d.reranker_device}</span>
                   </span>
                 </KnobRow>
                 <KnobRow
@@ -209,41 +280,15 @@ export function SettingsPanel({ onClose }: Props) {
                   </span>
                 </div>
                 <KnobRow
-                  label="Trigger when…"
-                  help="Either condition flips the run into HITL approval mode."
+                  label="Trigger when reranked chunks <"
+                  help="Falls into HITL when local candidates run thin. 0 disables."
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                      width: "100%",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ color: "var(--text-dim)", fontSize: "10.5px" }}>
-                        max rerank score &lt;
-                      </span>
-                      <NumInput
-                        value={fbScoreFloor}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(v) => setFbScoreFloor(Math.round(v * 100) / 100)}
-                      />
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ color: "var(--text-dim)", fontSize: "10.5px" }}>
-                        OR reranked chunks &lt;
-                      </span>
-                      <NumInput
-                        value={fbMinChunks}
-                        min={0}
-                        max={20}
-                        onChange={setFbMinChunks}
-                      />
-                    </div>
-                  </div>
+                  <NumInput
+                    value={d.web_fallback_min_chunks}
+                    min={0}
+                    max={20}
+                    onChange={(v) => setIn("web_fallback_min_chunks", v)}
+                  />
                 </KnobRow>
                 <KnobRow label="Search engine" help="SearXNG meta-search, self-hosted.">
                   <PillSelect v="searxng @ localhost:8082" />
@@ -252,7 +297,12 @@ export function SettingsPanel({ onClose }: Props) {
                   label="URL budget"
                   help="Maximum pages to crawl per approval round."
                 >
-                  <NumInput value={urlBudget} min={1} max={10} onChange={setUrlBudget} />
+                  <NumInput
+                    value={d.web_fallback_max_urls}
+                    min={1}
+                    max={10}
+                    onChange={(v) => setIn("web_fallback_max_urls", v)}
+                  />
                 </KnobRow>
               </div>
             </>
@@ -307,7 +357,7 @@ export function SettingsPanel({ onClose }: Props) {
               className="btn warm"
               type="button"
               style={{ background: "var(--vector)", color: "#0a0612" }}
-              onClick={onClose}
+              onClick={apply}
             >
               apply
             </button>

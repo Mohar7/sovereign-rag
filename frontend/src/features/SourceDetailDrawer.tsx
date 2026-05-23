@@ -1,62 +1,18 @@
 // Source-detail drawer — opens when a citation chip is clicked.
 // Shows the chunk text with highlights, prev/next neighbour chunks,
-// extracted entities, graph relations from Neo4j, and a metadata table.
-//
-// Wires `citation` from the active assistant turn; the neighbour / entities /
-// relations blocks render the design's mock data until a `/chunks/{id}` and
-// `/graph/local` endpoint exist on the backend (filed as roadmap).
+// extracted entities, and graph relations from Neo4j — all fetched
+// live from /api/chunks/{id}/neighbours and /api/entities?doc_id=….
 
-import type { Citation } from "../lib/types";
+import { useEffect, useState } from "react";
 import { CitationChip } from "../components/CitationChip";
+import { api, type ChunkSummary, type EntitiesResponse } from "../lib/api";
+import type { Citation } from "../lib/types";
 
 interface Props {
   n: number;
   citation: Citation;
   onClose: () => void;
 }
-
-interface Neighbour {
-  position: "prev" | "next";
-  chunk_id: string;
-  page?: number | string;
-  rerank: number;
-  text: string;
-}
-
-const MOCK_NEIGHBOURS: Neighbour[] = [
-  {
-    position: "prev",
-    chunk_id: "7be1d4f2",
-    page: 3,
-    rerank: 0.412,
-    text:
-      "We compare several rank-fusion strategies including CombSUM, CombMNZ, and Condorcet voting against the proposed RRF on a battery of TREC tracks…",
-  },
-  {
-    position: "next",
-    chunk_id: "a02c19de",
-    page: 4,
-    rerank: 0.529,
-    text:
-      "The constant k acts as a soft cap on the contribution of low-ranked candidates. In our sweep we tried k ∈ {10, 30, 60, 90, 120} and found 60 within 0.5pp of the per-task optimum…",
-  },
-];
-
-const MOCK_ENTITIES = [
-  { kind: "algo", name: "Reciprocal Rank Fusion" },
-  { kind: "algo", name: "CombSUM" },
-  { kind: "algo", name: "Condorcet" },
-  { kind: "org", name: "TREC" },
-  { kind: "person", name: "Cormack G." },
-  { kind: "var", name: "k = 60" },
-];
-
-const MOCK_RELATIONS = [
-  { s: "Reciprocal Rank Fusion", p: "cited by", o: "Milvus 2.6 docs" },
-  { s: "Reciprocal Rank Fusion", p: "outperforms", o: "CombSUM" },
-  { s: "k = 60", p: "default in", o: "Milvus / Vespa / Weaviate" },
-  { s: "Cormack G.", p: "co-authored", o: "TREC-COVID overview" },
-];
 
 function splitUri(uri: string): { scheme: string; path: string } {
   const i = uri.indexOf("://");
@@ -69,6 +25,43 @@ export function SourceDetailDrawer({ n, citation, onClose }: Props) {
   const { scheme, path } = splitUri(citation.source_uri);
   const kind: "hybrid" | "vector" | "graph" | "web" =
     scheme.startsWith("http") ? "web" : "vector";
+
+  // Live neighbours + entities fetched from FastAPI for this chunk.
+  const [prev, setPrev] = useState<ChunkSummary | null>(null);
+  const [next, setNext] = useState<ChunkSummary | null>(null);
+  const [neigErr, setNeigErr] = useState<string | null>(null);
+  const [graph, setGraph] = useState<EntitiesResponse>({ entities: [], relations: [] });
+  const [entErr, setEntErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .chunkNeighbours(citation.chunk_id)
+      .then((n) => {
+        if (cancelled) return;
+        setPrev(n.prev);
+        setNext(n.next);
+        setNeigErr(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setNeigErr(err instanceof Error ? err.message : String(err));
+      });
+    api
+      .entities(citation.doc_id)
+      .then((r) => {
+        if (!cancelled) {
+          setGraph(r);
+          setEntErr(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setEntErr(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [citation.chunk_id, citation.doc_id]);
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -138,34 +131,66 @@ export function SourceDetailDrawer({ n, citation, onClose }: Props) {
           <div className="drawer-section">
             <div className="h">◗ neighbouring chunks</div>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {MOCK_NEIGHBOURS.map((nb) => (
-                <div
-                  key={nb.chunk_id}
-                  className={nb.position === "next" ? "neighbor next" : "neighbor"}
-                >
+              {prev && (
+                <div className="neighbor">
                   <div className="nstrip">
-                    <span className="arrow">{nb.position === "prev" ? "↑ prev" : "↓ next"}</span>
+                    <span className="arrow">↑ prev</span>
                     <span>
-                      chunk {nb.chunk_id} · page {nb.page ?? "—"}
-                    </span>
-                    <span style={{ marginLeft: "auto" }} className="score">
-                      rerank {nb.rerank.toFixed(3)}
+                      chunk {prev.chunk_id.slice(0, 8)} · position {prev.position}
                     </span>
                   </div>
-                  {nb.text}
+                  {prev.raw_text.slice(0, 240)}…
                 </div>
-              ))}
+              )}
+              {next && (
+                <div className="neighbor next">
+                  <div className="nstrip">
+                    <span className="arrow">↓ next</span>
+                    <span>
+                      chunk {next.chunk_id.slice(0, 8)} · position {next.position}
+                    </span>
+                  </div>
+                  {next.raw_text.slice(0, 240)}…
+                </div>
+              )}
+              {!prev && !next && (
+                <div
+                  style={{
+                    color: "var(--muted)",
+                    fontSize: "11px",
+                    fontFamily: "var(--font-mono)",
+                    fontStyle: "italic",
+                    padding: "6px 0",
+                  }}
+                >
+                  {neigErr
+                    ? `couldn't load neighbours — ${neigErr}`
+                    : "no adjacent chunks in this document"}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="drawer-section">
             <div className="h">
-              ◗ entities in this chunk <span className="count">· {MOCK_ENTITIES.length}</span>
+              ◗ entities in this document{" "}
+              <span className="count">· {graph.entities.length}</span>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-              {MOCK_ENTITIES.map((e) => (
-                <span key={e.name} className="entity">
-                  <span className="kind">{e.kind}</span>
+              {graph.entities.length === 0 && (
+                <span
+                  style={{
+                    color: "var(--muted)",
+                    fontSize: "11px",
+                    fontStyle: "italic",
+                  }}
+                >
+                  {entErr ? `couldn't load entities — ${entErr}` : "—"}
+                </span>
+              )}
+              {graph.entities.map((e) => (
+                <span key={`${e.type}:${e.name}`} className="entity" title={e.description ?? ""}>
+                  <span className="kind">{e.type.toLowerCase()}</span>
                   {e.name}
                 </span>
               ))}
@@ -174,18 +199,31 @@ export function SourceDetailDrawer({ n, citation, onClose }: Props) {
 
           <div className="drawer-section">
             <div className="h">
-              ◗ graph relations <span className="count">· {MOCK_RELATIONS.length}</span>{" "}
+              ◗ graph relations <span className="count">· {graph.relations.length}</span>{" "}
               <span className="right" style={{ color: "var(--graph)" }}>
                 neo4j
               </span>
             </div>
-            {MOCK_RELATIONS.map((r, i) => (
-              <div key={i} className="relation">
-                <span className="ent">{r.s}</span>
-                <span className="pred">{r.p}</span>
-                <span className="ent">{r.o}</span>
+            {graph.relations.length === 0 ? (
+              <div
+                style={{
+                  color: "var(--muted)",
+                  fontSize: "11px",
+                  fontStyle: "italic",
+                  padding: "4px 0",
+                }}
+              >
+                no relations extracted for this document
               </div>
-            ))}
+            ) : (
+              graph.relations.map((r, i) => (
+                <div key={i} className="relation">
+                  <span className="ent">{r[0]}</span>
+                  <span className="pred">{r[1]}</span>
+                  <span className="ent">{r[2]}</span>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="drawer-section">

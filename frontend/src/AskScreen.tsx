@@ -31,14 +31,18 @@ import { ContextManager } from "./features/ContextManager";
 import { RetrievalInspector } from "./features/RetrievalInspector";
 import { SettingsPanel } from "./features/SettingsPanel";
 import { SourceDetailDrawer } from "./features/SourceDetailDrawer";
+import { useCorpusStats, useHealth, useSettings } from "./hooks/useCorpus";
 import { useRun } from "./hooks/useRun";
 import { useThreads } from "./hooks/useThreads";
-import type { Turn as TurnT } from "./lib/types";
+import type { ServiceHealth, Turn as TurnT } from "./lib/types";
 
 type Overlay = "settings" | "inspector" | "context" | "source" | "palette" | null;
 
 export function AskScreen() {
   const { threads, refresh: refreshThreads, create: createThread } = useThreads();
+  const { data: corpus } = useCorpusStats();
+  const { data: health } = useHealth();
+  const { data: settings, patch: patchSettings } = useSettings();
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const { turns, setTurns, state, pipeline, error, stop, start, resume } = useRun([]);
   const [composerValue, setComposerValue] = useState("");
@@ -139,11 +143,32 @@ export function AskScreen() {
     return "";
   }, [turns]);
 
+  // Health pills want a Partial<ServiceHealth>; map api ServiceStatus[] into that.
+  const healthMap: Partial<ServiceHealth> = useMemo(() => {
+    const out: Partial<ServiceHealth> = {};
+    for (const s of health?.services ?? []) {
+      if (
+        s.name === "milvus" ||
+        s.name === "neo4j" ||
+        s.name === "postgres" ||
+        s.name === "searxng" ||
+        s.name === "ollama" ||
+        s.name === "openai"
+      ) {
+        out[s.name] = s.state;
+      }
+    }
+    return out;
+  }, [health]);
+
   return (
     <div className="ask">
       <TopBar
         threadTitle={threadTitle}
         state={topbarState}
+        corpusDocs={corpus?.documents ?? 0}
+        corpusChunks={corpus?.chunks ?? 0}
+        health={healthMap}
         onOpenSettings={() => setOverlay("settings")}
         onOpenContext={() => setOverlay("context")}
       />
@@ -155,10 +180,30 @@ export function AskScreen() {
       />
 
       <main className="center">
-        <ThreadHead title={threadTitle} />
+        <ThreadHead
+          title={threadTitle}
+          model={settings?.llm_model ?? "kimi-k2.6"}
+          retrieveK={settings?.retrieve_top_k ?? 50}
+          rerankK={settings?.rerank_top_k ?? 5}
+          graphOn={settings?.enable_graph_retrieval ?? true}
+          fallbackOn={(settings?.web_fallback_min_chunks ?? 3) > 0}
+        />
 
         {turns.length === 0 && state === "idle" ? (
-          <Empty onSuggestion={(s) => setComposerValue(s)} />
+          <Empty
+            onSuggestion={(s) => setComposerValue(s)}
+            corpus={
+              corpus
+                ? {
+                    docs: corpus.documents,
+                    chunks: corpus.chunks,
+                    entities: corpus.entities,
+                    relations: corpus.relations,
+                    lastIndexed: corpus.last_indexed ?? "—",
+                  }
+                : undefined
+            }
+          />
         ) : (
           <div className="conversation">
             {state === "error" && error && (
@@ -187,6 +232,11 @@ export function AskScreen() {
           onSubmit={onSubmit}
           onStop={stop}
           state={state === "streaming" ? "streaming" : "idle"}
+          model={settings?.llm_model ?? "kimi-k2.6"}
+          retrieveK={settings?.retrieve_top_k ?? 50}
+          rerankK={settings?.rerank_top_k ?? 5}
+          graphOn={settings?.enable_graph_retrieval ?? true}
+          fallbackMin={settings?.web_fallback_min_chunks ?? 3}
         />
       </main>
 
@@ -201,7 +251,13 @@ export function AskScreen() {
       </SourcesRail>
 
       {/* Overlays — rendered last so they sit above the ask grid. */}
-      {overlay === "settings" && <SettingsPanel onClose={closeOverlay} />}
+      {overlay === "settings" && (
+        <SettingsPanel
+          settings={settings}
+          onPatch={patchSettings}
+          onClose={closeOverlay}
+        />
+      )}
       {overlay === "inspector" && (
         <RetrievalInspector question={lastQuestion} onClose={closeOverlay} />
       )}
