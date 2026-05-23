@@ -30,8 +30,13 @@ You need two processes — the LangGraph dev server and Vite.
 
 ```bash
 # 1. Backend — LangGraph dev server on :2024 (from the repo root)
-uv run langgraph dev
+uv run langgraph dev --allow-blocking
 #   → http://127.0.0.1:2024 + Studio UI link in the terminal
+#
+# `--allow-blocking` is needed because RAGPipeline init reads `.env`
+# synchronously via pydantic-settings; the call happens once on first
+# request. For a `langgraph build` / Platform deployment, set
+# BG_JOB_ISOLATED_LOOPS=true in the environment instead.
 
 # 2. Frontend — Vite dev server on :5173
 cd frontend

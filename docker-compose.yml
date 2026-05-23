@@ -161,7 +161,13 @@ services:
         "0.0.0.0",
         "--port",
         "2024",
-        "--no-browser"
+        "--no-browser",
+        # pydantic-settings reads `.env` synchronously on RAGPipeline init;
+        # langgraph dev's blocking-call detector flags it. The actual call
+        # happens once per process at first request, so the impact is
+        # bounded. `BG_JOB_ISOLATED_LOOPS=true` is the production-grade
+        # alternative for `langgraph build`.
+        "--allow-blocking"
       ]
     environment:
       OLLAMA_BASE_URL: http://host.docker.internal:11434
