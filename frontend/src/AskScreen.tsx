@@ -60,6 +60,7 @@ export function AskScreen() {
 
   // Overlay state — only one panel is ever visible at a time.
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
   const closeOverlay = useCallback(() => setOverlay(null), []);
 
   const lastAssistant = useMemo(
@@ -348,11 +349,13 @@ export function AskScreen() {
                 closeOverlay();
               }
             }}
-            onOpenInLibrary={(docId) => {
-              // The library lives under /documents — fall back to a palette
-              // open if the route isn't reachable. Soft route to keep state.
-              window.location.hash = `#documents/${docId}`;
-              closeOverlay();
+            onOpenInLibrary={(_docId) => {
+              // Open the palette with the doc title prefilled so the
+              // user lands on its other chunks. The Documents section in
+              // the palette fans out to /api/documents/search live.
+              const title = lastAssistant.citations![activeCitation]!.title;
+              setPaletteQuery(title);
+              setOverlay("palette");
             }}
             onClose={closeOverlay}
           />
@@ -360,12 +363,17 @@ export function AskScreen() {
       {overlay === "palette" && (
         <CommandPalette
           threads={threads}
+          initialQuery={paletteQuery}
           onSelectThread={(id) => {
             onSelectThread(id);
+            setPaletteQuery("");
             closeOverlay();
           }}
           onOpenSettings={() => setOverlay("settings")}
-          onClose={closeOverlay}
+          onClose={() => {
+            setPaletteQuery("");
+            closeOverlay();
+          }}
         />
       )}
       {overlay?.startsWith("ingest:") && (

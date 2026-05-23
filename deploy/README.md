@@ -8,7 +8,14 @@ The live sovereign-rag stack runs as three launchd services on the Mac Mini:
 | `dev.sovereign-rag.langgraph` | 2024 | `uv run langgraph dev --allow-blocking` |
 | `dev.sovereign-rag.frontend` | 5173 | `npm run dev` (vite, Tailscale-bound) |
 
-## First-time setup (one SSH session, never again)
+## First-time setup (zero SSH after self-hosted runner is registered)
+
+The first `Deploy (self-hosted)` workflow run on a fresh box detects that no
+sovereign-rag services exist and runs `install-services.sh` itself before
+the regular restart step. So once you've pushed to `main` once, the three
+launchd services are installed, loaded, and survive reboot.
+
+If you'd rather pre-install before any push:
 
 ```
 ssh muhriddin@100.81.83.18
@@ -16,7 +23,8 @@ cd /Users/muhriddin/actions-work/sovereign-rag
 ./deploy/install-services.sh
 ```
 
-That copies the three `.plist` files to `~/Library/LaunchAgents`, loads them with `launchctl`, and they survive reboot.
+Either way the result is the same: three `.plist` files in `~/Library/LaunchAgents`
+loaded with `launchctl`.
 
 ## Ongoing deploys
 

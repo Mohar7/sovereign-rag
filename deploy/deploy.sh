@@ -46,6 +46,15 @@ if [ "$fe_changed" = "1" ]; then
 fi
 
 # --- Restart services ------------------------------------------------------
+# First-deploy bootstrap: if none of the three services are registered yet
+# (typical of a fresh Mac Mini), install them in-band so the user never has
+# to SSH in. install-services.sh is idempotent and handles port cleanup of
+# any stray manually-launched processes.
+if ! launchctl list 2>/dev/null | grep -q "dev.sovereign-rag."; then
+  echo "==> No sovereign-rag services registered — running install-services.sh"
+  bash "$REPO_ROOT/deploy/install-services.sh"
+fi
+
 echo "==> Restarting launchd services"
 restart_svc() {
   local svc=$1

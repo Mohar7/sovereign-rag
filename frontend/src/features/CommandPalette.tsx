@@ -23,6 +23,9 @@ interface Props {
   onSelectThread: (id: string) => void;
   onOpenSettings: () => void;
   onClose: () => void;
+  /** Seed the search box on mount — e.g. when the SourceDetailDrawer's
+   * "open in library" button routes here with a doc title prefilled. */
+  initialQuery?: string;
 }
 
 export function CommandPalette({
@@ -30,8 +33,9 @@ export function CommandPalette({
   onSelectThread,
   onOpenSettings,
   onClose,
+  initialQuery = "",
 }: Props) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
   const [activeIdx, setActiveIdx] = useState(0);
 
   // Filtered set across sections — single flat list for keyboard nav.
