@@ -132,9 +132,8 @@ async def _milvus_count(pipe: Any) -> int:
         collections = await client.list_collections()
         if s.milvus_collection not in collections:
             return 0
-        rows = await client.query(
-            s.milvus_collection, filter="", output_fields=["count(*)"], limit=1
-        )
+        # Milvus rejects count(*) when paired with a limit — drop it.
+        rows = await client.query(s.milvus_collection, filter="", output_fields=["count(*)"])
         return int(rows[0]["count(*)"]) if rows else 0
     except Exception as exc:
         logger.warning("milvus count failed: %s", exc)
