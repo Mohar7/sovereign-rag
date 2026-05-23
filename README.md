@@ -14,6 +14,23 @@
 
 **Honest caveat.** The CI integration tier on a self-hosted Mac Mini runner swaps the LLM to **Ollama Cloud** and embeddings to **OpenAI** — the Mac Mini can't reasonably host a local Ollama daemon, and Ollama Cloud doesn't expose an embeddings endpoint. So "sovereign-rag" is the *architecture* and the *local-dev path*; the CI integration job is not. Details in [Two-tier CI](#two-tier-ci).
 
+## Web UI
+
+The Ask screen — research-instrument theme, IBM Plex Mono + Serif, split-tinted citation chips
+(graph blue / vector lavender) with warm orange for human-in-the-loop moments. Built in
+`frontend/` with React + TypeScript, talks to the LangGraph deployment via
+[`@langchain/langgraph-sdk`](https://www.npmjs.com/package/@langchain/langgraph-sdk).
+
+|     |     |
+|---|---|
+| ![Hero](docs/screenshots/01-hero.png)        | ![Mid-stream](docs/screenshots/03-mid-stream.png) |
+| ![HITL approval](docs/screenshots/04-hitl.png) | ![Error / degraded](docs/screenshots/05-error.png) |
+
+The fifth state, an empty new thread, is in `docs/screenshots/02-empty.png`. See
+[`frontend/README.md`](frontend/README.md) for how to run it locally
+(`langgraph dev` + `npm run dev`) and deploy in production
+(`docker compose --profile ui up`).
+
 ## Why this exists
 
 "Naive RAG" (embed -> cosine search -> stuff the prompt) loses to current best-practice on real corpora. This project implements the 2025/26 stack a senior reviewer expects, and **measures** each layer:

@@ -8,6 +8,22 @@ to maintain on this side.
 Visual design ported from the Claude Design handoff in
 `docs/ui-design-brief.md` (and the matching mocks under `assisstant/`).
 
+## Screens
+
+The Ask screen renders five states; the design is the same across all of them, only
+the conversation content changes:
+
+| | |
+|---|---|
+| **Hero** — multi-turn conversation, sources rail populated | ![Hero](../docs/screenshots/01-hero.png) |
+| **Empty** — fresh thread, suggestion buttons, corpus stats | ![Empty](../docs/screenshots/02-empty.png) |
+| **Mid-stream** — answer streaming, pipeline-status bar live | ![Mid-stream](../docs/screenshots/03-mid-stream.png) |
+| **HITL** — graph paused at `interrupt`, URL approval card    | ![HITL](../docs/screenshots/04-hitl.png) |
+| **Error** — degraded run, retry actions, trace log           | ![Error](../docs/screenshots/05-error.png) |
+
+These are captured automatically by `frontend/scripts/capture-artboards.py`
+(playwright; runs against the `/artboards` route).
+
 ## Running locally
 
 You need two processes — the LangGraph dev server and Vite.
