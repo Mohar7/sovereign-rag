@@ -1,0 +1,102 @@
+# Frontend end-to-end tests against the live LangGraph deployment.
+# Runs on the same self-hosted Mac Mini as integration.yml so we get a
+# real browser + a real LangGraph server. Triggered manually
+# (workflow_dispatch) or as part of nightly cron alongside the eval.
+
+name: E2E (self-hosted)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "47 3 * * *"
+
+jobs:
+  e2e:
+    runs-on: [self-hosted, macOS, sovereign]
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: sovereign-ci-e2e
+      OLLAMA_BASE_URL: https://ollama.com
+      OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+      LLM_MODEL: kimi-k2.6
+      EMBED_PROVIDER: openai
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_EMBED_MODEL: text-embedding-3-large
+      EMBED_DIM: "3072"
+      MILVUS_HOST_PORT: "19532"
+      MILVUS_HEALTH_HOST_PORT: "9093"
+      NEO4J_HTTP_HOST_PORT: "7476"
+      NEO4J_BOLT_HOST_PORT: "7689"
+      POSTGRES_HOST_PORT: "5435"
+      SEARXNG_HOST_PORT: "8084"
+      MILVUS_URI: http://localhost:19532
+      NEO4J_URI: neo4j://localhost:7689
+      SEARXNG_URL: http://localhost:8084
+      NEO4J_PASSWORD: sovereign-e2e-pw
+      POSTGRES_PASSWORD: sovereign-e2e-pw
+      LANGGRAPH_PG_URI: postgresql://sovereign:sovereign-e2e-pw@localhost:5435/sovereign_lg
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:5173
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Sync python deps
+        run: uv sync --frozen
+
+      - name: Bring up infra
+        run: docker compose up -d milvus neo4j postgres searxng
+
+      - name: Wait for services
+        run: |
+          for i in $(seq 1 60); do curl -sf "http://localhost:${MILVUS_HEALTH_HOST_PORT}/healthz" >/dev/null && break; sleep 5; done
+          for i in $(seq 1 30); do curl -sf "http://localhost:${NEO4J_HTTP_HOST_PORT}" >/dev/null && break; sleep 5; done
+          for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U sovereign -d sovereign_lg >/dev/null 2>&1 && break; sleep 2; done
+
+      - name: Start LangGraph dev (background)
+        run: |
+          nohup uv run langgraph dev --host 127.0.0.1 --port 2024 --no-browser --allow-blocking > /tmp/lg.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:2024/info >/dev/null 2>&1 && break; sleep 2; done
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start Vite (background)
+        working-directory: frontend
+        run: |
+          nohup npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/vite.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5173/ >/dev/null 2>&1 && break; sleep 2; done
+
+      - name: Playwright E2E + API contract
+        working-directory: frontend
+        timeout-minutes: 15
+        run: npx playwright test --project=chromium
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          if-no-files-found: warn
+
+      - name: Tear down
+        if: always()
+        run: |
+          pkill -f "langgraph dev" || true
+          pkill -f "vite" || true
+          docker compose down -v
