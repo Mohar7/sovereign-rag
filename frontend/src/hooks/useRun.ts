@@ -1,0 +1,339 @@
+// Streaming runner for the QA graph.
+//
+// Wraps `client.runs.stream(thread_id, "sovereign_qa", …)` and surfaces the
+// pieces the UI cares about: streaming text, citations as they land,
+// pipeline-step transitions, the HITL interrupt payload, fatal errors.
+//
+// LangGraph streams several "events" per turn:
+//   - "updates"   — node-level deltas, one per node completion.
+//   - "values"    — the full state after each step (heavy; we use it to
+//                   read final state).
+//   - "messages-tuple" / "messages" — streamed LLM tokens.
+//   - "interrupt" — the run paused (one of our `interrupt(...)` calls).
+//
+// We subscribe with mode=["values", "updates", "messages-tuple"] which is
+// what `langgraph dev` / Studio uses internally.
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { client, ASSISTANT_ID } from "../lib/langgraph";
+import type {
+  AskInterrupt,
+  CandidateURL,
+  Citation,
+  PipelineStatus,
+  Turn,
+} from "../lib/types";
+
+type Cmd =
+  | { kind: "start"; question: string; threadId: string }
+  | { kind: "resume"; threadId: string; approvedUrls: string[] };
+
+interface UseRunState {
+  /** Turns belonging to the active thread. */
+  turns: Turn[];
+  /** `streaming` while the SSE is open, `idle` otherwise. */
+  state: "idle" | "streaming" | "error";
+  pipeline: PipelineStatus[];
+  error: string | null;
+  /** Cancel any in-flight stream. */
+  stop: () => void;
+}
+
+interface RawState {
+  question?: string;
+  reranked?: Array<{
+    chunk?: {
+      chunk_id?: string;
+      doc_id?: string;
+      raw_text?: string;
+      page?: number | null;
+      metadata?: { title?: string; source_uri?: string };
+    };
+    score?: number;
+    source?: string;
+  }>;
+  candidates?: unknown[];
+  citations?: Citation[];
+  answer?: string;
+  used?: number;
+  retrieved?: number;
+  fallback_used?: boolean;
+}
+
+const PIPELINE_ORDER = [
+  "embed query",
+  "milvus",
+  "neo4j",
+  "dedupe",
+  "rerank",
+  "generate",
+] as const;
+
+const ALL_PENDING: PipelineStatus[] = PIPELINE_ORDER.map((step) => ({
+  step,
+  state: "pending",
+}));
+
+function markUntil(steps: PipelineStatus[], live: (typeof PIPELINE_ORDER)[number]): PipelineStatus[] {
+  let seenLive = false;
+  return steps.map((s) => {
+    if (s.step === live) {
+      seenLive = true;
+      return { ...s, state: "live" };
+    }
+    if (!seenLive) return { ...s, state: "done" };
+    return { ...s, state: "pending" };
+  });
+}
+
+function markAllDone(steps: PipelineStatus[]): PipelineStatus[] {
+  return steps.map((s) => ({ ...s, state: "done" }));
+}
+
+/** Translate a Citation's source into a chip kind. */
+function citationsWithKinds(cs: Citation[]): Citation[] {
+  return cs.map((c) => {
+    const isWeb = c.source_uri.startsWith("http://") || c.source_uri.startsWith("https://");
+    return { ...c, kind: c.kind ?? (isWeb ? "hybrid" : "hybrid") };
+  });
+}
+
+/** Pull candidate URLs out of an interrupt event regardless of shape. */
+function parseInterrupt(payload: unknown): AskInterrupt | null {
+  if (!payload || typeof payload !== "object") return null;
+  const wrapper = payload as { value?: unknown };
+  const value = wrapper.value !== undefined ? wrapper.value : payload;
+  if (!value || typeof value !== "object") return null;
+  const v = value as { reason?: unknown; candidate_urls?: unknown };
+  if (v.reason !== "approve_urls") return null;
+  const rawUrls = Array.isArray(v.candidate_urls) ? v.candidate_urls : [];
+  const urls: CandidateURL[] = [];
+  for (const item of rawUrls) {
+    if (item && typeof item === "object") {
+      const i = item as { url?: unknown; title?: unknown; snippet?: unknown };
+      if (typeof i.url === "string" && i.url.length > 0) {
+        urls.push({
+          url: i.url,
+          title: typeof i.title === "string" ? i.title : "",
+          snippet: typeof i.snippet === "string" ? i.snippet : "",
+        });
+      }
+    }
+  }
+  return { reason: "approve_urls", candidate_urls: urls };
+}
+
+/** Convert a token-chunk from the LangGraph "messages-tuple" event into
+ *  the accumulated assistant text. The exact shape depends on the SDK
+ *  version, so we accept a loose union. */
+function extractTokenText(event: unknown): string {
+  if (!event) return "";
+  // Newer SDK: ["messages-tuple", [message, metadata]] — message has .content
+  if (Array.isArray(event) && event.length === 2) {
+    const [maybeMsg] = event;
+    if (maybeMsg && typeof maybeMsg === "object") {
+      const m = maybeMsg as { content?: unknown };
+      if (typeof m.content === "string") return m.content;
+      if (Array.isArray(m.content)) {
+        return m.content
+          .map((c) =>
+            c && typeof c === "object" && "text" in c
+              ? String((c as { text: unknown }).text ?? "")
+              : ""
+          )
+          .join("");
+      }
+    }
+  }
+  return "";
+}
+
+export function useRun(initialTurns: Turn[]): UseRunState & {
+  start: (question: string, threadId: string) => Promise<void>;
+  resume: (threadId: string, approvedUrls: string[]) => Promise<void>;
+  /** Replace the conversation when the active thread changes. */
+  setTurns: (turns: Turn[]) => void;
+} {
+  const [turns, setTurns] = useState<Turn[]>(initialTurns);
+  const [state, setState] = useState<"idle" | "streaming" | "error">("idle");
+  const [pipeline, setPipeline] = useState<PipelineStatus[]>(ALL_PENDING);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    setState("idle");
+  }, []);
+
+  const run = useCallback(async (cmd: Cmd) => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setError(null);
+    setState("streaming");
+
+    const assistantTurnId = `a-${Date.now()}`;
+    const startedAt = new Date().toISOString();
+    let firstTokenAt: number | null = null;
+
+    if (cmd.kind === "start") {
+      const userTurn: Turn = {
+        id: `u-${Date.now()}`,
+        role: "user",
+        timestamp: startedAt,
+        content: cmd.question,
+      };
+      const assistantTurn: Turn = {
+        id: assistantTurnId,
+        role: "assistant",
+        timestamp: startedAt,
+        content: "",
+        status: "streaming",
+      };
+      setTurns((prev) => [...prev, userTurn, assistantTurn]);
+    } else {
+      // On resume, append a fresh assistant turn (the old one stays
+      // interrupted in history).
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: assistantTurnId,
+          role: "assistant",
+          timestamp: startedAt,
+          content: "",
+          status: "streaming",
+        },
+      ]);
+    }
+
+    setPipeline(markUntil(ALL_PENDING, "embed query"));
+
+    try {
+      const streamArgs =
+        cmd.kind === "start"
+          ? { input: { question: cmd.question } }
+          : { command: { resume: { approved_urls: cmd.approvedUrls } } };
+
+      const stream = client.runs.stream(cmd.threadId, ASSISTANT_ID, {
+        ...streamArgs,
+        streamMode: ["values", "updates", "messages-tuple"],
+        signal: ac.signal,
+      });
+
+      let accumulated = "";
+
+      for await (const ev of stream) {
+        if (ac.signal.aborted) break;
+        const event = ev as { event?: string; data?: unknown };
+
+        if (event.event === "messages-tuple" || event.event === "messages") {
+          const tokenText = extractTokenText(event.data);
+          if (tokenText) {
+            if (firstTokenAt == null) firstTokenAt = Date.now();
+            accumulated += tokenText;
+            const finalText = accumulated;
+            setTurns((prev) =>
+              prev.map((t) => (t.id === assistantTurnId ? { ...t, content: finalText } : t))
+            );
+          }
+          continue;
+        }
+
+        if (event.event === "updates" && event.data && typeof event.data === "object") {
+          // event.data is { node_name: partial_state, ... }
+          const updates = event.data as Record<string, unknown>;
+          if ("retrieve_local" in updates) setPipeline(markUntil(ALL_PENDING, "dedupe"));
+          if ("web_fallback" in updates) setPipeline(markUntil(ALL_PENDING, "dedupe"));
+          if ("rerank" in updates) setPipeline(markUntil(ALL_PENDING, "rerank"));
+          if ("generate" in updates) setPipeline(markUntil(ALL_PENDING, "generate"));
+          continue;
+        }
+
+        if (event.event === "values" && event.data && typeof event.data === "object") {
+          const s = event.data as RawState;
+          // Mid-stream we may see partial state; just refresh citations and
+          // counts so the right rail can render skeletons.
+          const cits = Array.isArray(s.citations)
+            ? citationsWithKinds(s.citations)
+            : undefined;
+          setTurns((prev) =>
+            prev.map((t) => {
+              if (t.id !== assistantTurnId) return t;
+              return {
+                ...t,
+                content: typeof s.answer === "string" && s.answer.length > 0 ? s.answer : t.content,
+                citations: cits ?? t.citations,
+                retrieved: typeof s.retrieved === "number" ? s.retrieved : t.retrieved,
+                used: typeof s.used === "number" ? s.used : t.used,
+                fallback_used: typeof s.fallback_used === "boolean" ? s.fallback_used : t.fallback_used,
+              };
+            })
+          );
+          continue;
+        }
+
+        if (event.event === "interrupt" || event.event === "__interrupt__") {
+          const intr = parseInterrupt(event.data);
+          if (intr) {
+            setTurns((prev) =>
+              prev.map((t) =>
+                t.id === assistantTurnId
+                  ? { ...t, status: "interrupted", interrupt: intr }
+                  : t
+              )
+            );
+          }
+          setPipeline(markUntil(ALL_PENDING, "dedupe"));
+          setState("idle");
+          return;
+        }
+
+        if (event.event === "error") {
+          throw new Error(String((event.data as { message?: unknown })?.message ?? "stream error"));
+        }
+      }
+
+      const endedAt = Date.now();
+      const ttf = firstTokenAt != null ? firstTokenAt - new Date(startedAt).getTime() : undefined;
+      const total = endedAt - new Date(startedAt).getTime();
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === assistantTurnId
+            ? { ...t, status: "done", ttf_ms: ttf, total_ms: total }
+            : t
+        )
+      );
+      setPipeline(markAllDone(ALL_PENDING));
+      setState("idle");
+    } catch (err) {
+      if (ac.signal.aborted) {
+        setState("idle");
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      setTurns((prev) =>
+        prev.map((t) => (t.id === assistantTurnId ? { ...t, status: "error", error: msg } : t))
+      );
+      setState("error");
+    }
+  }, []);
+
+  const start = useCallback(
+    async (question: string, threadId: string) => {
+      await run({ kind: "start", question, threadId });
+    },
+    [run]
+  );
+
+  const resume = useCallback(
+    async (threadId: string, approvedUrls: string[]) => {
+      await run({ kind: "resume", threadId, approvedUrls });
+    },
+    [run]
+  );
+
+  return { turns, setTurns, state, pipeline, error, stop, start, resume };
+}
