@@ -142,6 +142,65 @@ services:
         condition: service_healthy
     networks: [sovereign]
 
+  # ---------- LangGraph server (opt-in via `--profile ui`) ----------
+  # Same image as `app`; just a different entrypoint. The frontend talks
+  # to this via the in-network hostname `langgraph` on port 2024.
+  langgraph:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sovereign-rag:latest
+    profiles: [ui]
+    command:
+      [
+        "uv",
+        "run",
+        "langgraph",
+        "dev",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "2024",
+        "--no-browser"
+      ]
+    environment:
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      MILVUS_URI: http://milvus:19530
+      NEO4J_URI: neo4j://neo4j:7687
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+      SEARXNG_URL: http://searxng:8080
+      LANGGRAPH_PG_URI: postgresql://sovereign:${POSTGRES_PASSWORD:-sovereign-dev-pw}@postgres:5432/sovereign_lg
+    ports:
+      - "${LANGGRAPH_HOST_PORT:-2024}:2024"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      milvus:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks: [sovereign]
+
+  # ---------- Web UI (opt-in via `--profile ui`) ----------
+  # Static SPA served by nginx; nginx proxies /lg/* to the LangGraph
+  # service above so the browser sees a same-origin server (no CORS).
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: sovereign-rag-frontend:latest
+    profiles: [ui]
+    environment:
+      LANGGRAPH_UPSTREAM: http://langgraph:2024
+      NGINX_PORT: "80"
+    ports:
+      - "${FRONTEND_HOST_PORT:-8080}:80"
+    depends_on:
+      - langgraph
+    networks: [sovereign]
+
 volumes:
   etcd-data:
   minio-data:

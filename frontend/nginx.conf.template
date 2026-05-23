@@ -1,0 +1,50 @@
+# nginx config for the sovereign-rag frontend.
+#
+# - Serves the static SPA bundle out of /usr/share/nginx/html with a
+#   try_files fallback so client-side routes (e.g. /artboards) work on
+#   refresh.
+# - Proxies /lg/* to the LangGraph deployment, stripping the prefix so
+#   `/lg/threads` → `<upstream>/threads`. Same shape as the Vite dev
+#   proxy in vite.config.ts so the frontend doesn't care which it's
+#   talking to.
+# - Buffering off + long read timeout so SSE streams (`runs/stream`)
+#   flow through without nginx batching the events.
+
+server {
+    listen ${NGINX_PORT};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Static assets — long cache on the fingerprinted JS/CSS.
+    location /assets/ {
+        try_files $uri =404;
+        access_log off;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # LangGraph deployment proxy (SDK calls /threads, /runs, /assistants,
+    # etc — they hit /lg/* here and we forward upstream).
+    location /lg/ {
+        rewrite ^/lg/(.*)$ /$1 break;
+        proxy_pass ${LANGGRAPH_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        # Server-Sent Events from runs.stream — don't buffer or time out.
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # SPA fallback — every other path goes to index.html so client-side
+    # routing handles it.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
