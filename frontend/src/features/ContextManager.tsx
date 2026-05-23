@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CitationChip } from "../components/CitationChip";
-import { useThreadContext } from "../hooks/useCorpus";
+import type { useThreadContext } from "../hooks/useCorpus";
 import { client } from "../lib/langgraph";
 import type { Citation, CitationKind, Turn } from "../lib/types";
 
@@ -28,6 +28,10 @@ interface Props {
   threadId: string | null;
   turns: Turn[];
   contextWindow: number;
+  /** Shared thread-context hook from the parent. Lifting the hook means the
+   * drawer's pinned/excluded chips and this panel stay in sync when either
+   * side mutates. */
+  threadCtx: ReturnType<typeof useThreadContext>;
   onClose: () => void;
   onRevertCheckpoint?: (checkpointId: string) => void;
 }
@@ -58,10 +62,11 @@ export function ContextManager({
   threadId,
   turns,
   contextWindow,
+  threadCtx,
   onClose,
   onRevertCheckpoint,
 }: Props) {
-  const ctx = useThreadContext(threadId);
+  const ctx = threadCtx;
 
   // Build a fast lookup of every chunk we've seen in the thread by chunk_id.
   // The Pinned list relies on this to display the chunk's title + kind even

@@ -293,7 +293,9 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
       });
 
       let accumulated = "";
-      let runId: string | null = null;
+      // The SDK doesn't expose run_id on the event envelope; fall back to the
+      // thread id so the inspector header has something to display.
+      let runId: string | null = cmd.threadId;
       let lastRerankK = 5;
 
       for await (const ev of stream) {
@@ -304,9 +306,9 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
           run_id?: string;
           metadata?: { run_id?: string };
         };
-        if (!runId) {
-          runId = event.run_id ?? event.metadata?.run_id ?? null;
-        }
+        // Some event shapes carry a real run_id in metadata — prefer it.
+        const fromEvent = event.run_id ?? event.metadata?.run_id;
+        if (fromEvent) runId = fromEvent;
 
         if (event.event === "messages-tuple" || event.event === "messages") {
           const tokenText = extractTokenText(event.data);
@@ -322,27 +324,31 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
         }
 
         if (event.event === "updates" && event.data && typeof event.data === "object") {
-          // event.data is { node_name: partial_state, ... }
+          // event.data is { node_name: partial_state, ... }. LangGraph emits
+          // one update per node *completion*; we model timings by opening
+          // the next node as soon as the previous one closes, so each node's
+          // duration covers the full gap between updates (which is the time
+          // the LangGraph runtime actually spent inside that node).
           const updates = event.data as Record<string, unknown>;
           if ("retrieve_local" in updates) {
             closeNode("retrieve_local");
+            openNode("rerank");
             setPipeline(markUntil(ALL_PENDING, "dedupe"));
           }
           if ("web_fallback" in updates) {
             closeNode("web_fallback");
-            openNode("retrieve_local");
-            closeNode("retrieve_local");
+            // Web fallback re-runs retrieve_local; track that second retrieval
+            // pass separately so its duration shows in the inspector.
+            openNode("retrieve_local_2");
             setPipeline(markUntil(ALL_PENDING, "dedupe"));
           }
           if ("rerank" in updates) {
-            // rerank starts implicitly when retrieve_local closes; the event
-            // marking it complete arrives now.
-            if (!nodeTimings.some((t) => t.node === "rerank")) openNode("rerank");
+            closeNode("retrieve_local_2"); // no-op if web_fallback didn't fire
             closeNode("rerank");
+            openNode("generate");
             setPipeline(markUntil(ALL_PENDING, "rerank"));
           }
           if ("generate" in updates) {
-            if (!nodeTimings.some((t) => t.node === "generate")) openNode("generate");
             closeNode("generate");
             setPipeline(markUntil(ALL_PENDING, "generate"));
           }

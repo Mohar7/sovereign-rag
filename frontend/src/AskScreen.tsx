@@ -318,6 +318,7 @@ export function AskScreen() {
           threadId={activeThread}
           turns={turns}
           contextWindow={256_000}
+          threadCtx={threadCtx}
           onClose={closeOverlay}
         />
       )}
