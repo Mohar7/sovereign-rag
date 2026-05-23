@@ -85,3 +85,44 @@ export interface PipelineStatus {
   state: "pending" | "live" | "done";
   count?: number;
 }
+
+/** Per-LangGraph-node timing captured client-side from the stream events.
+ * Only nodes the graph actually emits as `updates` are observable here —
+ * which means retrieve_local / web_fallback / rerank / generate. The
+ * inspector aliases these onto the design's seven sub-stages. */
+export interface NodeTiming {
+  node: string;
+  started_at_ms: number;
+  ended_at_ms: number | null;
+}
+
+/** Live snapshot of the most recently observed inspector data — populated
+ * by useRun from the `values` + `updates` SSE events as the run progresses,
+ * consumed by <RetrievalInspector>. */
+export interface InspectorData {
+  question: string | null;
+  /** LangGraph run id, surfaced in the inspector header when present. */
+  run_id: string | null;
+  /** Wall-clock ms total once the run is finished. */
+  total_ms: number | null;
+  /** Per-node start/end timings. */
+  node_timings: NodeTiming[];
+  /** Final reranked + cited list (best information we have client-side
+   * about which chunks made it in). */
+  reranked: InspectorChunk[];
+  /** Aggregate counters mirrored from graph state. */
+  retrieved: number;
+  used: number;
+  fallback_used: boolean;
+}
+
+export interface InspectorChunk {
+  rank: number;
+  doc_id: string;
+  chunk_id: string;
+  title: string;
+  source_uri: string;
+  score: number;
+  kind: CitationKind;
+  used: boolean;
+}

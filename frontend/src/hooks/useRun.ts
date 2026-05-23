@@ -20,6 +20,10 @@ import type {
   AskInterrupt,
   CandidateURL,
   Citation,
+  CitationKind,
+  InspectorChunk,
+  InspectorData,
+  NodeTiming,
   PipelineStatus,
   Turn,
 } from "../lib/types";
@@ -35,8 +39,47 @@ interface UseRunState {
   state: "idle" | "streaming" | "error";
   pipeline: PipelineStatus[];
   error: string | null;
+  /** Live snapshot for the Retrieval Inspector overlay. Null until the
+   * first run starts; reset on each new run. */
+  inspector: InspectorData | null;
   /** Cancel any in-flight stream. */
   stop: () => void;
+}
+
+const EMPTY_INSPECTOR: InspectorData = {
+  question: null,
+  run_id: null,
+  total_ms: null,
+  node_timings: [],
+  reranked: [],
+  retrieved: 0,
+  used: 0,
+  fallback_used: false,
+};
+
+/** Translate a chunk-shaped item from the graph state into an InspectorChunk.
+ * The reranked list looks like `[{chunk: {chunk_id, doc_id, metadata: {title,
+ * source_uri}}, score, source}, ...]`; missing fields fall back to safe blanks
+ * so the inspector renders even on partial state. */
+function toInspectorChunk(
+  rank: number,
+  raw: NonNullable<RawState["reranked"]>[number],
+  rerankTopK: number,
+): InspectorChunk {
+  const chunk = raw.chunk ?? {};
+  const meta = chunk.metadata ?? {};
+  const uri = meta.source_uri ?? "";
+  const kind: CitationKind = uri.startsWith("http") ? "web" : "vector";
+  return {
+    rank,
+    doc_id: chunk.doc_id ?? "",
+    chunk_id: chunk.chunk_id ?? "",
+    title: meta.title ?? "(untitled)",
+    source_uri: uri,
+    score: typeof raw.score === "number" ? raw.score : 0,
+    kind,
+    used: rank <= rerankTopK,
+  };
 }
 
 interface RawState {
@@ -158,6 +201,7 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
   const [state, setState] = useState<"idle" | "streaming" | "error">("idle");
   const [pipeline, setPipeline] = useState<PipelineStatus[]>(ALL_PENDING);
   const [error, setError] = useState<string | null>(null);
+  const [inspector, setInspector] = useState<InspectorData | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -210,6 +254,32 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
 
     setPipeline(markUntil(ALL_PENDING, "embed query"));
 
+    // Reset inspector state for the new run. We seed an open "retrieve_local"
+    // node timing because that's effectively running from t=0; the `updates`
+    // event for the node closes it on completion.
+    const inspectorQuestion = cmd.kind === "start" ? cmd.question : null;
+    const t0 = Date.now();
+    const nodeTimings: NodeTiming[] = [
+      { node: "retrieve_local", started_at_ms: t0, ended_at_ms: null },
+    ];
+    setInspector({
+      ...EMPTY_INSPECTOR,
+      question: inspectorQuestion,
+      node_timings: nodeTimings,
+    });
+    const closeNode = (node: string) => {
+      const idx = nodeTimings.findIndex(
+        (t) => t.node === node && t.ended_at_ms == null,
+      );
+      if (idx >= 0) {
+        const t = nodeTimings[idx]!;
+        nodeTimings[idx] = { ...t, ended_at_ms: Date.now() };
+      }
+    };
+    const openNode = (node: string) => {
+      nodeTimings.push({ node, started_at_ms: Date.now(), ended_at_ms: null });
+    };
+
     try {
       const streamArgs =
         cmd.kind === "start"
@@ -223,10 +293,20 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
       });
 
       let accumulated = "";
+      let runId: string | null = null;
+      let lastRerankK = 5;
 
       for await (const ev of stream) {
         if (ac.signal.aborted) break;
-        const event = ev as { event?: string; data?: unknown };
+        const event = ev as {
+          event?: string;
+          data?: unknown;
+          run_id?: string;
+          metadata?: { run_id?: string };
+        };
+        if (!runId) {
+          runId = event.run_id ?? event.metadata?.run_id ?? null;
+        }
 
         if (event.event === "messages-tuple" || event.event === "messages") {
           const tokenText = extractTokenText(event.data);
@@ -244,10 +324,36 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
         if (event.event === "updates" && event.data && typeof event.data === "object") {
           // event.data is { node_name: partial_state, ... }
           const updates = event.data as Record<string, unknown>;
-          if ("retrieve_local" in updates) setPipeline(markUntil(ALL_PENDING, "dedupe"));
-          if ("web_fallback" in updates) setPipeline(markUntil(ALL_PENDING, "dedupe"));
-          if ("rerank" in updates) setPipeline(markUntil(ALL_PENDING, "rerank"));
-          if ("generate" in updates) setPipeline(markUntil(ALL_PENDING, "generate"));
+          if ("retrieve_local" in updates) {
+            closeNode("retrieve_local");
+            setPipeline(markUntil(ALL_PENDING, "dedupe"));
+          }
+          if ("web_fallback" in updates) {
+            closeNode("web_fallback");
+            openNode("retrieve_local");
+            closeNode("retrieve_local");
+            setPipeline(markUntil(ALL_PENDING, "dedupe"));
+          }
+          if ("rerank" in updates) {
+            // rerank starts implicitly when retrieve_local closes; the event
+            // marking it complete arrives now.
+            if (!nodeTimings.some((t) => t.node === "rerank")) openNode("rerank");
+            closeNode("rerank");
+            setPipeline(markUntil(ALL_PENDING, "rerank"));
+          }
+          if ("generate" in updates) {
+            if (!nodeTimings.some((t) => t.node === "generate")) openNode("generate");
+            closeNode("generate");
+            setPipeline(markUntil(ALL_PENDING, "generate"));
+          }
+          // Flush the rolling timings snapshot so the inspector sees the
+          // newly-closed nodes as the run progresses.
+          setInspector((prev) => ({
+            ...(prev ?? EMPTY_INSPECTOR),
+            question: inspectorQuestion,
+            node_timings: [...nodeTimings],
+            run_id: runId,
+          }));
           continue;
         }
 
@@ -271,6 +377,26 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
               };
             })
           );
+
+          // Mirror the chunks into the inspector. The graph populates
+          // ``reranked`` only after the rerank node; before that, the array is
+          // empty and we leave the inspector's reranked list alone.
+          if (Array.isArray(s.reranked) && s.reranked.length > 0) {
+            lastRerankK = typeof s.used === "number" ? s.used : lastRerankK;
+            const reranked = s.reranked.map((r, i) =>
+              toInspectorChunk(i + 1, r, lastRerankK),
+            );
+            setInspector((prev) => ({
+              ...(prev ?? EMPTY_INSPECTOR),
+              question: inspectorQuestion,
+              run_id: runId,
+              node_timings: [...nodeTimings],
+              reranked,
+              retrieved: typeof s.retrieved === "number" ? s.retrieved : reranked.length,
+              used: typeof s.used === "number" ? s.used : lastRerankK,
+              fallback_used: !!s.fallback_used,
+            }));
+          }
           continue;
         }
 
@@ -306,6 +432,21 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
         )
       );
       setPipeline(markAllDone(ALL_PENDING));
+      // Close any still-open nodes (generate is usually still open here
+      // because there's no follow-on update event after the last token).
+      for (let i = 0; i < nodeTimings.length; i++) {
+        const t = nodeTimings[i]!;
+        if (t.ended_at_ms == null) {
+          nodeTimings[i] = { ...t, ended_at_ms: endedAt };
+        }
+      }
+      setInspector((prev) => ({
+        ...(prev ?? EMPTY_INSPECTOR),
+        question: inspectorQuestion,
+        run_id: runId,
+        node_timings: [...nodeTimings],
+        total_ms: total,
+      }));
       setState("idle");
     } catch (err) {
       if (ac.signal.aborted) {
@@ -335,5 +476,5 @@ export function useRun(initialTurns: Turn[]): UseRunState & {
     [run]
   );
 
-  return { turns, setTurns, state, pipeline, error, stop, start, resume };
+  return { turns, setTurns, state, pipeline, error, inspector, stop, start, resume };
 }

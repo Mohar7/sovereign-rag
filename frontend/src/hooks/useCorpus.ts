@@ -3,7 +3,14 @@
 // for these small refresh-loop surfaces.
 
 import { useEffect, useState } from "react";
-import { api, type CorpusStats, type HealthResponse, type Settings } from "../lib/api";
+import {
+  api,
+  type CorpusStats,
+  type HealthResponse,
+  type PinAction,
+  type Settings,
+  type ThreadContextDoc,
+} from "../lib/api";
 
 export interface UseRefreshable<T> {
   data: T | null;
@@ -75,6 +82,64 @@ export function useSettings(): UseRefreshable<Settings> & {
       // without a network round-trip on the next render.
       base.reload();
       return next;
+    },
+  };
+}
+
+export function useThreadContext(threadId: string | null): UseRefreshable<ThreadContextDoc> & {
+  pin: (chunkId: string, action?: PinAction, note?: string) => Promise<void>;
+  unpin: (chunkId: string) => Promise<void>;
+  clear: () => Promise<void>;
+} {
+  const [data, setData] = useState<ThreadContextDoc | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const p: Promise<ThreadContextDoc> = threadId
+      ? api.threadContext(threadId)
+      : Promise.resolve({ thread_id: "", pins: [] });
+    p.then((d) => {
+      if (cancelled) return;
+      setData(d);
+      setError(null);
+    })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, tick]);
+
+  const reload = () => setTick((t) => t + 1);
+
+  return {
+    data,
+    loading,
+    error,
+    reload,
+    pin: async (chunkId, action = "pinned", note) => {
+      if (!threadId) return;
+      await api.pinChunk(threadId, chunkId, action, note);
+      reload();
+    },
+    unpin: async (chunkId) => {
+      if (!threadId) return;
+      await api.unpinChunk(threadId, chunkId);
+      reload();
+    },
+    clear: async () => {
+      if (!threadId) return;
+      await api.clearThreadContext(threadId);
+      reload();
     },
   };
 }

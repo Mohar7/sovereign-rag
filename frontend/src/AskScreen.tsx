@@ -28,15 +28,24 @@ import { TopBar } from "./components/TopBar";
 import { Turn } from "./components/Turn";
 import { CommandPalette } from "./features/CommandPalette";
 import { ContextManager } from "./features/ContextManager";
+import { IngestSheet } from "./features/IngestSheet";
 import { RetrievalInspector } from "./features/RetrievalInspector";
 import { SettingsPanel } from "./features/SettingsPanel";
 import { SourceDetailDrawer } from "./features/SourceDetailDrawer";
-import { useCorpusStats, useHealth, useSettings } from "./hooks/useCorpus";
+import { useCorpusStats, useHealth, useSettings, useThreadContext } from "./hooks/useCorpus";
 import { useRun } from "./hooks/useRun";
 import { useThreads } from "./hooks/useThreads";
 import type { ServiceHealth, Turn as TurnT } from "./lib/types";
 
-type Overlay = "settings" | "inspector" | "context" | "source" | "palette" | null;
+type IngestMode = "url" | "text" | "web";
+type Overlay =
+  | "settings"
+  | "inspector"
+  | "context"
+  | "source"
+  | "palette"
+  | `ingest:${IngestMode}`
+  | null;
 
 export function AskScreen() {
   const { threads, refresh: refreshThreads, create: createThread } = useThreads();
@@ -44,7 +53,8 @@ export function AskScreen() {
   const { data: health } = useHealth();
   const { data: settings, patch: patchSettings } = useSettings();
   const [activeThread, setActiveThread] = useState<string | null>(null);
-  const { turns, setTurns, state, pipeline, error, stop, start, resume } = useRun([]);
+  const threadCtx = useThreadContext(activeThread);
+  const { turns, setTurns, state, pipeline, error, inspector, stop, start, resume } = useRun([]);
   const [composerValue, setComposerValue] = useState("");
   const [activeCitation, setActiveCitation] = useState<number | undefined>();
 
@@ -103,6 +113,30 @@ export function AskScreen() {
     await start(q, threadId);
     void refreshThreads();
   }, [activeThread, composerValue, createThread, refreshThreads, start]);
+
+  // Used by the Empty-state ASK suggestion cards: same flow as a composer
+  // submit but with the chosen question instead of whatever's in the box.
+  const askDirect = useCallback(
+    async (question: string) => {
+      const q = question.trim();
+      if (!q) return;
+      let threadId = activeThread;
+      if (!threadId) {
+        threadId = await createThread(q.slice(0, 60));
+        setActiveThread(threadId);
+      }
+      await start(q, threadId);
+      void refreshThreads();
+    },
+    [activeThread, createThread, refreshThreads, start],
+  );
+
+  // Used by ingest/web sheets — refresh the corpus pill after a doc is added.
+  // The /api/corpus/stats hook polls every 30s so we don't strictly need this,
+  // but a force-bust makes the UI feel instant.
+  const onIngested = useCallback(() => {
+    void refreshThreads();
+  }, [refreshThreads]);
 
   const onApprove = useCallback(
     async (approvedUrls: string[]) => {
@@ -192,6 +226,9 @@ export function AskScreen() {
         {turns.length === 0 && state === "idle" ? (
           <Empty
             onSuggestion={(s) => setComposerValue(s)}
+            onAsk={(q) => void askDirect(q)}
+            onIngest={() => setOverlay("ingest:url")}
+            onWeb={() => setOverlay("ingest:web")}
             corpus={
               corpus
                 ? {
@@ -259,9 +296,30 @@ export function AskScreen() {
         />
       )}
       {overlay === "inspector" && (
-        <RetrievalInspector question={lastQuestion} onClose={closeOverlay} />
+        <RetrievalInspector
+          data={inspector}
+          question={lastQuestion}
+          settings={
+            settings
+              ? {
+                  embed_model: settings.embed_model,
+                  embed_dim: settings.embed_dim,
+                  rrf_k: settings.rrf_k,
+                  reranker_model: settings.reranker_model,
+                }
+              : null
+          }
+          onClose={closeOverlay}
+        />
       )}
-      {overlay === "context" && <ContextManager onClose={closeOverlay} />}
+      {overlay === "context" && (
+        <ContextManager
+          threadId={activeThread}
+          turns={turns}
+          contextWindow={256_000}
+          onClose={closeOverlay}
+        />
+      )}
       {overlay === "source" &&
         activeCitation != null &&
         lastAssistant?.citations?.[activeCitation] && (
@@ -269,6 +327,33 @@ export function AskScreen() {
             n={activeCitation + 1}
             citation={lastAssistant.citations[activeCitation]!}
             settings={settings}
+            pinned={(threadCtx.data?.pins ?? []).some(
+              (p) =>
+                p.chunk_id === lastAssistant.citations![activeCitation]!.chunk_id &&
+                p.action === "pinned",
+            )}
+            excluded={(threadCtx.data?.pins ?? []).some(
+              (p) =>
+                p.chunk_id === lastAssistant.citations![activeCitation]!.chunk_id &&
+                p.action === "excluded",
+            )}
+            onPin={(id) => threadCtx.pin(id, "pinned")}
+            onUnpin={(id) => threadCtx.unpin(id)}
+            onExclude={(id) => threadCtx.pin(id, "excluded")}
+            onRerank={() => {
+              // Re-fire the most recent user question against the active thread.
+              const lastUserTurn = [...turns].reverse().find((t) => t.role === "user");
+              if (lastUserTurn && activeThread) {
+                void start(lastUserTurn.content, activeThread);
+                closeOverlay();
+              }
+            }}
+            onOpenInLibrary={(docId) => {
+              // The library lives under /documents — fall back to a palette
+              // open if the route isn't reachable. Soft route to keep state.
+              window.location.hash = `#documents/${docId}`;
+              closeOverlay();
+            }}
             onClose={closeOverlay}
           />
         )}
@@ -280,6 +365,13 @@ export function AskScreen() {
             closeOverlay();
           }}
           onOpenSettings={() => setOverlay("settings")}
+          onClose={closeOverlay}
+        />
+      )}
+      {overlay?.startsWith("ingest:") && (
+        <IngestSheet
+          initialMode={overlay.slice("ingest:".length) as IngestMode}
+          onIndexed={onIngested}
           onClose={closeOverlay}
         />
       )}

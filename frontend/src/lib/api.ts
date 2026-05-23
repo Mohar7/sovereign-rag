@@ -108,6 +108,33 @@ export interface EntitiesResponse {
   relations: [string, string, string][];
 }
 
+export type PinAction = "pinned" | "excluded";
+
+export interface PinEntry {
+  chunk_id: string;
+  action: PinAction;
+  note: string | null;
+  created_at: string;
+}
+
+export interface ThreadContextDoc {
+  thread_id: string;
+  pins: PinEntry[];
+}
+
+export interface IngestResponse {
+  doc_id: string;
+  title: string;
+  chunks_indexed: number;
+  source_uri: string;
+}
+
+export interface WebSearchHit {
+  url: string;
+  title: string;
+  snippet: string;
+}
+
 async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
@@ -134,4 +161,31 @@ export const api = {
     getJSON<NeighbourResponse>(`/chunks/${chunkId}/neighbours`),
   entities: (docId: string) =>
     getJSON<EntitiesResponse>(`/entities?doc_id=${encodeURIComponent(docId)}`),
+  threadContext: (threadId: string) =>
+    getJSON<ThreadContextDoc>(`/threads/${encodeURIComponent(threadId)}/context`),
+  pinChunk: (threadId: string, chunkId: string, action: PinAction = "pinned", note?: string) =>
+    getJSON<PinEntry>(`/threads/${encodeURIComponent(threadId)}/context`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chunk_id: chunkId, action, note }),
+    }),
+  unpinChunk: (threadId: string, chunkId: string) =>
+    getJSON<{ ok: boolean }>(
+      `/threads/${encodeURIComponent(threadId)}/context/${encodeURIComponent(chunkId)}`,
+      { method: "DELETE" },
+    ),
+  clearThreadContext: (threadId: string) =>
+    getJSON<{ removed: number }>(`/threads/${encodeURIComponent(threadId)}/context`, {
+      method: "DELETE",
+    }),
+  ingest: (body: { type: "url" | "text"; value: string; title?: string }) =>
+    getJSON<IngestResponse>("/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  searchWeb: (q: string, maxResults = 8) =>
+    getJSON<WebSearchHit[]>(
+      `/search?q=${encodeURIComponent(q)}&max_results=${maxResults}`,
+    ),
 };

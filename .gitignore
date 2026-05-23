@@ -32,6 +32,10 @@ models/
 .docling_cache/
 .crawl4ai/
 
+# Runtime state managed by the live deploy (pin/exclude JSON, deploy marker)
+.runtime/
+.deploy-sha
+
 # SearXNG runtime state — limiter db, uwsgi caches, etc. Our committed
 # settings.yml stays tracked (small overrides on top of upstream defaults).
 deploy/searxng/limiter.toml

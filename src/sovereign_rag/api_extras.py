@@ -1,20 +1,25 @@
 """Real-data endpoints under /api/*.
 
-The frontend's TopBar, Empty state, ThreadHead, SettingsPanel, Inspector,
-SourceDetail and CommandPalette were populated with hardcoded mock values
-until these routes existed. Wiring them so every visible number / pill /
-list reflects what's actually in the running stack — not a guess made at
-build time.
+Every panel, knob, drawer, and button in the design needs a live backend
+to point at — these routes are that backend. Each one is wired to a real
+data source (Milvus / Neo4j / Postgres / SearXNG / Ollama) and avoids
+sneaking in a placeholder.
 
-Six GETs + one PATCH:
+Routes:
 
-  GET   /api/corpus/stats         counts derived from Milvus + Neo4j
-  GET   /api/health               per-service liveness + p50 latency
-  GET   /api/settings             current retrieval knobs (config snapshot)
-  PATCH /api/settings             override knobs in the process for this session
-  GET   /api/documents/search     title-substring search over the Milvus collection
-  GET   /api/chunks/{id}/neighbours  prev/next sibling chunks in the same document
-  GET   /api/entities             entities mentioned in a given document
+  GET    /api/corpus/stats                counts derived from Milvus + Neo4j
+  GET    /api/health                      per-service liveness + p50 latency
+  GET    /api/settings                    current retrieval knobs (snapshot)
+  PATCH  /api/settings                    override knobs in-process for this session
+  GET    /api/documents/search            title-substring search over the collection
+  GET    /api/chunks/{id}/neighbours      prev/next sibling chunks in the same document
+  GET    /api/entities                    entities mentioned in a given document
+  POST   /api/ingest                      crawl a URL or paste raw text into the corpus
+  GET    /api/search                      proxy SearXNG (with ddgs fallback) for the WEB sheet
+  GET    /api/threads/{id}/context        pinned + excluded chunks for a thread
+  POST   /api/threads/{id}/context        pin or exclude a chunk
+  DELETE /api/threads/{id}/context/{cid}  remove one pin/exclusion
+  DELETE /api/threads/{id}/context        clear every pin/exclusion for the thread
 
 The router is mounted onto the existing FastAPI app from api.py; this file
 intentionally avoids importing from api.py to keep the import graph DAG-like.
@@ -33,6 +38,14 @@ from pydantic import BaseModel, Field
 
 from sovereign_rag.agent import get_pipeline
 from sovereign_rag.config import get_settings
+from sovereign_rag.thread_context import (
+    PinEntry,
+    ThreadContextDoc,
+    clear_thread,
+    delete_pin,
+    get_thread,
+    upsert_pin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -467,6 +480,132 @@ async def entities(
     )
     rels = [(r["s"], r["p"] or "related to", r["o"]) for r in rel_records]
     return EntitiesResponse(entities=ents, relations=rels)
+
+
+# ---------- ingest / web-search ----------
+
+
+class IngestRequest(BaseModel):
+    """Polymorphic ingest body.
+
+    ``type='url'`` crawls the URL (Crawl4AI), ``type='text'`` indexes the
+    pasted text as a synthetic source. ``title`` is optional — derived from
+    the URL/first line if missing.
+    """
+
+    type: Literal["url", "text"]
+    value: str = Field(min_length=1)
+    title: str | None = None
+
+
+class IngestResponse(BaseModel):
+    doc_id: str
+    title: str
+    chunks_indexed: int
+    source_uri: str
+
+
+@router.post("/ingest", response_model=IngestResponse)
+async def ingest(body: IngestRequest) -> IngestResponse:
+    """Index a URL or pasted text into Milvus + Neo4j.
+
+    Returns the resulting doc_id + chunk count. The work happens synchronously
+    so the UI can show a deterministic completion state — for large URLs this
+    can take several seconds (Crawl4AI render + chunking + embedding).
+    """
+    from sovereign_rag.documents import SourceDocument, SourceType
+
+    pipe = get_pipeline()
+    if body.type == "url":
+        from sovereign_rag.ingestion import crawl_url
+
+        try:
+            doc = await crawl_url(body.value)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"crawl failed: {exc}") from exc
+        if body.title:
+            doc.title = body.title
+    else:
+        import hashlib
+
+        # Use a deterministic SHA1 prefix so re-ingesting the same text
+        # idempotently updates the same Milvus row instead of growing the
+        # collection per identical paste. Not security-sensitive — just an
+        # 8-byte stable id.
+        sha = hashlib.sha1(body.value.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
+        title = body.title or body.value.splitlines()[0][:80]
+        doc = SourceDocument(
+            doc_id=f"text/{sha}",
+            title=title,
+            source_uri=f"text://{title}",
+            source_type=SourceType.TEXT,
+            markdown=body.value,
+        )
+
+    n = await pipe.index_document(doc)
+    return IngestResponse(
+        doc_id=doc.doc_id,
+        title=doc.title,
+        chunks_indexed=n,
+        source_uri=doc.source_uri,
+    )
+
+
+class WebSearchHit(BaseModel):
+    url: str
+    title: str
+    snippet: str
+
+
+@router.get("/search", response_model=list[WebSearchHit])
+async def web_search(
+    q: str = Query(..., min_length=1, description="search query"),
+    max_results: int = Query(8, ge=1, le=20),
+) -> list[WebSearchHit]:
+    """Proxy SearXNG (with ddgs fallback) — used by the WEB ingest sheet
+    so the frontend doesn't need to handle CORS to SearXNG directly."""
+    from sovereign_rag.ingestion import search as _search
+
+    hits = await _search(q, max_results=max_results)
+    return [
+        WebSearchHit(url=h["url"], title=h["title"], snippet=h.get("snippet", "")) for h in hits
+    ]
+
+
+# ---------- thread context (pins + exclusions) ----------
+
+
+class PinRequest(BaseModel):
+    chunk_id: str
+    action: Literal["pinned", "excluded"] = "pinned"
+    note: str | None = None
+
+
+@router.get("/threads/{thread_id}/context", response_model=ThreadContextDoc)
+async def thread_context_get(thread_id: str) -> ThreadContextDoc:
+    """Return all pins + exclusions for a thread (empty list for unknown id)."""
+    return await get_thread(thread_id)
+
+
+@router.post("/threads/{thread_id}/context", response_model=PinEntry)
+async def thread_context_post(thread_id: str, body: PinRequest) -> PinEntry:
+    """Pin or exclude a chunk in the thread (idempotent on chunk_id)."""
+    return await upsert_pin(thread_id, body.chunk_id, body.action, body.note)
+
+
+@router.delete("/threads/{thread_id}/context/{chunk_id}")
+async def thread_context_delete(thread_id: str, chunk_id: str) -> dict[str, bool]:
+    """Remove one pin/exclusion. 404 if no such entry."""
+    removed = await delete_pin(thread_id, chunk_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="no such pin/exclusion")
+    return {"ok": True}
+
+
+@router.delete("/threads/{thread_id}/context")
+async def thread_context_clear(thread_id: str) -> dict[str, int]:
+    """Wipe every pin/exclusion for the thread. Returns the count removed."""
+    return {"removed": await clear_thread(thread_id)}
 
 
 __all__ = ["router"]

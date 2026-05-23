@@ -1,5 +1,12 @@
 interface Props {
   onSuggestion: (text: string) => void;
+  /** Fired by the ASK suggestion cards. If provided, suggestions both fill the
+   * composer and submit. Falls back to `onSuggestion` when omitted. */
+  onAsk?: (text: string) => void;
+  /** Fired by the INGEST suggestion card — caller opens the ingest sheet. */
+  onIngest?: () => void;
+  /** Fired by the WEB suggestion card — caller opens the web-search sheet. */
+  onWeb?: () => void;
   corpus?: {
     docs: number;
     chunks: number;
@@ -34,8 +41,21 @@ const SUGGESTIONS: { kind: "ask" | "ingest" | "web"; text: string; kbd: string }
 
 export function Empty({
   onSuggestion,
+  onAsk,
+  onIngest,
+  onWeb,
   corpus = { docs: 42, chunks: 1847, entities: 312, relations: 1094, lastIndexed: "3m ago" },
 }: Props) {
+  const handleClick = (s: { kind: "ask" | "ingest" | "web"; text: string }) => {
+    if (s.kind === "ask") {
+      const clean = s.text.replace(/^"|"$/g, "");
+      if (onAsk) onAsk(clean);
+      else onSuggestion(clean);
+      return;
+    }
+    if (s.kind === "ingest") onIngest?.();
+    if (s.kind === "web") onWeb?.();
+  };
   return (
     <div className="empty">
       <div className="mark">
@@ -56,7 +76,7 @@ export function Empty({
           <button
             key={s.text}
             className="suggestion"
-            onClick={() => s.kind === "ask" && onSuggestion(s.text.replace(/^"|"$/g, ""))}
+            onClick={() => handleClick(s)}
           >
             <span className={`tag kind-${s.kind}`}>
               <span className="ic" /> {s.kind.toUpperCase()}

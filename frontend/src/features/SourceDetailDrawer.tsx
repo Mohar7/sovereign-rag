@@ -2,6 +2,15 @@
 // Shows the chunk text with highlights, prev/next neighbour chunks,
 // extracted entities, and graph relations from Neo4j — all fetched
 // live from /api/chunks/{id}/neighbours and /api/entities?doc_id=….
+//
+// All footer actions write to real backend state:
+//   - ↗ open               opens the source URI in a new tab
+//   - ⌖ pin / unpin        POSTs to /api/threads/{id}/context
+//   - exclude from thread  POSTs the same with action=excluded
+//   - re-rerank            asks the same question again (composer
+//                          callback) — caller decides what to do.
+//   - open in library      triggers a route change to /documents
+//                          (caller handles routing).
 
 import { useEffect, useState } from "react";
 import { CitationChip } from "../components/CitationChip";
@@ -12,6 +21,18 @@ interface Props {
   n: number;
   citation: Citation;
   settings?: Settings | null;
+  /** Whether this chunk is pinned in the active thread (drives the pin button label). */
+  pinned?: boolean;
+  /** Whether this chunk is excluded in the active thread. */
+  excluded?: boolean;
+  /** Pin/unpin in the active thread. Caller wires this to useThreadContext. */
+  onPin?: (chunkId: string) => Promise<void> | void;
+  onUnpin?: (chunkId: string) => Promise<void> | void;
+  onExclude?: (chunkId: string) => Promise<void> | void;
+  /** Re-fire the last question — caller decides which question and with what knobs. */
+  onRerank?: () => void;
+  /** Open the document in the library overlay or route. */
+  onOpenInLibrary?: (docId: string) => void;
   onClose: () => void;
 }
 
@@ -22,7 +43,19 @@ function splitUri(uri: string): { scheme: string; path: string } {
     : { scheme: uri.slice(0, i + 3), path: uri.slice(i + 3) };
 }
 
-export function SourceDetailDrawer({ n, citation, settings, onClose }: Props) {
+export function SourceDetailDrawer({
+  n,
+  citation,
+  settings,
+  pinned,
+  excluded,
+  onPin,
+  onUnpin,
+  onExclude,
+  onRerank,
+  onOpenInLibrary,
+  onClose,
+}: Props) {
   const embedLabel = settings
     ? settings.embed_provider === "openai"
       ? `openai · ${settings.embed_dim}d`
@@ -115,14 +148,24 @@ export function SourceDetailDrawer({ n, citation, settings, onClose }: Props) {
             <span style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
               <button
                 className="chip-btn"
+                disabled={!scheme.startsWith("http")}
+                title={scheme.startsWith("http") ? "Open source URL" : "Local chunk — nothing to open"}
                 onClick={() => {
                   if (scheme.startsWith("http")) window.open(citation.source_uri, "_blank");
                 }}
               >
                 ↗ open
               </button>
-              <button className="chip-btn" type="button">
-                ⌖ pin
+              <button
+                className={`chip-btn ${pinned ? "on" : ""}`}
+                type="button"
+                onClick={() => {
+                  if (!onPin || !onUnpin) return;
+                  void (pinned ? onUnpin(citation.chunk_id) : onPin(citation.chunk_id));
+                }}
+                title={pinned ? "Unpin from thread" : "Pin to thread"}
+              >
+                ⌖ {pinned ? "pinned" : "pin"}
               </button>
             </span>
           </div>
@@ -266,17 +309,36 @@ export function SourceDetailDrawer({ n, citation, settings, onClose }: Props) {
         <div className="drawer-foot">
           <span className="scope">
             cited as <span style={{ color: "var(--text)" }}>[{n}]</span>
+            {excluded && (
+              <span style={{ color: "var(--err)", marginLeft: "8px" }}>· excluded next turn</span>
+            )}
           </span>
           <div className="right">
-            <button className="btn ghost" type="button">
-              exclude from thread
+            <button
+              className={`btn ghost ${excluded ? "on" : ""}`}
+              type="button"
+              disabled={!onExclude || !onUnpin}
+              onClick={() => {
+                if (!onExclude || !onUnpin) return;
+                void (excluded ? onUnpin(citation.chunk_id) : onExclude(citation.chunk_id));
+              }}
+            >
+              {excluded ? "stop excluding" : "exclude from thread"}
             </button>
-            <button className="btn ghost" type="button">
+            <button
+              className="btn ghost"
+              type="button"
+              disabled={!onRerank}
+              onClick={() => onRerank?.()}
+              title="Re-ask the same question; useful after changing rerank settings"
+            >
               re-rerank
             </button>
             <button
               className="btn warm"
               type="button"
+              disabled={!onOpenInLibrary}
+              onClick={() => onOpenInLibrary?.(citation.doc_id)}
               style={{ background: "var(--vector)", color: "#0a0612" }}
             >
               open in library

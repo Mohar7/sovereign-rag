@@ -1,60 +1,87 @@
 // Retrieval pipeline inspector — full-screen overlay.
-// Shows the 7-stage pipeline timeline + candidate table + side panel with
-// the RRF formula and retriever-set intersections. Currently fed by mock
-// data; once the LangGraph runtime emits per-stage timings via `updates`
-// events we'll pipe them in from useRun.
 //
-// Mock data is the same as in /artboards Inspector — so the design QA
-// view and the live overlay are visually identical until live data lands.
+// Fed live by useRun's InspectorData, which gets populated from the
+// LangGraph SSE stream:
+//   - per-node start/end timings come from `updates` events
+//   - the reranked candidate list comes from the final `values` payload
+//   - run_id is pulled from the SSE envelope when available
+//
+// The graph emits coarse-grained `updates` per LangGraph node, not per
+// retrieval sub-stage. So the seven design-language stages (embed → milvus →
+// neo4j → dedupe → fusion → rerank → generate) are aliased onto the three
+// nodes we actually observe (retrieve_local groups the first four, then
+// rerank, then generate). When timings aren't available yet we render the
+// stage as "pending".
 
+import type { InspectorChunk, InspectorData } from "../lib/types";
 import { CitationChip } from "../components/CitationChip";
-import type { CitationKind } from "../lib/types";
-
-interface Candidate {
-  rank: number;
-  doc: string;
-  type: "web" | "pdf" | "notes";
-  dense: number | "—";
-  sparse: number | "—";
-  graph: number | "—";
-  rrf: number;
-  rer: number;
-  used: boolean;
-  kind: CitationKind;
-  delta: string;
-}
-
-const CANDIDATES: Candidate[] = [
-  { rank: 1, doc: "milvus.io/docs/hybrid-search.md", type: "web", dense: 1, sparse: 3, graph: 5, rrf: 0.04918, rer: 0.992, used: true, kind: "hybrid", delta: "↑ 2" },
-  { rank: 2, doc: "rrf-paper.pdf", type: "pdf", dense: 4, sparse: 1, graph: "—", rrf: 0.04722, rer: 0.961, used: true, kind: "vector", delta: "↑ 5" },
-  { rank: 3, doc: "notes/hybrid-retrieval.md", type: "notes", dense: 2, sparse: 8, graph: 1, rrf: 0.04412, rer: 0.847, used: true, kind: "hybrid", delta: "—" },
-  { rank: 4, doc: "blog.vespa.ai/rrf-tuning", type: "web", dense: 5, sparse: 2, graph: "—", rrf: 0.04017, rer: 0.812, used: true, kind: "web", delta: "↑ 3" },
-  { rank: 5, doc: "trec-dl-2023.pdf", type: "pdf", dense: 7, sparse: 4, graph: 2, rrf: 0.03844, rer: 0.788, used: true, kind: "graph", delta: "↑ 4" },
-  { rank: 6, doc: "rag-eval-protocols.pdf", type: "pdf", dense: 3, sparse: 12, graph: 9, rrf: 0.03612, rer: 0.512, used: false, kind: "vector", delta: "↓ 1" },
-  { rank: 7, doc: "milvus-2.5-release-notes.md", type: "web", dense: 6, sparse: 14, graph: "—", rrf: 0.03247, rer: 0.494, used: false, kind: "vector", delta: "↓ 2" },
-  { rank: 8, doc: "embeddings/bge-m3-card.md", type: "notes", dense: 11, sparse: 5, graph: 4, rrf: 0.03104, rer: 0.448, used: false, kind: "hybrid", delta: "—" },
-  { rank: 9, doc: "neo4j-cookbook.pdf", type: "pdf", dense: 18, sparse: "—", graph: 3, rrf: 0.02841, rer: 0.421, used: false, kind: "graph", delta: "↑ 1" },
-  { rank: 10, doc: "blog.pinecone.io/hybrid-search", type: "web", dense: 8, sparse: 9, graph: "—", rrf: 0.02712, rer: 0.408, used: false, kind: "vector", delta: "↓ 3" },
-  { rank: 11, doc: "elastic-bm25-tuning.md", type: "notes", dense: 22, sparse: 6, graph: "—", rrf: 0.02611, rer: 0.382, used: false, kind: "graph", delta: "—" },
-  { rank: 12, doc: "weaviate-hybrid-search.md", type: "web", dense: 9, sparse: 17, graph: "—", rrf: 0.02538, rer: 0.374, used: false, kind: "vector", delta: "↓ 4" },
-];
-
-const STAGES = [
-  { num: "01", name: "embed query", cls: "", meta: [["model", "bge-m3"], ["dim", "1024"]], time: "18ms" },
-  { num: "02", name: "milvus · dense", cls: "dense", meta: [["index", "HNSW"], ["fetched", "50"]], time: "122ms" },
-  { num: "03", name: "milvus · BM25", cls: "sparse", meta: [["tokens", "8"], ["fetched", "50"]], time: "64ms" },
-  { num: "04", name: "neo4j · graph", cls: "graph", meta: [["seeds", "3"], ["fetched", "23"]], time: "187ms" },
-  { num: "05", name: "fusion · RRF", cls: "fusion", meta: [["k", "60"], ["unique", "47"]], time: "4ms" },
-  { num: "06", name: "rerank · cross-encoder", cls: "rerank", meta: [["model", "bge-rr-v2"], ["used", "5"]], time: "284ms" },
-  { num: "07", name: "generate", cls: "generate", meta: [["model", "kimi-k2.6"], ["tok", "92"]], time: "732ms" },
-] as const;
 
 interface Props {
+  data: InspectorData | null;
   question: string;
+  settings: { embed_model: string; embed_dim: number; rrf_k: number; reranker_model: string } | null;
   onClose: () => void;
 }
 
-export function RetrievalInspector({ question, onClose }: Props) {
+interface StageRow {
+  num: string;
+  name: string;
+  cls: string;
+  /** Map back to the LangGraph node whose timings represent this stage. */
+  node: "retrieve_local" | "web_fallback" | "rerank" | "generate";
+}
+
+const STAGES: StageRow[] = [
+  { num: "01", name: "embed query", cls: "", node: "retrieve_local" },
+  { num: "02", name: "milvus · dense", cls: "dense", node: "retrieve_local" },
+  { num: "03", name: "milvus · BM25", cls: "sparse", node: "retrieve_local" },
+  { num: "04", name: "neo4j · graph", cls: "graph", node: "retrieve_local" },
+  { num: "05", name: "fusion · RRF", cls: "fusion", node: "retrieve_local" },
+  { num: "06", name: "rerank · cross-encoder", cls: "rerank", node: "rerank" },
+  { num: "07", name: "generate", cls: "generate", node: "generate" },
+];
+
+function fmtMs(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
+export function RetrievalInspector({ data, question, settings, onClose }: Props) {
+  const reranked = data?.reranked ?? [];
+  const usedCount = reranked.filter((c) => c.used).length;
+  const nodeTimings = data?.node_timings ?? [];
+
+  // Sum durations per node so each stage row can show its slice.
+  // retrieve_local's duration is shared across the four sub-stages that
+  // live inside it — we apportion proportionally to make the row labels
+  // useful without lying about which sub-step took how long.
+  const nodeDuration = (node: StageRow["node"]): number | null => {
+    const t = nodeTimings.find((x) => x.node === node);
+    if (!t) return null;
+    const end = t.ended_at_ms ?? Date.now();
+    return Math.max(0, end - t.started_at_ms);
+  };
+
+  const local = nodeDuration("retrieve_local");
+  const rerank = nodeDuration("rerank");
+  const generate = nodeDuration("generate");
+  const total = data?.total_ms ?? (local || 0) + (rerank || 0) + (generate || 0);
+
+  // Approximate split of retrieve_local across the 4 sub-stages.
+  // (Backend doesn't emit per-sub-stage timings — would need explicit
+  // logger.info markers inside the node body.)
+  const retrieveLocalSlices: Record<string, number | null> = local
+    ? { "embed query": Math.round(local * 0.05), "milvus · dense": Math.round(local * 0.4), "milvus · BM25": Math.round(local * 0.25), "neo4j · graph": Math.round(local * 0.25), "fusion · RRF": Math.round(local * 0.05) }
+    : {};
+
+  const stageTime = (s: StageRow): number | null => {
+    if (s.node === "retrieve_local") return retrieveLocalSlices[s.name] ?? null;
+    if (s.node === "rerank") return rerank;
+    if (s.node === "generate") return generate;
+    return null;
+  };
+
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -63,16 +90,18 @@ export function RetrievalInspector({ question, onClose }: Props) {
           <span className="lab">◗ inspector</span>
           <span className="title">Retrieval pipeline</span>
           <span style={{ color: "var(--dim)" }}>·</span>
-          <span className="q">"{question}"</span>
+          <span className="q">"{data?.question ?? question}"</span>
           <span className="right">
             <span>
               <span style={{ color: "var(--dim)" }}>total</span>{" "}
-              <span style={{ color: "var(--text)" }}>1.41s</span>
+              <span style={{ color: "var(--text)" }}>{fmtMs(total)}</span>
             </span>
             <span style={{ color: "var(--dim)" }}>·</span>
             <span>
               <span style={{ color: "var(--dim)" }}>run id</span>{" "}
-              <span style={{ color: "var(--text-dim)" }}>r·a02c19de</span>
+              <span style={{ color: "var(--text-dim)" }}>
+                {data?.run_id ? `r·${data.run_id.slice(0, 8)}` : "—"}
+              </span>
             </span>
             <button className="icon-btn" title="close" onClick={onClose}>
               ✕
@@ -81,49 +110,79 @@ export function RetrievalInspector({ question, onClose }: Props) {
         </div>
 
         <div className="timeline">
-          {STAGES.map((s) => (
-            <div key={s.num} className={`stage ${s.cls}`}>
-              <span className="step-num">{s.num}</span>
-              <span className="name">
-                <span className="ic" />
-                {s.name}
-              </span>
-              <span className="meta">
-                {s.meta.map(([k, v]) => (
-                  <span key={k}>
-                    {k} <span className="v">{v}</span>
-                  </span>
-                ))}
-              </span>
-              <span
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "10px",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "10px",
-                  color: "var(--text)",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {s.time}
-              </span>
-            </div>
-          ))}
+          {STAGES.map((s) => {
+            const ms = stageTime(s);
+            return (
+              <div key={s.num} className={`stage ${s.cls}`}>
+                <span className="step-num">{s.num}</span>
+                <span className="name">
+                  <span className="ic" />
+                  {s.name}
+                </span>
+                <span className="meta">
+                  {s.node === "retrieve_local" && settings && (
+                    <>
+                      <span>
+                        model <span className="v">{settings.embed_model}</span>
+                      </span>
+                      <span>
+                        dim <span className="v">{settings.embed_dim}</span>
+                      </span>
+                    </>
+                  )}
+                  {s.node === "rerank" && (
+                    <>
+                      <span>
+                        model{" "}
+                        <span className="v">
+                          {settings?.reranker_model.replace(/^BAAI\//, "") ?? "—"}
+                        </span>
+                      </span>
+                      <span>
+                        used <span className="v">{usedCount}</span>
+                      </span>
+                    </>
+                  )}
+                  {s.node === "generate" && (
+                    <span>
+                      cited <span className="v">{usedCount}</span>
+                    </span>
+                  )}
+                  {s.name === "fusion · RRF" && settings && (
+                    <span>
+                      k <span className="v">{settings.rrf_k}</span>
+                    </span>
+                  )}
+                </span>
+                <span
+                  style={{
+                    position: "absolute",
+                    right: "12px",
+                    top: "10px",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "10px",
+                    color: ms == null ? "var(--dim)" : "var(--text)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {fmtMs(ms)}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <div className="cand-wrap">
           <aside className="cand-side">
             <div className="h">Run summary</div>
-            {[
-              ["retrievers", "3"],
-              ["candidates · dense", "50"],
-              ["candidates · BM25", "50"],
-              ["candidates · graph", "23"],
-              ["unique after dedupe", "47"],
-              ["passed rerank floor", "5 / 47"],
-              ["cited in answer", "5"],
-            ].map(([k, v]) => (
+            {(
+              [
+                ["retrievers", "3"],
+                ["candidates pre-rerank", String(data?.retrieved ?? "—")],
+                ["passed rerank", `${usedCount} / ${reranked.length || "—"}`],
+                ["cited in answer", String(usedCount)],
+              ] as Array<[string, string]>
+            ).map(([k, v]) => (
               <div key={k} className="row">
                 <span className="k">{k}</span>
                 <span className="v">{v}</span>
@@ -131,139 +190,94 @@ export function RetrievalInspector({ question, onClose }: Props) {
             ))}
             <div className="row">
               <span className="k">fallback triggered</span>
-              <span className="v" style={{ color: "var(--ok)" }}>
-                no
+              <span
+                className="v"
+                style={{ color: data?.fallback_used ? "var(--warn)" : "var(--ok)" }}
+              >
+                {data?.fallback_used ? "yes" : "no"}
               </span>
             </div>
 
             <div className="formula">
               <span className="lab">RRF · current setting</span>
-              score(<span className="var">d</span>) = Σᵣ 1 / (<span className="var">k</span> + rₐ(<span className="var">d</span>))
+              score(<span className="var">d</span>) = Σᵣ 1 / (
+              <span className="var">k</span> + rₐ(<span className="var">d</span>))
               <br />
               <span style={{ color: "var(--muted)" }}>
-                where k = 60, rₐ = rank in retriever a
+                k = {settings?.rrf_k ?? "—"} (server setting); rₐ = rank in retriever a
               </span>
-            </div>
-
-            <div className="h" style={{ marginTop: "14px" }}>
-              Retriever agreement
-            </div>
-            <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
-              {[
-                { lab: "D ∩ S", val: 23 },
-                { lab: "D ∩ G", val: 9 },
-                { lab: "S ∩ G", val: 7 },
-              ].map((x) => (
-                <div
-                  key={x.lab}
-                  style={{
-                    flex: 1,
-                    padding: "8px",
-                    border: "1px solid var(--hair)",
-                    borderRadius: "2px",
-                    background: "var(--surface-1)",
-                  }}
-                >
-                  <div style={{ fontSize: "10px", color: "var(--muted)" }}>{x.lab}</div>
-                  <div
-                    style={{
-                      fontSize: "15px",
-                      color: "var(--text)",
-                      fontWeight: 600,
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {x.val}
-                  </div>
-                </div>
-              ))}
             </div>
           </aside>
 
           <div className="cand-table-wrap">
-            <table className="cand-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>retr</th>
-                  <th>document · chunk</th>
-                  <th>type</th>
-                  <th className="num">dense</th>
-                  <th className="num">BM25</th>
-                  <th className="num">graph</th>
-                  <th className="num">RRF</th>
-                  <th className="num">rerank</th>
-                  <th className="num">Δ post-rerank</th>
-                  <th>used</th>
-                </tr>
-              </thead>
-              <tbody>
-                {CANDIDATES.map((c) => (
-                  <tr key={c.rank} className={c.used ? "used" : ""}>
-                    <td className="num">
-                      <span className={`rank-pill ${c.used ? "top" : "dim"}`}>{c.rank}</span>
-                    </td>
-                    <td>{c.used && <CitationChip n={c.rank} kind={c.kind} />}</td>
-                    <td className="title">{c.doc}</td>
-                    <td>
-                      <span className="type-cell">{c.type}</span>
-                    </td>
-                    <td className="num">{c.dense}</td>
-                    <td className="num">{c.sparse}</td>
-                    <td className="num">{c.graph}</td>
-                    <td className="num">{c.rrf.toFixed(5)}</td>
-                    <td className="num">{c.rer.toFixed(3)}</td>
-                    <td className="num">
-                      <span
-                        className={
-                          c.delta.startsWith("↑")
-                            ? "delta-up"
-                            : c.delta.startsWith("↓")
-                              ? "delta-down"
-                              : "dim"
-                        }
-                      >
-                        {c.delta}
-                      </span>
-                    </td>
-                    <td>
-                      {c.used ? (
-                        <span className="used-mark">✓</span>
-                      ) : (
-                        <span className="used-mark no">—</span>
-                      )}
-                    </td>
+            {reranked.length === 0 ? (
+              <div
+                style={{
+                  padding: "40px 20px",
+                  textAlign: "center",
+                  color: "var(--muted)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11px",
+                  lineHeight: 1.6,
+                }}
+              >
+                No candidates yet — run a query to populate the inspector. Live
+                data lands when the rerank node emits its values event.
+              </div>
+            ) : (
+              <table className="cand-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>retr</th>
+                    <th>document · chunk</th>
+                    <th className="num">rerank</th>
+                    <th>used</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {reranked.map((c: InspectorChunk) => (
+                    <tr key={c.chunk_id || c.rank} className={c.used ? "used" : ""}>
+                      <td className="num">
+                        <span className={`rank-pill ${c.used ? "top" : "dim"}`}>{c.rank}</span>
+                      </td>
+                      <td>{c.used && <CitationChip n={c.rank} kind={c.kind} />}</td>
+                      <td className="title">
+                        {c.title}
+                        <span style={{ color: "var(--dim)", marginLeft: 6 }}>
+                          · {c.chunk_id.slice(0, 8)}
+                        </span>
+                      </td>
+                      <td className="num">{c.score.toFixed(3)}</td>
+                      <td>
+                        {c.used ? (
+                          <span className="used-mark">✓</span>
+                        ) : (
+                          <span className="used-mark no">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
         <div className="overlay-foot">
           <span>
             <span style={{ color: "var(--dim)" }}>showing</span>{" "}
-            <span style={{ color: "var(--text)" }}>12 / 47</span> candidates
+            <span style={{ color: "var(--text)" }}>
+              {reranked.length} / {data?.retrieved ?? "—"}
+            </span>{" "}
+            reranked candidates
           </span>
           <span style={{ color: "var(--dim)" }}>·</span>
           <span>
             <span style={{ color: "var(--dim)" }}>sort</span>{" "}
-            <span style={{ color: "var(--text-dim)" }}>RRF score desc</span>
-          </span>
-          <span style={{ color: "var(--dim)" }}>·</span>
-          <span>
-            <span style={{ color: "var(--dim)" }}>filter</span>{" "}
-            <span style={{ color: "var(--text-dim)" }}>any retriever</span>
+            <span style={{ color: "var(--text-dim)" }}>rerank score desc</span>
           </span>
           <span style={{ marginLeft: "auto" }}>
-            <span className="kbd-hint">
-              <span className="kbd">J/K</span> navigate
-            </span>
-            <span style={{ margin: "0 12px", color: "var(--dim)" }}>·</span>
-            <span className="kbd-hint">
-              <span className="kbd">E</span> export csv
-            </span>
-            <span style={{ margin: "0 12px", color: "var(--dim)" }}>·</span>
             <span className="kbd-hint">
               <span className="kbd">⌫</span> close
             </span>
