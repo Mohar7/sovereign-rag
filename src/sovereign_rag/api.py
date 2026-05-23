@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.types import Command
 from pydantic import BaseModel, Field
@@ -40,6 +41,7 @@ from sovereign_rag.agent import (
     build_graph,
     set_pipeline,
 )
+from sovereign_rag.api_extras import router as api_router
 from sovereign_rag.config import get_settings
 from sovereign_rag.documents import SourceDocument, SourceType
 from sovereign_rag.ingestion import crawl_url, parse_file, search_and_crawl
@@ -85,6 +87,20 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Allow the dev frontend on :5173 (and the Tailscale IPs of the same) to
+# call /api/* without a Vite proxy round-trip.  In production the SPA is
+# served from the same nginx that proxies the backend, so CORS is moot.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|100\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+):\d+$",
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# /api/* — real-data endpoints powering the frontend (corpus stats, health,
+# settings, documents search, chunk neighbours, entities). See api_extras.py.
+app.include_router(api_router)
 
 
 # ---------- schemas ----------

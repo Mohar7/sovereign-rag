@@ -259,7 +259,18 @@ class Neo4jGraphStore:
         self._auth = (user or s.neo4j_user, password or s.neo4j_password)
         self._database = database or s.neo4j_database
         self._embed_dim = embed_dim or s.embed_dim
-        self._driver: AsyncDriver = AsyncGraphDatabase.driver(self._uri, auth=self._auth)
+        # Suppress the "UNRECOGNIZED" notification category — every
+        # local_search call otherwise warns about `c.page` being missing
+        # on chunks indexed before the property existed (and on text
+        # corpora where page is structurally null). The category covers
+        # property-key / label / relation-type schema-cache warnings; we
+        # surface real schema errors elsewhere via try/except, so quieting
+        # this class costs us nothing and cleans up the logs.
+        self._driver: AsyncDriver = AsyncGraphDatabase.driver(
+            self._uri,
+            auth=self._auth,
+            notifications_disabled_categories=["UNRECOGNIZED"],
+        )
 
     # -- lifecycle ---------------------------------------------------------
     async def close(self) -> None:
