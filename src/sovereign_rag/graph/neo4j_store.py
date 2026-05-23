@@ -439,28 +439,39 @@ class Neo4jGraphStore:
         """GraphRAG local search.
 
         Embed the query, vector-search seed chunks, then for each seed gather
-        the 1-hop neighborhood of its mentioned entities and append the
-        relation facts as a "Related facts:" block. Score is the vector
-        similarity (0..1, cosine) from the index.
+        the ``graph_depth``-hop neighborhood of its mentioned entities and
+        append the relation facts as a "Related facts:" block. Score is the
+        vector similarity (0..1, cosine) from the index.
+
+        ``graph_max_nodes`` caps the total seed-chunk count so a degenerate
+        traversal can't grow without bound. ``graph_depth`` selects how many
+        RELATED hops the neighbourhood query walks; we substitute it directly
+        into the variable-length pattern (parameter substitution doesn't work
+        for path quantifiers in Cypher).
         """
-        k = top_k if top_k is not None else get_settings().retrieve_top_k
+        s = get_settings()
+        k = top_k if top_k is not None else s.retrieve_top_k
         if k <= 0:
             return []
+        # graph_max_nodes is a separate, smaller cap so the deep BFS doesn't
+        # snowball when the user dials the seed count up.
+        k = min(k, s.graph_max_nodes)
+        depth = max(1, min(s.graph_depth, 5))
         query_embedding = await embed_query(query)
 
-        records, _summary, _keys = await self._driver.execute_query(
-            """
+        cypher = f"""
             CALL db.index.vector.queryNodes($index_name, $k, $embedding)
             YIELD node AS c, score
-            // 1-hop entity neighborhood of each seed chunk's mentioned entities
+            // 1..N-hop entity neighborhood of each seed chunk's mentioned entities
             OPTIONAL MATCH (c)-[:MENTIONS]->(e:Entity)
-            OPTIONAL MATCH (e)-[r:RELATED]-(neighbor:Entity)
+            OPTIONAL MATCH (e)-[r:RELATED*1..{depth}]-(neighbor:Entity)
             WITH c, score,
                  collect(DISTINCT
-                     CASE WHEN r IS NULL THEN null
-                     ELSE startNode(r).name + ' ' + r.type + ' ' + endNode(r).name +
-                          CASE WHEN coalesce(r.description, '') = '' THEN ''
-                               ELSE ' (' + r.description + ')' END
+                     CASE
+                       WHEN r IS NULL OR size(r) = 0 THEN null
+                       ELSE startNode(r[0]).name + ' ' + r[0].type + ' ' + endNode(r[-1]).name +
+                            CASE WHEN coalesce(r[0].description, '') = '' THEN ''
+                                 ELSE ' (' + r[0].description + ')' END
                      END
                  ) AS rel_facts,
                  collect(DISTINCT
@@ -480,7 +491,9 @@ class Neo4jGraphStore:
                    score        AS score,
                    facts        AS facts
             ORDER BY score DESC
-            """,
+            """
+        records, _summary, _keys = await self._driver.execute_query(
+            cypher,
             index_name=CHUNK_VECTOR_INDEX,
             k=k,
             embedding=query_embedding,

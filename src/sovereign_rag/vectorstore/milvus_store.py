@@ -28,6 +28,7 @@ from pymilvus import (
     Function,
     FunctionType,
     RRFRanker,
+    WeightedRanker,
 )
 
 from sovereign_rag.config import Settings, get_settings
@@ -282,34 +283,63 @@ class MilvusHybridStore:
         top_k: int | None = None,
         doc_id: str | None = None,
     ) -> list[RetrievedChunk]:
-        """Dense + BM25 hybrid search fused with RRF, all inside Milvus."""
+        """Dense + BM25 hybrid search fused with RRF, all inside Milvus.
+
+        Honours ``dense_enabled`` / ``sparse_enabled`` from Settings: when one
+        leg is turned off in the SettingsPanel we drop it from the request set
+        and fall back to a single-leg search instead of hybrid. When both legs
+        are off we short-circuit to an empty result rather than fire a noop
+        request.
+        """
         await self.ensure_collection()
-        limit = top_k or self._settings.retrieve_top_k
+        s = self._settings
+        limit = top_k or s.retrieve_top_k
         expr = doc_id_filter(doc_id)
 
-        query_dense = await embed_query(query)
+        if not s.dense_enabled and not s.sparse_enabled:
+            return []
 
-        # Dense leg: vector ANN over COSINE/HNSW.
-        dense_req = AnnSearchRequest(
-            data=[query_dense],
-            anns_field=_F_DENSE,
-            param={"metric_type": "COSINE"},
-            limit=limit,
-            expr=expr or None,
-        )
-        # BM25 leg: pass the RAW query string; Milvus tokenizes + scores it.
-        sparse_req = AnnSearchRequest(
-            data=[query],
-            anns_field=_F_SPARSE,
-            param={"metric_type": "BM25"},
-            limit=limit,
-            expr=expr or None,
-        )
+        reqs: list[AnnSearchRequest] = []
+        if s.dense_enabled:
+            query_dense = await embed_query(query)
+            reqs.append(
+                AnnSearchRequest(
+                    data=[query_dense],
+                    anns_field=_F_DENSE,
+                    param={"metric_type": "COSINE"},
+                    limit=limit,
+                    expr=expr or None,
+                )
+            )
+        if s.sparse_enabled:
+            reqs.append(
+                AnnSearchRequest(
+                    data=[query],
+                    anns_field=_F_SPARSE,
+                    param={"metric_type": "BM25"},
+                    limit=limit,
+                    expr=expr or None,
+                )
+            )
+
+        # Pick the ranker. When both legs are enabled we keep RRF (the only
+        # strategy whose fusion math we actually implement); WeightedRanker
+        # is available when fusion_strategy=="weighted" so the user's choice
+        # in the panel takes effect end-to-end.
+        ranker: Any
+        if len(reqs) == 1:
+            # Hybrid with a single leg is just a regular search; Milvus
+            # accepts it but the ranker still has to be set to something.
+            ranker = RRFRanker(s.rrf_k)
+        elif s.fusion_strategy == "weighted":
+            ranker = WeightedRanker(s.fusion_vector_weight, s.fusion_graph_weight)
+        else:
+            ranker = RRFRanker(s.rrf_k)
 
         results = await self._client.hybrid_search(
             collection_name=self._collection,
-            reqs=[dense_req, sparse_req],
-            ranker=RRFRanker(self._settings.rrf_k),
+            reqs=reqs,
+            ranker=ranker,
             limit=limit,
             output_fields=_OUTPUT_FIELDS,
         )
