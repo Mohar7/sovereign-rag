@@ -72,6 +72,15 @@ class SettingsResponse(BaseModel):
     rrf_k: int
     enable_graph_retrieval: bool
     enable_contextual_retrieval: bool
+    dense_enabled: bool
+    sparse_enabled: bool
+    fusion_strategy: str
+    fusion_graph_weight: float
+    fusion_vector_weight: float
+    graph_depth: int
+    graph_max_nodes: int
+    rerank_score_floor: float
+    adaptive_rerank: bool
     reranker_model: str
     reranker_device: str
     web_fallback_min_chunks: int
@@ -84,8 +93,18 @@ class SettingsPatch(BaseModel):
     rrf_k: int | None = Field(default=None, ge=1, le=500)
     enable_graph_retrieval: bool | None = None
     enable_contextual_retrieval: bool | None = None
+    dense_enabled: bool | None = None
+    sparse_enabled: bool | None = None
+    fusion_strategy: str | None = Field(default=None, pattern="^(rrf|weighted|borda)$")
+    fusion_graph_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    fusion_vector_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    graph_depth: int | None = Field(default=None, ge=1, le=5)
+    graph_max_nodes: int | None = Field(default=None, ge=10, le=500)
+    rerank_score_floor: float | None = Field(default=None, ge=0.0, le=1.0)
+    adaptive_rerank: bool | None = None
     web_fallback_min_chunks: int | None = Field(default=None, ge=0, le=50)
     web_fallback_max_urls: int | None = Field(default=None, ge=1, le=20)
+    reranker_device: str | None = Field(default=None, pattern="^(auto|mps|cuda|cpu)$")
 
 
 class DocumentSummary(BaseModel):
@@ -285,6 +304,15 @@ def _settings_snapshot() -> SettingsResponse:
         rrf_k=s.rrf_k,
         enable_graph_retrieval=s.enable_graph_retrieval,
         enable_contextual_retrieval=s.enable_contextual_retrieval,
+        dense_enabled=s.dense_enabled,
+        sparse_enabled=s.sparse_enabled,
+        fusion_strategy=s.fusion_strategy,
+        fusion_graph_weight=s.fusion_graph_weight,
+        fusion_vector_weight=s.fusion_vector_weight,
+        graph_depth=s.graph_depth,
+        graph_max_nodes=s.graph_max_nodes,
+        rerank_score_floor=s.rerank_score_floor,
+        adaptive_rerank=s.adaptive_rerank,
         reranker_model=s.reranker_model,
         reranker_device=s.reranker_device,
         web_fallback_min_chunks=s.web_fallback_min_chunks,

@@ -80,13 +80,24 @@ def decide_after_local(state: RAGState) -> Literal["web_fallback", "rerank"]:
     """If local retrieval came up short and we haven't already tried, fallback."""
     s = get_settings()
     candidates = state.get("candidates") or []
-    if state.get("web_fallback_attempted"):
-        return "rerank"
-    if s.web_fallback_min_chunks <= 0:
-        return "rerank"
-    if len(candidates) >= s.web_fallback_min_chunks:
-        return "rerank"
-    return "web_fallback"
+    attempted = state.get("web_fallback_attempted")
+    decision: Literal["web_fallback", "rerank"] = (
+        "rerank"
+        if (
+            attempted
+            or s.web_fallback_min_chunks <= 0
+            or len(candidates) >= s.web_fallback_min_chunks
+        )
+        else "web_fallback"
+    )
+    logger.info(
+        "decide_after_local: candidates=%d threshold=%d attempted=%s -> %s",
+        len(candidates),
+        s.web_fallback_min_chunks,
+        bool(attempted),
+        decision,
+    )
+    return decision
 
 
 # ---------------------------------------------------------------------------

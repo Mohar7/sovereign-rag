@@ -69,6 +69,26 @@ class Settings(BaseSettings):
     rrf_k: int = 60  # Reciprocal Rank Fusion constant
     enable_contextual_retrieval: bool = True
     enable_graph_retrieval: bool = True
+    # Per-channel toggles for the hybrid retriever. Disabling either weights
+    # its branch to zero in the fusion step.
+    dense_enabled: bool = True
+    sparse_enabled: bool = True
+    # Fusion strategy: "rrf" (default), "weighted" (uses the two weights below),
+    # "borda" (rank-only positional voting). Only "rrf" is honored end-to-end
+    # today; "weighted"/"borda" are accepted so the UI can persist the user's
+    # choice. The pipeline falls back to RRF when an unsupported value is set.
+    fusion_strategy: str = "rrf"  # rrf | weighted | borda
+    fusion_graph_weight: float = 0.4
+    fusion_vector_weight: float = 0.6
+    # Graph BFS budget — passed to the Neo4j local_search().
+    graph_depth: int = 2  # hops from seed entities
+    graph_max_nodes: int = 60
+    # Reranker post-filters. ``rerank_score_floor`` drops chunks below the
+    # threshold so a weak context never reaches the LLM (0 disables). The
+    # ``adaptive_rerank`` flag stops collecting once cumulative score-mass
+    # crosses ~0.85 (saves LLM context on easy queries).
+    rerank_score_floor: float = 0.0
+    adaptive_rerank: bool = False
     # Cross-encoder via sentence-transformers. bge-reranker-v2-m3 is multilingual
     # and SOTA among open rerankers; on Mac Mini / Apple Silicon it picks MPS,
     # on CUDA boxes it picks GPU, else CPU.

@@ -1,0 +1,71 @@
+# Automated deploy to the Mac Mini.
+#
+# On push to main: cd into the live deployment directory, fast-forward
+# to the new HEAD, run deploy.sh which decides what to rebuild/restart
+# and smoke-tests the result.
+#
+# Runs on the same self-hosted runner as integration.yml / e2e.yml.
+# The first time this is set up you must run deploy/install-services.sh
+# once via SSH (see deploy/README.md). After that, every push deploys.
+#
+# All commands consume only hard-coded paths or env vars set here — no
+# github.event.* values flow into shell, so workflow injection is N/A.
+
+name: Deploy (self-hosted)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - "docs/**"
+  workflow_dispatch:
+
+# Never run two deploys in parallel against the same Mac Mini.
+concurrency:
+  group: deploy-mac-mini
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, macOS, sovereign]
+    timeout-minutes: 15
+
+    env:
+      LIVE_DIR: /Users/muhriddin/actions-work/sovereign-rag
+
+    steps:
+      - name: Pull latest into live directory
+        run: |
+          cd "$LIVE_DIR"
+          git fetch --prune origin main
+          git checkout main
+          git reset --hard origin/main
+          git log -1 --oneline
+
+      - name: Run deploy.sh
+        run: |
+          cd "$LIVE_DIR"
+          bash deploy/deploy.sh
+
+      - name: Snapshot live state on failure
+        if: failure()
+        run: |
+          echo "=== launchctl list ==="
+          launchctl list | grep sovereign-rag || true
+          echo
+          echo "=== /api/health ==="
+          curl -fsS http://127.0.0.1:8000/api/health || true
+          echo
+          echo "=== tail uvicorn log ==="
+          tail -50 /tmp/sovereign-rag-api.log || true
+          echo
+          echo "=== tail langgraph log ==="
+          tail -50 /tmp/sovereign-rag-langgraph.log || true
+          echo
+          echo "=== tail vite log ==="
+          tail -30 /tmp/sovereign-rag-frontend.log || true

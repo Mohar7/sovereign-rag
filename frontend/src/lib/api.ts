@@ -24,6 +24,9 @@ export interface HealthResponse {
   services: ServiceStatus[];
 }
 
+export type FusionStrategy = "rrf" | "weighted" | "borda";
+export type RerankerDevice = "auto" | "mps" | "cuda" | "cpu";
+
 export interface Settings {
   llm_model: string;
   embed_provider: string;
@@ -34,8 +37,17 @@ export interface Settings {
   rrf_k: number;
   enable_graph_retrieval: boolean;
   enable_contextual_retrieval: boolean;
+  dense_enabled: boolean;
+  sparse_enabled: boolean;
+  fusion_strategy: FusionStrategy;
+  fusion_graph_weight: number;
+  fusion_vector_weight: number;
+  graph_depth: number;
+  graph_max_nodes: number;
+  rerank_score_floor: number;
+  adaptive_rerank: boolean;
   reranker_model: string;
-  reranker_device: string;
+  reranker_device: RerankerDevice;
   web_fallback_min_chunks: number;
   web_fallback_max_urls: number;
 }
@@ -48,6 +60,16 @@ export type SettingsPatch = Partial<
     | "rrf_k"
     | "enable_graph_retrieval"
     | "enable_contextual_retrieval"
+    | "dense_enabled"
+    | "sparse_enabled"
+    | "fusion_strategy"
+    | "fusion_graph_weight"
+    | "fusion_vector_weight"
+    | "graph_depth"
+    | "graph_max_nodes"
+    | "rerank_score_floor"
+    | "adaptive_rerank"
+    | "reranker_device"
     | "web_fallback_min_chunks"
     | "web_fallback_max_urls"
   >

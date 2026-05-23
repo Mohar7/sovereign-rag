@@ -5,12 +5,13 @@
 
 import { useEffect, useState } from "react";
 import { CitationChip } from "../components/CitationChip";
-import { api, type ChunkSummary, type EntitiesResponse } from "../lib/api";
+import { api, type ChunkSummary, type EntitiesResponse, type Settings } from "../lib/api";
 import type { Citation } from "../lib/types";
 
 interface Props {
   n: number;
   citation: Citation;
+  settings?: Settings | null;
   onClose: () => void;
 }
 
@@ -21,7 +22,12 @@ function splitUri(uri: string): { scheme: string; path: string } {
     : { scheme: uri.slice(0, i + 3), path: uri.slice(i + 3) };
 }
 
-export function SourceDetailDrawer({ n, citation, onClose }: Props) {
+export function SourceDetailDrawer({ n, citation, settings, onClose }: Props) {
+  const embedLabel = settings
+    ? settings.embed_provider === "openai"
+      ? `openai · ${settings.embed_dim}d`
+      : `${settings.embed_model} · ${settings.embed_dim}d`
+    : "—";
   const { scheme, path } = splitUri(citation.source_uri);
   const kind: "hybrid" | "vector" | "graph" | "web" =
     scheme.startsWith("http") ? "web" : "vector";
@@ -250,7 +256,7 @@ export function SourceDetailDrawer({ n, citation, onClose }: Props) {
                 )}
                 <tr>
                   <td>embedding</td>
-                  <td>bge-m3 · 1024d</td>
+                  <td>{embedLabel}</td>
                 </tr>
               </tbody>
             </table>

@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -227,7 +228,14 @@ async def _run_live(
         with contextlib.suppress(Exception):
             await pipeline.aclose()
 
-    ragas_result = await run_ragas(ragas_samples)
+    if os.environ.get("EVAL_SKIP_RAGAS", "").lower() in ("1", "true", "yes"):
+        ragas_result: dict[str, Any] = {
+            "available": False,
+            "scores": {},
+            "reason": "skipped via EVAL_SKIP_RAGAS env",
+        }
+    else:
+        ragas_result = dict(await run_ragas(ragas_samples))
     return {
         "mode": "live",
         "k": k,
@@ -235,7 +243,7 @@ async def _run_live(
             "per_question": retrieval_rows,
             "aggregate": _aggregate(retrieval_rows),
         },
-        "ragas": dict(ragas_result),
+        "ragas": ragas_result,
     }
 
 

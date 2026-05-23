@@ -268,6 +268,7 @@ export function AskScreen() {
           <SourceDetailDrawer
             n={activeCitation + 1}
             citation={lastAssistant.citations[activeCitation]!}
+            settings={settings}
             onClose={closeOverlay}
           />
         )}

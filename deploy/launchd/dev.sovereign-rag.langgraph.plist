@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.sovereign-rag.langgraph</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/muhriddin/.local/bin/uv</string>
+    <string>run</string>
+    <string>langgraph</string>
+    <string>dev</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>2024</string>
+    <string>--no-browser</string>
+    <string>--allow-blocking</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/muhriddin/actions-work/sovereign-rag</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/muhriddin/.local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>GRPC_VERBOSITY</key>
+    <string>ERROR</string>
+    <key>GLOG_minloglevel</key>
+    <string>2</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/sovereign-rag-langgraph.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/sovereign-rag-langgraph.log</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>
