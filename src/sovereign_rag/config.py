@@ -76,7 +76,13 @@ class Settings(BaseSettings):
     reranker_device: str = "auto"  # auto | mps | cuda | cpu
 
     # ---- Observability ----
+    # LangSmith (zero-code: langchain-core reads LANGSMITH_TRACING /
+    # LANGSMITH_API_KEY / LANGSMITH_PROJECT directly from env).
+    # Langfuse needs the three env vars below plus enable_langfuse=True.
     enable_langfuse: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "http://localhost:3100"
 
 
 @lru_cache
