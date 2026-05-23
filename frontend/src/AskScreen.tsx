@@ -6,8 +6,15 @@
 //   - Mid-stream  → useRun.state === "streaming"
 //   - HITL        → the last assistant turn has a `.interrupt`
 //   - Error       → useRun.state === "error"
+//
+// Plus five overlay surfaces from the v2 design:
+//   - Settings panel (TopBar ⚙)
+//   - Retrieval inspector (SourcesRail ⚙ INSPECT)
+//   - Context manager (TopBar context button — to wire)
+//   - Source detail drawer (click a citation chip or a source card)
+//   - Command palette (⌘K)
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalCard } from "./components/ApprovalCard";
 import { Composer } from "./components/Composer";
 import { Empty } from "./components/Empty";
@@ -19,9 +26,16 @@ import { ThreadHead } from "./components/ThreadHead";
 import { ThreadsRail } from "./components/ThreadsRail";
 import { TopBar } from "./components/TopBar";
 import { Turn } from "./components/Turn";
+import { CommandPalette } from "./features/CommandPalette";
+import { ContextManager } from "./features/ContextManager";
+import { RetrievalInspector } from "./features/RetrievalInspector";
+import { SettingsPanel } from "./features/SettingsPanel";
+import { SourceDetailDrawer } from "./features/SourceDetailDrawer";
 import { useRun } from "./hooks/useRun";
 import { useThreads } from "./hooks/useThreads";
 import type { Turn as TurnT } from "./lib/types";
+
+type Overlay = "settings" | "inspector" | "context" | "source" | "palette" | null;
 
 export function AskScreen() {
   const { threads, refresh: refreshThreads, create: createThread } = useThreads();
@@ -30,18 +44,36 @@ export function AskScreen() {
   const [composerValue, setComposerValue] = useState("");
   const [activeCitation, setActiveCitation] = useState<number | undefined>();
 
+  // Overlay state — only one panel is ever visible at a time.
+  const [overlay, setOverlay] = useState<Overlay>(null);
+  const closeOverlay = useCallback(() => setOverlay(null), []);
+
   const lastAssistant = useMemo(
     () => [...turns].reverse().find((t) => t.role === "assistant"),
     [turns]
   );
 
+  // Global keyboard shortcuts: ⌘K opens palette; Esc closes any overlay.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOverlay((o) => (o === "palette" ? null : "palette"));
+        return;
+      }
+      if (e.key === "Escape" && overlay) {
+        e.preventDefault();
+        closeOverlay();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [overlay, closeOverlay]);
+
   const onSelectThread = useCallback(
     (id: string) => {
       if (id === activeThread) return;
       setActiveThread(id);
-      // For a portfolio first iteration we don't reload past turns from the
-      // server — the right thing here is to fetch the thread state and
-      // re-hydrate. Wiring left as a follow-up.
       setTurns([]);
       setActiveCitation(undefined);
     },
@@ -81,6 +113,11 @@ export function AskScreen() {
     await onApprove([]);
   }, [onApprove]);
 
+  const onCitationClick = useCallback((idx: number) => {
+    setActiveCitation(idx);
+    setOverlay("source");
+  }, []);
+
   const topbarState: "ok" | "streaming" | "hitl" | "error" =
     state === "error"
       ? "error"
@@ -94,9 +131,22 @@ export function AskScreen() {
     threads.find((t) => t.thread_id === activeThread)?.title ||
     (turns[0]?.role === "user" ? turns[0].content.slice(0, 40) : "untitled");
 
+  const lastQuestion = useMemo(() => {
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const t = turns[i];
+      if (t && t.role === "user") return t.content;
+    }
+    return "";
+  }, [turns]);
+
   return (
     <div className="ask">
-      <TopBar threadTitle={threadTitle} state={topbarState} />
+      <TopBar
+        threadTitle={threadTitle}
+        state={topbarState}
+        onOpenSettings={() => setOverlay("settings")}
+        onOpenContext={() => setOverlay("context")}
+      />
       <ThreadsRail
         threads={threads}
         activeId={activeThread}
@@ -119,7 +169,15 @@ export function AskScreen() {
                 onRetry={() => void refreshThreads()}
               />
             )}
-            {renderTurns(turns, activeCitation, setActiveCitation, state, pipeline, onApprove, onSkipApproval)}
+            {renderTurns(
+              turns,
+              activeCitation,
+              onCitationClick,
+              state,
+              pipeline,
+              onApprove,
+              onSkipApproval
+            )}
           </div>
         )}
 
@@ -137,9 +195,37 @@ export function AskScreen() {
         count={lastAssistant?.citations?.length ?? 0}
         retrieved={lastAssistant?.retrieved ?? 0}
         used={lastAssistant?.used ?? 0}
+        onInspect={() => setOverlay("inspector")}
       >
-        {renderSources(lastAssistant, activeCitation, setActiveCitation, state)}
+        {renderSources(lastAssistant, activeCitation, onCitationClick, state)}
       </SourcesRail>
+
+      {/* Overlays — rendered last so they sit above the ask grid. */}
+      {overlay === "settings" && <SettingsPanel onClose={closeOverlay} />}
+      {overlay === "inspector" && (
+        <RetrievalInspector question={lastQuestion} onClose={closeOverlay} />
+      )}
+      {overlay === "context" && <ContextManager onClose={closeOverlay} />}
+      {overlay === "source" &&
+        activeCitation != null &&
+        lastAssistant?.citations?.[activeCitation] && (
+          <SourceDetailDrawer
+            n={activeCitation + 1}
+            citation={lastAssistant.citations[activeCitation]!}
+            onClose={closeOverlay}
+          />
+        )}
+      {overlay === "palette" && (
+        <CommandPalette
+          threads={threads}
+          onSelectThread={(id) => {
+            onSelectThread(id);
+            closeOverlay();
+          }}
+          onOpenSettings={() => setOverlay("settings")}
+          onClose={closeOverlay}
+        />
+      )}
     </div>
   );
 }
@@ -147,15 +233,14 @@ export function AskScreen() {
 function renderTurns(
   turns: TurnT[],
   active: number | undefined,
-  setActive: (i: number | undefined) => void,
+  onCitationClick: (i: number) => void,
   state: "idle" | "streaming" | "error",
   pipeline: ReturnType<typeof useRun>["pipeline"],
   onApprove: (urls: string[]) => void,
   onSkip: () => void
 ) {
   return turns.map((t, i) => {
-    const isLastAssistant =
-      t.role === "assistant" && i === turns.length - 1;
+    const isLastAssistant = t.role === "assistant" && i === turns.length - 1;
     const extras: React.ReactNode[] = [];
     if (isLastAssistant && t.status === "interrupted" && t.interrupt) {
       const lastUser = [...turns]
@@ -173,9 +258,7 @@ function renderTurns(
       );
     }
     if (isLastAssistant && state === "streaming") {
-      extras.push(
-        <PipelineStatusBar key="pipeline" steps={pipeline} />
-      );
+      extras.push(<PipelineStatusBar key="pipeline" steps={pipeline} />);
     }
     return (
       <Turn
@@ -183,7 +266,7 @@ function renderTurns(
         turn={t}
         index={i}
         activeCitation={active}
-        onCitationClick={(idx) => setActive(idx)}
+        onCitationClick={onCitationClick}
         extra={<>{extras}</>}
       />
     );
@@ -193,7 +276,7 @@ function renderTurns(
 function renderSources(
   lastAssistant: TurnT | undefined,
   active: number | undefined,
-  setActive: (i: number | undefined) => void,
+  onCitationClick: (i: number) => void,
   state: "idle" | "streaming" | "error"
 ) {
   const cits = lastAssistant?.citations ?? [];
@@ -225,7 +308,7 @@ function renderSources(
       n={i + 1}
       citation={c}
       active={active === i}
-      onClick={() => setActive(i)}
+      onClick={() => onCitationClick(i)}
     />
   ));
 }

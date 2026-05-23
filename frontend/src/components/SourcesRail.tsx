@@ -8,6 +8,8 @@ interface Props {
   children: ReactNode;
   /** Show "fusion" footer chip on the right of the stats row. */
   showFusion?: boolean;
+  /** Optional inspector handler — wired to the ⚙ INSPECT link in the head. */
+  onInspect?: () => void;
 }
 
 export function SourcesRail({
@@ -17,6 +19,7 @@ export function SourcesRail({
   used,
   children,
   showFusion = true,
+  onInspect,
 }: Props) {
   return (
     <aside className="sources">
@@ -24,7 +27,19 @@ export function SourcesRail({
         <span>
           {title} <span className="count">· {count}</span>
         </span>
-        <span className="add" title="Inspector">
+        <span
+          className="add"
+          title="Inspector"
+          role={onInspect ? "button" : undefined}
+          tabIndex={onInspect ? 0 : undefined}
+          onClick={onInspect}
+          onKeyDown={(e) => {
+            if (onInspect && (e.key === "Enter" || e.key === " ")) {
+              e.preventDefault();
+              onInspect();
+            }
+          }}
+        >
           ⚙ INSPECT
         </span>
       </div>

@@ -1,12 +1,20 @@
 import { Artboards } from "./Artboards";
 import { AskScreen } from "./AskScreen";
+import { ComponentsSheet } from "./ComponentsSheet";
 
 export default function App() {
-  // Tiny routing — the only secondary route is /artboards (or ?artboards=1)
-  // which renders all five mock states for screenshots / portfolio.
-  const isArtboards =
-    window.location.pathname.startsWith("/artboards") ||
-    new URLSearchParams(window.location.search).has("artboards");
-  if (isArtboards) return <Artboards />;
+  // Tiny routing — three top-level screens:
+  //   /                — live Ask screen (LangGraph SDK + streaming).
+  //   /artboards       — five mock states side by side (portfolio QA).
+  //   /components      — atomic-controls showcase (design system).
+  // Routes don't need a router lib — three branches are easier to read.
+  const path = window.location.pathname;
+  const params = new URLSearchParams(window.location.search);
+  if (path.startsWith("/components") || params.has("components")) {
+    return <ComponentsSheet />;
+  }
+  if (path.startsWith("/artboards") || params.has("artboards")) {
+    return <Artboards />;
+  }
   return <AskScreen />;
 }
