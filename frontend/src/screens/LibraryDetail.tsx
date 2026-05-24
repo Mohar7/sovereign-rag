@@ -22,8 +22,10 @@ export function LibraryDetail({ docId }: Props) {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
+    // documents_search caps at 500. For a 1000-doc corpus we'd want a
+    // /api/documents/{id} lookup; today this is fine.
     api
-      .documentsSearch("", 200)
+      .documentsSearch("", 500)
       .then((all) => {
         const match = all.find((d) => d.doc_id === docId) ?? null;
         setDoc(match);

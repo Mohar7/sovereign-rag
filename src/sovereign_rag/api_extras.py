@@ -357,7 +357,7 @@ async def settings_patch(patch: SettingsPatch) -> SettingsResponse:
 @router.get("/documents/search", response_model=list[DocumentSummary])
 async def documents_search(
     q: str = Query("", description="title-substring filter"),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
 ) -> list[DocumentSummary]:
     """List indexed documents (one row per unique doc_id), filtered by title."""
     pipe = get_pipeline()
