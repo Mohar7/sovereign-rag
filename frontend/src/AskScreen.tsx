@@ -26,6 +26,7 @@ import { ThreadHead } from "./components/ThreadHead";
 import { ThreadsRail } from "./components/ThreadsRail";
 import { TopBar } from "./components/TopBar";
 import { Turn } from "./components/Turn";
+import { PrimaryNav } from "./components/PrimaryNav";
 import { CommandPalette } from "./features/CommandPalette";
 import { ContextManager } from "./features/ContextManager";
 import { IngestSheet } from "./features/IngestSheet";
@@ -196,8 +197,14 @@ export function AskScreen() {
     return out;
   }, [health]);
 
+  const hitlSections = useMemo<("threads" | "ask" | "library" | "ingest" | "graph" | "evals" | "history" | "settings")[]>(
+    () => (threads.some((t) => t.paused_at_interrupt) ? ["threads"] : []),
+    [threads],
+  );
+
   return (
-    <div className="ask">
+    <div className="ask with-nav">
+      <PrimaryNav active="ask" hitl={hitlSections} servicesState="ok" />
       <TopBar
         threadTitle={threadTitle}
         state={topbarState}
