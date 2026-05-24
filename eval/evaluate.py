@@ -202,6 +202,7 @@ async def _run_live(
             )
             await pipeline.index_document(doc)
 
+        skip_ragas = os.environ.get("EVAL_SKIP_RAGAS", "").lower() in ("1", "true", "yes")
         retrieval_rows: list[dict[str, Any]] = []
         ragas_samples: list[dict[str, Any]] = []
         for item in qa_pairs:
@@ -209,18 +210,22 @@ async def _run_live(
             # metrics on the actual rerank output, and so the RAGAS sample
             # carries both the answer and the contexts that backed it.
             retrieved: list[RetrievedChunk] = await pipeline.retrieve(item["question"])
-            result = await pipeline.answer(item["question"])
             retrieval_rows.append(
                 _retrieval_row(item["question"], retrieved, item["relevant_substrings"], k)
             )
-            ragas_samples.append(
-                {
-                    "question": item["question"],
-                    "answer": result.answer,
-                    "contexts": [rc.chunk.raw_text for rc in retrieved],
-                    "ground_truth": item["ground_truth"],
-                }
-            )
+            if not skip_ragas:
+                # Generating an answer requires an LLM call. When RAGAS is
+                # disabled (IR-only mode), skip the LLM entirely — the metrics
+                # we still compute only need the rerank output.
+                result = await pipeline.answer(item["question"])
+                ragas_samples.append(
+                    {
+                        "question": item["question"],
+                        "answer": result.answer,
+                        "contexts": [rc.chunk.raw_text for rc in retrieved],
+                        "ground_truth": item["ground_truth"],
+                    }
+                )
     except Exception as exc:
         print(f"  live pipeline present but not usable ({exc}); falling back.")
         return None
