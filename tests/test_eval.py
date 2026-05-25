@@ -218,6 +218,20 @@ def test_ndcg_is_between_zero_and_one() -> None:
     assert 0.0 <= value <= 1.0
 
 
+def test_ndcg_multiple_chunks_match_same_substring_stays_bounded() -> None:
+    # Single golden substring; three retrieved chunks all contain it.
+    # Previous implementation normalized by distinct substrings (=1) and
+    # produced nDCG > 1. New behaviour: IDCG is built from the number of
+    # relevant retrieved positions, so a perfect ranking yields exactly 1.0
+    # and the result is always within [0, 1].
+    ranking = _ranking("alpha here", "alpha said hello", "more about alpha")
+    assert ndcg_at_k(ranking, ["alpha"], 3) == pytest.approx(1.0)
+    # Same scenario but the second hit is misplaced behind a non-relevant.
+    ranking2 = _ranking("alpha here", "completely irrelevant", "alpha said hello")
+    value = ndcg_at_k(ranking2, ["alpha"], 3)
+    assert 0.0 < value < 1.0
+
+
 # --------------------------------------------------------------------------- #
 # End-to-end sanity over a tiny realistic fixture                              #
 # --------------------------------------------------------------------------- #

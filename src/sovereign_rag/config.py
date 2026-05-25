@@ -19,14 +19,32 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # ---- LLM provider selection ----
+    # "ollama" (local daemon or Ollama Cloud) or "openai". All ``shared.llm_factory``
+    # callers and the legacy ``providers.ollama.get_llm`` route through this.
+    llm_provider: str = "ollama"
+
     # ---- Ollama (LLM; optionally Ollama Cloud) ----
     ollama_base_url: str = "http://localhost:11434"
     # Set for Ollama Cloud (https://ollama.com); sent as a Bearer header.
     ollama_api_key: str = ""
     llm_model: str = "qwen2.5:7b"
+    # Smaller tiers for cheap structured-output / fast tasks. Mirrors
+    # FB_ASSESSOR's ``default | light | nano`` convention so graph nodes can
+    # ask for the right size by intent rather than hardcoding a model name.
+    llm_model_light: str = "qwen2.5:3b"
+    llm_model_nano: str = "qwen2.5:1.5b"
     llm_temperature: float = 0.0
     # Generous context for contextual-retrieval prefixing of long docs.
     llm_num_ctx: int = 8192
+
+    # ---- OpenAI chat models (used when llm_provider == "openai") ----
+    # The ``llm_model*`` envs above carry the model IDs across providers; these
+    # exist as explicit overrides when someone wants to set them separately. If
+    # blank, the factory falls back to the matching ``llm_model*`` setting.
+    openai_chat_model: str = ""        # tier=default
+    openai_chat_model_light: str = ""  # tier=light
+    openai_chat_model_nano: str = ""   # tier=nano
 
     # ---- Embeddings ----
     # "ollama" (local bge-m3) or "openai" (Ollama Cloud has no embeddings API).
@@ -57,11 +75,6 @@ class Settings(BaseSettings):
     # matches the `postgres` service in docker-compose.yml (host port 5433,
     # since 5432 is often already in use by other dev stacks).
     langgraph_pg_uri: str = "postgresql://sovereign:sovereign-dev-pw@localhost:5433/sovereign_lg"
-    # Web fallback fires when the local hybrid+graph retrieval returns fewer
-    # than this many candidates (deduped, pre-rerank). Set 0 to disable.
-    web_fallback_min_chunks: int = 3
-    # Cap on URLs fetched per web fallback round (latency control).
-    web_fallback_max_urls: int = 3
 
     # ---- Retrieval knobs ----
     retrieve_top_k: int = 50  # candidates before rerank
@@ -89,10 +102,13 @@ class Settings(BaseSettings):
     # crosses ~0.85 (saves LLM context on easy queries).
     rerank_score_floor: float = 0.0
     adaptive_rerank: bool = False
-    # Cross-encoder via sentence-transformers. bge-reranker-v2-m3 is multilingual
-    # and SOTA among open rerankers; on Mac Mini / Apple Silicon it picks MPS,
-    # on CUDA boxes it picks GPU, else CPU.
-    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    # Cross-encoder via sentence-transformers. Default: gte-reranker-modernbert-base
+    # — 149M params (~3.8× smaller than bge-reranker-v2-m3), Apache 2.0, multilingual
+    # via ModernBERT; matches nemotron-rerank-1b on Hit@1 at a fraction of memory.
+    # On Mac Mini / Apple Silicon it picks MPS, on CUDA boxes it picks GPU, else CPU.
+    # Override to "BAAI/bge-reranker-v2-m3" for the older battle-tested baseline,
+    # or to "mixedbread-ai/mxbai-rerank-large-v2" for the stronger multilingual one.
+    reranker_model: str = "Alibaba-NLP/gte-reranker-modernbert-base"
     reranker_device: str = "auto"  # auto | mps | cuda | cpu
 
     # ---- Observability ----

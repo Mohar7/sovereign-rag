@@ -1,23 +1,20 @@
 """LLM and embeddings providers.
 
-The LLM is served by Ollama — either a local daemon or Ollama Cloud
-(`ollama_api_key` set → sent as a Bearer header). Embeddings come from either
-local Ollama (bge-m3) or OpenAI, selected by `embed_provider`, because Ollama
-Cloud does not expose an embeddings endpoint.
-
-`get_llm` / `get_embeddings` are cached so we reuse one client across the
-process. Both honor `config.Settings` so models are swappable via env.
+The LLM accessor (``get_llm``) is a legacy entry-point that now delegates to
+``shared.llm_factory.get_chat_model`` so it picks up the provider switch
+(Ollama vs OpenAI). Embeddings come from either local Ollama (bge-m3) or
+OpenAI, selected by ``embed_provider``, because Ollama Cloud does not expose
+an embeddings endpoint.
 """
 
 from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Any
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
-from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings
 from pydantic import SecretStr
 
 from sovereign_rag.config import get_settings
@@ -25,68 +22,22 @@ from sovereign_rag.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-@lru_cache(maxsize=1)
-def _langfuse_callback() -> Any | None:
-    """Build the Langfuse Langchain CallbackHandler if env says so.
-
-    Returns None when ``enable_langfuse`` is off or the package / creds are
-    missing — callers can then add `[handler]` only when truthy. We cache
-    the handler so every LLM call shares the same Langfuse session
-    instead of opening a new HTTP client per invocation.
-    """
-    s = get_settings()
-    if not s.enable_langfuse:
-        return None
-    if not (s.langfuse_public_key and s.langfuse_secret_key):
-        logger.info("langfuse disabled: missing public/secret key")
-        return None
-    try:
-        from langfuse import Langfuse
-        from langfuse.langchain import CallbackHandler
-    except Exception as exc:  # pragma: no cover
-        logger.warning("langfuse import failed: %s — tracing disabled", exc)
-        return None
-    try:
-        # Initialise the global Langfuse client so any direct trace
-        # writes (eval, custom spans) hit the same project.
-        Langfuse(
-            public_key=s.langfuse_public_key,
-            secret_key=s.langfuse_secret_key,
-            host=s.langfuse_base_url,
-        )
-        return CallbackHandler()
-    except Exception as exc:  # pragma: no cover
-        logger.warning("langfuse init failed: %s — tracing disabled", exc)
-        return None
-
-
-@lru_cache(maxsize=1)
 def get_llm() -> BaseChatModel:
-    """Chat model served by Ollama (local daemon or Ollama Cloud).
+    """Legacy chat-model accessor — delegates to ``shared.llm_factory.get_chat_model``.
 
-    Attaches the Langfuse Langchain callback at construction so every
-    chat call is automatically traced when ``enable_langfuse`` is on.
-    LangSmith traces are independent — picked up from LANGSMITH_*
-    env vars by langchain-core globally.
+    The factory branches on ``Settings.llm_provider`` (``ollama`` | ``openai``),
+    so flipping the env switch swaps every existing caller in one shot:
+    ``chunking.contextualize``, ``graph.neo4j_store`` entity extraction,
+    ``retrieval.pipeline.answer``, and ``eval/ragas_eval``.
+
+    Tracing is wired at the graph level via OTEL + the OpenInference
+    LangChain instrumentor (see ``shared/tracing.py``), not on the model —
+    keeps the cache effective and avoids the async-context bug in
+    ``langfuse.langchain.CallbackHandler``.
     """
-    s = get_settings()
-    client_kwargs = (
-        {"headers": {"Authorization": f"Bearer {s.ollama_api_key}"}} if s.ollama_api_key else {}
-    )
-    callbacks: list[Any] = []
-    lf = _langfuse_callback()
-    if lf is not None:
-        callbacks.append(lf)
-    kwargs: dict[str, Any] = {
-        "model": s.llm_model,
-        "base_url": s.ollama_base_url,
-        "temperature": s.llm_temperature,
-        "num_ctx": s.llm_num_ctx,
-        "client_kwargs": client_kwargs,
-    }
-    if callbacks:
-        kwargs["callbacks"] = callbacks
-    return ChatOllama(**kwargs)
+    from sovereign_rag.shared.llm_factory import get_chat_model
+
+    return get_chat_model(model_tier="default")
 
 
 @lru_cache(maxsize=1)

@@ -1,117 +1,120 @@
 {
-  "mode": "offline",
+  "mode": "live",
   "k": 5,
-  "n_corpus_chunks": 28,
   "retrieval": {
     "per_question": [
       {
         "question": "What is the asyncio event loop and how many tasks run at once?",
         "n_retrieved": 5,
-        "precision@5": 0.4,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 1.0
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "How do you get the currently running event loop inside a coroutine?",
         "n_retrieved": 5,
-        "precision@5": 0.2,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "What is the recommended high-level way to run an asyncio program?",
         "n_retrieved": 5,
-        "precision@5": 0.2,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "What happens if a coroutine performs a long blocking call without awaiting?",
         "n_retrieved": 5,
-        "precision@5": 0.2,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "Does calling an async def function run it immediately?",
         "n_retrieved": 5,
-        "precision@5": 0.2,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "What does asyncio.create_task do?",
         "n_retrieved": 5,
-        "precision@5": 0.2,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "How does asyncio.gather handle ordering and exceptions?",
         "n_retrieved": 5,
-        "precision@5": 0.2,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "What is asyncio.TaskGroup and what does it do on exit?",
-        "n_retrieved": 4,
-        "precision@5": 0.2,
+        "n_retrieved": 5,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "Why is time.sleep a problem in an asyncio program, and what should you use instead?",
         "n_retrieved": 5,
-        "precision@5": 0.2,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "How can you run blocking or CPU-bound code without freezing the event loop?",
-        "n_retrieved": 3,
-        "precision@5": 0.2,
+        "n_retrieved": 5,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "Is asyncio.Lock thread-safe?",
-        "n_retrieved": 4,
-        "precision@5": 0.2,
+        "n_retrieved": 5,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       },
       {
         "question": "What happens when an asyncio task is cancelled?",
         "n_retrieved": 5,
-        "precision@5": 0.2,
+        "precision@5": 0.8,
         "recall@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.6131471927654584
+        "ndcg@5": 1.5706417189553201
       }
     ],
     "aggregate": {
-      "n_retrieved": 4.666666666666667,
-      "precision@5": 0.21666666666666667,
+      "n_retrieved": 5.0,
+      "precision@5": 0.8000000000000002,
       "recall@5": 1.0,
       "mrr": 1.0,
-      "ndcg@5": 0.6453849267016701
+      "ndcg@5": 1.5706417189553201
     }
   },
   "ragas": {
-    "available": false,
-    "scores": {},
-    "reason": "live RAG + RAGAS skipped (offline demo)"
+    "available": true,
+    "scores": {
+      "faithfulness": 0.9880952380952381,
+      "answer_relevancy": 0.8585876518128633,
+      "context_recall": 1.0
+    },
+    "reason": null
   }
 }

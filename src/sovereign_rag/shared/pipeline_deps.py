@@ -1,4 +1,4 @@
-"""Process-wide handle to the singleton RAGPipeline.
+"""Process-wide handle to the singleton ``RAGPipeline``.
 
 Graph nodes are pure functions of state and don't carry a FastAPI app
 reference, so we expose the pipeline via a module-level accessor.
@@ -6,14 +6,14 @@ reference, so we expose the pipeline via a module-level accessor.
 Two callers populate it:
 
 1. **FastAPI lifespan** — calls ``set_pipeline(p)`` at startup and
-   ``set_pipeline(None)`` at shutdown. Lets FastAPI own ``aclose()`` so
-   the Milvus / Neo4j clients close cleanly.
+   ``set_pipeline(None)`` at shutdown. Lets FastAPI own ``aclose()`` so the
+   Milvus / Neo4j clients close cleanly.
 
 2. **LangGraph deployment** (``langgraph dev`` / ``langgraph build`` /
    LangGraph Platform) — does *not* run FastAPI, so it never reaches the
-   lifespan. ``get_pipeline()`` lazy-constructs the singleton on first
-   call instead of raising. The client connections live for the lifetime
-   of the runtime process, which is what we want there.
+   lifespan. ``get_pipeline()`` lazy-constructs the singleton on first call
+   instead of raising. The client connections live for the lifetime of the
+   runtime process, which is what we want there.
 """
 
 from __future__ import annotations
@@ -42,8 +42,8 @@ def set_pipeline(pipeline: RAGPipeline | None) -> None:
 def get_pipeline() -> RAGPipeline:
     """Return the singleton, building it lazily if no one set it.
 
-    The first call from a LangGraph runtime takes ~1-2 s while the Milvus
-    and Neo4j async clients open; subsequent calls reuse the same instance.
+    The first call from a LangGraph runtime takes ~1-2 s while the Milvus and
+    Neo4j async clients open; subsequent calls reuse the same instance.
     """
     global _pipeline
     if _pipeline is not None:
@@ -52,7 +52,7 @@ def get_pipeline() -> RAGPipeline:
         if _pipeline is None:
             from sovereign_rag.retrieval.pipeline import RAGPipeline
 
-            logger.info("agent.get_pipeline: lazy-initializing RAGPipeline")
+            logger.info("shared.pipeline_deps: lazy-initializing RAGPipeline")
             _pipeline = RAGPipeline()
     return _pipeline
 

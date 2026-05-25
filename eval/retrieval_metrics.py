@@ -128,20 +128,26 @@ def ndcg_at_k(
     """Normalised discounted cumulative gain at k with binary relevance.
 
     Uses binary gains (1 for relevant, 0 otherwise) and the standard log2
-    discount ``1 / log2(rank + 1)``. The ideal DCG places as many relevant
-    items as exist (capped at k) at the top. Returns 0.0 when ``k <= 0`` or
-    there is nothing relevant to find.
+    discount ``1 / log2(rank + 1)``. Returns 0.0 when ``k <= 0`` or no relevant
+    item is in the top-k.
+
+    Normalization (IDCG) uses the count of relevant chunks present in the
+    top-k retrieved set — not the count of distinct ground-truth substrings.
+    The relevance model is "any substring matches", so multiple retrieved
+    chunks can each match the same substring; counting distinct substrings
+    in the denominator under-estimates the ideal DCG and would make nDCG
+    exceed 1.0 whenever more than one retrieved chunk satisfies the same
+    target. Using ``sum(flags)`` as the ideal-hit count keeps the result in
+    [0, 1] and measures ranking quality of the relevant items the retriever
+    actually surfaced.
     """
     if k <= 0:
         return 0.0
     flags = relevance_flags(retrieved[:k], relevant_substrings)
     dcg = sum(1.0 / math.log2(rank + 1) for rank, hit in enumerate(flags, start=1) if hit)
 
-    num_relevant = _total_relevant(relevant_substrings)
-    ideal_hits = min(num_relevant, k)
+    ideal_hits = sum(flags)
     if ideal_hits == 0:
         return 0.0
     idcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
-    if idcg == 0.0:
-        return 0.0
     return dcg / idcg

@@ -32,13 +32,30 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["RAGAS_METRIC_NAMES", "RagasResult", "run_ragas"]
 
-# The RAGAS column names each metric reports under, in the order we present them.
+# User-facing metric names — the keys that appear in ``RagasResult.scores`` and
+# in the CLI report. We keep the friendly names ("context_precision") even
+# though some current RAGAS metric classes report under longer column names
+# (e.g. ``LLMContextPrecisionWithReference.name == "llm_context_precision_with_reference"``).
+# The actual column lookup uses ``_RAGAS_COLUMN_FOR`` below.
 RAGAS_METRIC_NAMES: tuple[str, ...] = (
     "faithfulness",
     "answer_relevancy",
     "context_precision",
     "context_recall",
 )
+
+# Map user-facing metric name → the candidate column names RAGAS may emit.
+# Multiple candidates accommodate both the legacy short names and the newer
+# explicit names; we take whichever appears in the result frame first.
+_RAGAS_COLUMN_FOR: dict[str, tuple[str, ...]] = {
+    "faithfulness": ("faithfulness",),
+    "answer_relevancy": ("answer_relevancy", "response_relevancy"),
+    "context_precision": (
+        "llm_context_precision_with_reference",
+        "context_precision",
+    ),
+    "context_recall": ("context_recall",),
+}
 
 
 class RagasResult(TypedDict):
@@ -79,17 +96,27 @@ def _build_dataset(samples: list[dict[str, Any]]) -> Any:
 def _mean_scores(result: Any) -> dict[str, float]:
     """Extract per-metric mean scores from a RAGAS ``EvaluationResult``.
 
-    ``result.to_pandas()`` yields one row per sample with one column per metric;
-    we take the column means and drop any that came back entirely NaN.
+    ``result.to_pandas()`` yields one row per sample with one column per
+    metric. We resolve each user-facing name (``faithfulness``,
+    ``answer_relevancy``, ``context_precision``, ``context_recall``) to
+    whichever candidate column RAGAS emitted — modern ragas reports
+    ``LLMContextPrecisionWithReference`` as ``llm_context_precision_with_reference``
+    and ``ResponseRelevancy`` as ``response_relevancy``, so we look up
+    aliases via :data:`_RAGAS_COLUMN_FOR` instead of the user-facing keys.
+    NaN columns (every sample errored) are dropped.
     """
     import math
 
     frame = result.to_pandas()
     scores: dict[str, float] = {}
     for name in RAGAS_METRIC_NAMES:
-        if name not in frame.columns:
+        column = next(
+            (candidate for candidate in _RAGAS_COLUMN_FOR[name] if candidate in frame.columns),
+            None,
+        )
+        if column is None:
             continue
-        value = float(frame[name].mean())
+        value = float(frame[column].mean())
         if not math.isnan(value):
             scores[name] = value
     return scores
@@ -114,6 +141,24 @@ async def run_ragas(samples: list[dict[str, Any]]) -> RagasResult:
     """
     if not samples:
         return RagasResult(available=False, scores={}, reason="no samples provided")
+
+    # --- Shim missing langchain-community submodule that ragas imports unconditionally. ---
+    # ragas/llms/base.py does `from langchain_community.chat_models.vertexai import ChatVertexAI`
+    # at module load. langchain-community ≥ 0.3 removed that path (Vertex AI moved out into a
+    # standalone integration package). We're Ollama-only and never call ChatVertexAI, so we
+    # register a stub module just so the import resolves.
+    import sys
+    import types
+
+    if "langchain_community.chat_models.vertexai" not in sys.modules:
+        _stub = types.ModuleType("langchain_community.chat_models.vertexai")
+
+        class _ChatVertexAIStub:  # pragma: no cover — never instantiated
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                raise RuntimeError("ChatVertexAI stub: real Vertex AI integration not installed")
+
+        _stub.ChatVertexAI = _ChatVertexAIStub  # type: ignore[attr-defined]
+        sys.modules["langchain_community.chat_models.vertexai"] = _stub
 
     # --- Import RAGAS lazily; the env may lack it or have a broken dep chain. ---
     try:

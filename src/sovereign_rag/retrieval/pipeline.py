@@ -25,8 +25,8 @@ from sovereign_rag.chunking import chunk_document, contextualize
 from sovereign_rag.config import Settings, get_settings
 from sovereign_rag.documents import RetrievedChunk, SourceDocument
 from sovereign_rag.graph.neo4j_store import Neo4jGraphStore
-from sovereign_rag.providers.ollama import get_llm
 from sovereign_rag.providers.reranker import rerank
+from sovereign_rag.shared.llm_factory import get_chat_model
 from sovereign_rag.vectorstore.milvus_store import MilvusHybridStore
 
 logger = logging.getLogger(__name__)
@@ -106,6 +106,27 @@ class RAGPipeline:
         logger.info("Indexed %d chunks from doc %s", len(chunks), doc.doc_id)
         return len(chunks)
 
+    async def delete_document(self, doc_id: str) -> dict[str, int]:
+        """Remove every trace of ``doc_id`` from Milvus + Neo4j.
+
+        Returns the number of vector rows the Milvus delete touched plus a
+        ``graph_deleted`` flag (Neo4j's driver doesn't report row counts the
+        same way). Missing documents are not errors — both stores treat
+        unknown ids as no-ops.
+        """
+        chunks_deleted = await self._milvus.delete_document(doc_id)
+        graph_deleted = 0
+        if self._graph is not None:
+            await self._graph.delete_document(doc_id)
+            graph_deleted = 1
+        logger.info(
+            "Deleted document %s — milvus_chunks=%d graph=%s",
+            doc_id,
+            chunks_deleted,
+            bool(graph_deleted),
+        )
+        return {"chunks_deleted": chunks_deleted, "graph_deleted": graph_deleted}
+
     # ---------- retrieval ----------
 
     async def retrieve(self, query: str, *, doc_id: str | None = None) -> list[RetrievedChunk]:
@@ -142,7 +163,7 @@ class RAGPipeline:
             )
 
         context_block, citations = _format_context(retrieved)
-        llm = get_llm()
+        llm = get_chat_model(model_tier="default")
         resp = await llm.ainvoke(
             [
                 SystemMessage(content=_ANSWER_SYSTEM),

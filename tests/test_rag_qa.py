@@ -1,9 +1,8 @@
-"""Agent / LangGraph unit tests.
+"""RAG QA graph unit tests.
 
 Each node is exercised with the heavy collaborators (pipeline, retrievers,
-LLM, reranker, web search/crawl, the `interrupt()` call) stubbed out via
-monkeypatch — so the suite stays offline and fast while still pinning the
-node contracts.
+LLM, reranker) stubbed out via monkeypatch — so the suite stays offline
+and fast while still pinning the node contracts.
 """
 
 from __future__ import annotations
@@ -13,9 +12,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from sovereign_rag.agent import nodes as agent_nodes
-from sovereign_rag.agent.state import INTERRUPT_REASON_APPROVE_URLS
 from sovereign_rag.documents import Chunk, RetrievedChunk
+from sovereign_rag.graphs.rag_qa import nodes as agent_nodes
 from sovereign_rag.retrieval.pipeline import Citation
 
 
@@ -31,41 +29,6 @@ def _rc(chunk_id: str, score: float = 0.5, source: str = "milvus_hybrid") -> Ret
         chunk_id=chunk_id,
     )
     return RetrievedChunk(chunk=chunk, score=score, source=source)
-
-
-# ---------------------------------------------------------------------------
-# decide_after_local
-# ---------------------------------------------------------------------------
-class TestDecideAfterLocal:
-    def test_enough_candidates_goes_to_rerank(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from sovereign_rag.config import get_settings
-
-        monkeypatch.setattr(get_settings(), "web_fallback_min_chunks", 3)
-        state = {"candidates": [_rc("a"), _rc("b"), _rc("c")]}
-        assert agent_nodes.decide_after_local(state) == "rerank"
-
-    def test_few_candidates_triggers_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from sovereign_rag.config import get_settings
-
-        monkeypatch.setattr(get_settings(), "web_fallback_min_chunks", 3)
-        state = {"candidates": [_rc("a")]}
-        assert agent_nodes.decide_after_local(state) == "web_fallback"
-
-    def test_already_attempted_short_circuits(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Once web_fallback has fired, the conditional edge must not loop."""
-        from sovereign_rag.config import get_settings
-
-        monkeypatch.setattr(get_settings(), "web_fallback_min_chunks", 10)
-        state = {"candidates": [], "web_fallback_attempted": True}
-        assert agent_nodes.decide_after_local(state) == "rerank"
-
-    def test_zero_threshold_disables_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """WEB_FALLBACK_MIN_CHUNKS=0 means 'never fall back', even with nothing."""
-        from sovereign_rag.config import get_settings
-
-        monkeypatch.setattr(get_settings(), "web_fallback_min_chunks", 0)
-        state = {"candidates": []}
-        assert agent_nodes.decide_after_local(state) == "rerank"
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +77,7 @@ class TestGenerate:
 
         fake_llm = AsyncMock()
         fake_llm.ainvoke.return_value = MagicMock(content="The codeword is FERRET [1].")
-        monkeypatch.setattr(agent_nodes, "get_llm", lambda: fake_llm)
+        monkeypatch.setattr(agent_nodes, "get_chat_model", lambda **_: fake_llm)
 
         out = await agent_nodes.generate({"question": "What's the codeword?", "reranked": reranked})
 
@@ -129,7 +92,7 @@ class TestGenerate:
 
     async def test_no_reranked_returns_default_no_op(self, monkeypatch: pytest.MonkeyPatch) -> None:
         sentinel = MagicMock(side_effect=AssertionError("LLM shouldn't be called"))
-        monkeypatch.setattr(agent_nodes, "get_llm", sentinel)
+        monkeypatch.setattr(agent_nodes, "get_chat_model", sentinel)
 
         out = await agent_nodes.generate({"question": "?", "reranked": []})
 
@@ -178,61 +141,3 @@ class TestRetrieveLocal:
         assert cands["c1"].score == 0.95
         # doc_id propagated to milvus call:
         milvus.hybrid_search.assert_awaited_once_with("q", doc_id="d1")
-
-
-# ---------------------------------------------------------------------------
-# web_fallback (HITL)
-# ---------------------------------------------------------------------------
-class TestWebFallback:
-    async def test_pauses_with_candidate_urls_when_search_has_hits(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        hits = [
-            {"url": "https://a", "title": "A", "snippet": "sa"},
-            {"url": "https://b", "title": "B", "snippet": "sb"},
-        ]
-        monkeypatch.setattr(agent_nodes, "search", AsyncMock(return_value=hits))
-
-        captured_payload: dict[str, Any] = {}
-
-        def fake_interrupt(payload: dict[str, Any]) -> Any:
-            captured_payload.update(payload)
-            # If we got this far, the test verified the pause; raise a marker
-            # so we don't need to fake the resume flow here.
-            raise AssertionError("interrupt was invoked")
-
-        monkeypatch.setattr(agent_nodes, "interrupt", fake_interrupt)
-
-        with pytest.raises(AssertionError, match="interrupt was invoked"):
-            await agent_nodes.web_fallback({"question": "q"})
-
-        assert captured_payload["reason"] == INTERRUPT_REASON_APPROVE_URLS
-        urls = [c["url"] for c in captured_payload["candidate_urls"]]
-        assert urls == ["https://a", "https://b"]
-
-    async def test_skips_interrupt_when_search_yields_nothing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(agent_nodes, "search", AsyncMock(return_value=[]))
-        sentinel = MagicMock(side_effect=AssertionError("interrupt shouldn't be called"))
-        monkeypatch.setattr(agent_nodes, "interrupt", sentinel)
-
-        out = await agent_nodes.web_fallback({"question": "q"})
-
-        assert out["web_fallback_attempted"] is True
-        assert out["fallback_used"] is False
-
-    async def test_search_failure_is_logged_and_falls_through(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            agent_nodes, "search", AsyncMock(side_effect=RuntimeError("searxng down"))
-        )
-        sentinel = MagicMock(side_effect=AssertionError("interrupt shouldn't be called"))
-        monkeypatch.setattr(agent_nodes, "interrupt", sentinel)
-
-        out = await agent_nodes.web_fallback({"question": "q"})
-
-        # Empty candidate list (because of the swallowed exception) → no
-        # interrupt; we mark attempted and let the next node take over.
-        assert out == {"web_fallback_attempted": True, "fallback_used": False}
