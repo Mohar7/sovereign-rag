@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   Check,
   ChevronsUpDown,
   Cpu,
@@ -24,6 +26,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -96,6 +99,9 @@ export function SettingsPage() {
               <TabsTrigger value="indexing">Indexing</TabsTrigger>
               <TabsTrigger value="rerank">Rerank</TabsTrigger>
               <TabsTrigger value="services">Services</TabsTrigger>
+              <TabsTrigger value="danger" className="text-destructive">
+                Danger
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="retrieval">
@@ -112,6 +118,9 @@ export function SettingsPage() {
             </TabsContent>
             <TabsContent value="services">
               <ServicesTab />
+            </TabsContent>
+            <TabsContent value="danger">
+              <DangerTab />
             </TabsContent>
           </Tabs>
         </div>
@@ -812,4 +821,152 @@ function iconFor(name: string) {
     default:
       return Activity
   }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Danger zone — typed-confirm wrapper for /admin/wipe
+//
+// Three scopes (corpus / threads / all) each get a card with the exact
+// implications spelled out, plus a typed-confirmation input that must
+// match the scope name before the destructive button enables.
+// ─────────────────────────────────────────────────────────────────
+
+function DangerTab() {
+  const qc = useQueryClient()
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-destructive/15 text-destructive">
+            <AlertTriangle className="size-3.5" strokeWidth={2} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[14px] font-semibold text-foreground">
+              Destructive operations
+            </h2>
+            <p className="mt-0.5 text-[12.5px] leading-[1.55] text-muted-foreground">
+              Everything in this tab is irreversible. The confirmation input
+              must match the scope name exactly before the button enables.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <WipeCard
+        scope="corpus"
+        title="Wipe corpus"
+        summary="Drops the Milvus chunks collection and DETACH DELETE every node in Neo4j. Threads and pins survive."
+        details={["Milvus: drop sovereign_chunks collection", "Neo4j: MATCH (n) DETACH DELETE n", "Schema constraints + indexes retained (cheap)"]}
+        invalidateKeys={[["library", "search"], ["corpus", "stats"], ["graph", "stats"], ["graph", "entities"]]}
+        qc={qc}
+      />
+      <WipeCard
+        scope="threads"
+        title="Wipe threads"
+        summary="TRUNCATEs every LangGraph checkpoint table + drops the on-disk pins file. Corpus is untouched."
+        details={["Postgres: TRUNCATE checkpoints + checkpoint_writes + checkpoint_blobs", "Filesystem: delete .runtime/thread_context.json"]}
+        invalidateKeys={[["threads", "list"], ["runs", "list"]]}
+        qc={qc}
+      />
+      <WipeCard
+        scope="all"
+        title="Wipe everything"
+        summary="Both of the above, in one call. Equivalent to a fresh install."
+        details={["Corpus + threads in one transaction-like sequence", "Use after major schema changes or when reproducing a clean baseline"]}
+        invalidateKeys={[["library", "search"], ["corpus", "stats"], ["graph", "stats"], ["graph", "entities"], ["threads", "list"], ["runs", "list"]]}
+        qc={qc}
+      />
+    </div>
+  )
+}
+
+function WipeCard({
+  scope,
+  title,
+  summary,
+  details,
+  invalidateKeys,
+  qc,
+}: {
+  scope: "corpus" | "threads" | "all"
+  title: string
+  summary: string
+  details: string[]
+  invalidateKeys: Array<readonly string[]>
+  qc: ReturnType<typeof useQueryClient>
+}) {
+  const [confirmText, setConfirmText] = useState("")
+  const [running, setRunning] = useState(false)
+  const armed = confirmText === scope
+  const handleWipe = async () => {
+    if (!armed || running) return
+    setRunning(true)
+    try {
+      const r = await fetch("/admin/wipe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope, confirm: "wipe" }),
+      })
+      if (!r.ok) {
+        const body = await r.text().catch(() => r.statusText)
+        throw new Error(body || r.statusText)
+      }
+      toast.success(`Wiped ${scope}.`)
+      setConfirmText("")
+      for (const key of invalidateKeys) {
+        void qc.invalidateQueries({ queryKey: [...key] })
+      }
+    } catch (err) {
+      toast.error(`Wipe failed: ${(err as Error).message}`)
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <Card className="border-destructive/30">
+      <CardContent className="space-y-3 p-5">
+        <div className="space-y-1">
+          <h3 className="text-[14px] font-semibold text-foreground">{title}</h3>
+          <p className="text-[12.5px] leading-[1.55] text-muted-foreground">
+            {summary}
+          </p>
+        </div>
+        <ul className="space-y-1 pl-3 text-[12px] leading-[1.55] text-muted-foreground">
+          {details.map((d, i) => (
+            <li key={i} className="list-disc">
+              {d}
+            </li>
+          ))}
+        </ul>
+        <div className="space-y-2 pt-1">
+          <Label className="text-[12px] font-medium">
+            Type <code className="rounded bg-muted px-1 font-mono">{scope}</code> to confirm
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={scope}
+              className="h-8 font-mono text-[13px]"
+            />
+            <Button
+              variant="destructive"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={handleWipe}
+              disabled={!armed || running}
+            >
+              {running ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <AlertTriangle className="size-3.5" strokeWidth={2} />
+              )}
+              Wipe {scope}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }

@@ -29,8 +29,12 @@ import { useDeleteThread, useThreadsList } from "@/hooks/use-threads"
 import { api, type ThreadSummary } from "@/lib/api"
 import { cn, downloadJSON } from "@/lib/utils"
 
+type StatusFilter = "all" | "ok" | "error"
+
 export function ThreadsPage() {
   const [query, setQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [modelFilter, setModelFilter] = useState<string | null>(null)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [openThread, setOpenThread] = useState<ThreadSummary | null>(null)
   const threads = useThreadsList()
@@ -62,15 +66,36 @@ export function ThreadsPage() {
 
   const filtered = useMemo<ThreadSummary[]>(() => {
     const all = threads.data ?? []
-    if (!query.trim()) return all
-    const q = query.toLowerCase()
-    return all.filter(
-      (t) =>
+    const q = query.trim().toLowerCase()
+    return all.filter((t) => {
+      if (statusFilter !== "all" && (t.status ?? "ok") !== statusFilter) return false
+      if (modelFilter !== null && (t.model ?? "") !== modelFilter) return false
+      if (!q) return true
+      return (
         (t.question ?? "").toLowerCase().includes(q) ||
         (t.answer_snippet ?? "").toLowerCase().includes(q) ||
-        t.thread_id.toLowerCase().includes(q),
-    )
-  }, [threads.data, query])
+        (t.model ?? "").toLowerCase().includes(q) ||
+        t.thread_id.toLowerCase().includes(q)
+      )
+    })
+  }, [threads.data, query, statusFilter, modelFilter])
+
+  // Model-facet list from unfiltered data (counts reflect "how many threads
+  // use this model" globally, not after applying the current filter).
+  const modelFacets = useMemo<Array<{ model: string; count: number }>>(() => {
+    const all = threads.data ?? []
+    const counts = new Map<string, number>()
+    for (const t of all) {
+      const m = t.model
+      if (!m) continue
+      counts.set(m, (counts.get(m) ?? 0) + 1)
+    }
+    return Array.from(counts.entries())
+      .map(([model, count]) => ({ model, count }))
+      .sort((a, b) => b.count - a.count)
+  }, [threads.data])
+
+  const errorCount = (threads.data ?? []).filter((t) => t.status === "error").length
 
   const selectedIds = Object.keys(selected).filter((id) => selected[id])
   const toggle = (id: string) =>
@@ -99,7 +124,16 @@ export function ThreadsPage() {
   const total = (threads.data ?? []).length
 
   return (
-    <div className="flex h-[calc(100svh-4rem)] min-h-0 w-full">
+    <div className="flex h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
+      <ThreadsFilterRail
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        modelFilter={modelFilter}
+        onModelChange={setModelFilter}
+        modelFacets={modelFacets}
+        totalCount={(threads.data ?? []).length}
+        errorCount={errorCount}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 border-b border-border px-6 py-3">
           <h1 className="text-[15px] font-semibold tracking-tight">Threads</h1>
@@ -366,5 +400,115 @@ function EmptyState({
           : "Threads appear here after you ask a question from the Ask page."}
       </p>
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ThreadsFilterRail — left rail with status pill + model facet
+// ─────────────────────────────────────────────────────────────────
+
+function ThreadsFilterRail({
+  statusFilter,
+  onStatusChange,
+  modelFilter,
+  onModelChange,
+  modelFacets,
+  totalCount,
+  errorCount,
+}: {
+  statusFilter: StatusFilter
+  onStatusChange: (next: StatusFilter) => void
+  modelFilter: string | null
+  onModelChange: (next: string | null) => void
+  modelFacets: Array<{ model: string; count: number }>
+  totalCount: number
+  errorCount: number
+}) {
+  return (
+    <aside className="hidden w-[240px] shrink-0 flex-col border-r border-border bg-background lg:flex">
+      <div className="border-b border-border px-4 py-3">
+        <div className="text-[14px] font-semibold">Filters</div>
+        <p className="mt-2 font-mono text-[11px] leading-[1.55] text-muted-foreground">
+          {totalCount.toLocaleString()} threads ·{" "}
+          <span className={errorCount > 0 ? "text-destructive" : ""}>
+            {errorCount.toLocaleString()} with errors
+          </span>
+        </p>
+      </div>
+      <div className="space-y-4 border-b border-border px-4 py-3">
+        <div>
+          <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
+            status
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {(["all", "ok", "error"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onStatusChange(s)}
+                className={cn(
+                  "inline-flex h-7 items-center rounded-full border px-2.5 font-mono text-[11px]",
+                  statusFilter === s
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card hover:bg-muted",
+                  s === "error" && statusFilter === s && "border-destructive text-destructive bg-destructive/10",
+                )}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="space-y-2 px-4 py-3">
+          <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
+            model
+          </div>
+          {modelFacets.length === 0 ? (
+            <p className="text-[12px] italic text-muted-foreground">
+              No model data yet — runs are required.
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => onModelChange(null)}
+                  className={cn(
+                    "flex w-full items-baseline justify-between gap-2 rounded-md px-2 py-1 text-left text-[12.5px]",
+                    modelFilter === null ? "bg-primary/10 text-primary" : "hover:bg-muted",
+                  )}
+                >
+                  <span>Any model</span>
+                  <span className="font-mono tabular-nums text-muted-foreground">
+                    {modelFacets.reduce((s, m) => s + m.count, 0)}
+                  </span>
+                </button>
+              </li>
+              {modelFacets.map((m) => (
+                <li key={m.model}>
+                  <button
+                    type="button"
+                    onClick={() => onModelChange(m.model)}
+                    className={cn(
+                      "flex w-full items-baseline justify-between gap-2 rounded-md px-2 py-1 text-left",
+                      modelFilter === m.model
+                        ? "bg-primary/10 text-primary"
+                        : "hover:bg-muted",
+                    )}
+                  >
+                    <span className="truncate font-mono text-[12px]">{m.model}</span>
+                    <span className="font-mono tabular-nums text-muted-foreground">
+                      {m.count}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </ScrollArea>
+    </aside>
   )
 }

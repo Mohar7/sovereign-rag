@@ -30,6 +30,44 @@ function postJSON<T>(path: string, body: unknown): Promise<T> {
   })
 }
 
+// ---------- evals ----------
+
+export interface EvalsPerQuestion {
+  question: string
+  n_retrieved: number
+  "precision@5": number
+  "recall@5": number
+  mrr: number
+  "ndcg@5": number
+}
+
+export interface EvalsAggregate {
+  n_retrieved: number
+  "precision@5": number
+  "recall@5": number
+  mrr: number
+  "ndcg@5": number
+}
+
+export interface EvalsRagas {
+  available: boolean
+  scores: Record<string, number>
+  reason: string | null
+}
+
+export interface EvalsResults {
+  available: boolean
+  mode: string
+  k: number
+  retrieval: {
+    per_question: EvalsPerQuestion[]
+    aggregate: EvalsAggregate
+  }
+  ragas: EvalsRagas
+  generated_at: string | null
+  path: string | null
+}
+
 // ---------- run history ----------
 
 export interface RunRow {
@@ -187,6 +225,12 @@ export interface ThreadSummary {
   answer_snippet?: string | null
   citations: number
   updated_at?: string | null
+  /** Most-recent run's model, joined from the runs table. */
+  model?: string | null
+  /** Most-recent run's status (ok | error). Defaults to "ok" if no runs. */
+  status: "ok" | "error"
+  /** Total error runs in this thread's history. */
+  error_count: number
 }
 
 export interface ThreadDetail {
@@ -205,6 +249,21 @@ export interface ThreadMessage {
   citations: CitationModel[]
   retrieved: number
   used: number
+}
+
+export type PinAction = "pinned" | "excluded"
+
+export interface PinEntry {
+  chunk_id: string
+  action: PinAction
+  note: string | null
+  created_at: string
+}
+
+export interface ThreadContextDoc {
+  thread_id: string
+  /** Both pinned and excluded entries live here; filter by `.action`. */
+  pins: PinEntry[]
 }
 
 export interface IngestUrlRequest {
@@ -315,6 +374,27 @@ export const api = {
       method: "DELETE",
     }),
 
+  // thread context — pinned + excluded chunks
+  threadContext: (id: string) =>
+    request<ThreadContextDoc>(
+      `/api/threads/${encodeURIComponent(id)}/context`,
+    ),
+  threadContextUpsert: (
+    id: string,
+    body: { chunk_id: string; action: PinAction; note?: string | null },
+  ) =>
+    postJSON<PinEntry>(`/api/threads/${encodeURIComponent(id)}/context`, body),
+  threadContextDelete: (id: string, chunkId: string) =>
+    request<{ ok: boolean }>(
+      `/api/threads/${encodeURIComponent(id)}/context/${encodeURIComponent(chunkId)}`,
+      { method: "DELETE" },
+    ),
+  threadContextClear: (id: string) =>
+    request<{ removed: number }>(
+      `/api/threads/${encodeURIComponent(id)}/context`,
+      { method: "DELETE" },
+    ),
+
   ingest: (body: IngestBody) => postJSON<IngestResponse>("/api/ingest", body),
   ingestFile: (file: File) => {
     const fd = new FormData()
@@ -338,6 +418,9 @@ export const api = {
 
   // run history
   runsList: (limit = 50) => request<RunRow[]>(`/api/runs?limit=${limit}`),
+
+  // evals
+  evalsLatest: () => request<EvalsResults>("/api/evals/latest"),
 
   // graph explorer
   graphStats: () => request<GraphStats>("/api/graph/stats"),

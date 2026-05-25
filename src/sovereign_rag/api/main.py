@@ -24,6 +24,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from sovereign_rag.api.admin.router import router as admin_router
 from sovereign_rag.api.ask.router import router as ask_router
+from sovereign_rag.api.evals.router import router as evals_router
 from sovereign_rag.api.graph.router import router as graph_router
 from sovereign_rag.api.health.router import root_router as health_root_router
 from sovereign_rag.api.health.router import router as health_router
@@ -100,6 +101,7 @@ app.include_router(threads_router)
 app.include_router(ingest_router)
 app.include_router(graph_router)
 app.include_router(runs_router)
+app.include_router(evals_router)
 
 
 @app.get("/")

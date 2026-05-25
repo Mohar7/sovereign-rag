@@ -133,9 +133,36 @@ export function LibraryPage() {
   ])
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
   const [drawerDoc, setDrawerDoc] = useState<DocumentSummary | null>(null)
+  const [kindFilters, setKindFilters] = useState<Set<string>>(new Set())
 
   const docs = useLibrarySearch(query)
-  const data = docs.data ?? []
+  const allDocs = docs.data ?? []
+
+  // Filter client-side by kind (derived from source_uri). The backend
+  // doesn't store kind yet — when it does, replace `inferDocKind` with the
+  // server-provided field. See task #67-follow-up.
+  const data = useMemo(() => {
+    if (kindFilters.size === 0) return allDocs
+    return allDocs.filter((d) => kindFilters.has(inferDocKind(d.source_uri)))
+  }, [allDocs, kindFilters])
+
+  // Counts per kind for the rail (computed from unfiltered set).
+  const kindCounts = useMemo<Record<string, number>>(() => {
+    const m: Record<string, number> = {}
+    for (const d of allDocs) {
+      const k = inferDocKind(d.source_uri)
+      m[k] = (m[k] ?? 0) + 1
+    }
+    return m
+  }, [allDocs])
+
+  const toggleKind = (k: string) =>
+    setKindFilters((prev) => {
+      const next = new Set(prev)
+      if (next.has(k)) next.delete(k)
+      else next.add(k)
+      return next
+    })
 
   // Allow deep-linking to a specific doc, e.g. /library?doc=<doc_id>. When the
   // matching row is in the current result set we open the SourceDrawer to it.
@@ -286,11 +313,17 @@ export function LibraryPage() {
                 )}
               </div>
             </div>
-            <FilterStub label="kind" options={["pdf", "web", "text", "docx"]} />
-            <FilterStub label="status" options={["ready", "indexing", "error"]} />
+            <FilterChecklist
+              label="kind"
+              options={["pdf", "docx", "web", "text", "file"]}
+              selected={kindFilters}
+              onToggle={toggleKind}
+              counts={kindCounts}
+            />
             <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[11.5px] leading-[1.5] text-muted-foreground">
-              Additional filters appear when the backend surfaces document
-              kind / status / indexed_at fields.
+              Kind is derived from <code className="font-mono">source_uri</code>{" "}
+              client-side. Status + indexed_at land when the backend grows
+              those columns.
             </div>
           </div>
         </ScrollArea>
@@ -484,9 +517,34 @@ function SortIcon({ dir }: { dir?: "asc" | "desc" }) {
   return <ArrowUpDown className="size-3 opacity-50" strokeWidth={2} />
 }
 
-function FilterStub({ label, options }: { label: string; options: string[] }) {
+/** Active kind filter. Derives kind from source_uri client-side until the
+ *  backend surfaces a stored kind column per document. */
+export type DocKind = "pdf" | "docx" | "web" | "text" | "file"
+
+export function inferDocKind(source_uri: string): DocKind {
+  const s = source_uri.toLowerCase()
+  if (s.endsWith(".pdf")) return "pdf"
+  if (s.endsWith(".docx") || s.endsWith(".doc")) return "docx"
+  if (s.startsWith("http://") || s.startsWith("https://")) return "web"
+  if (s.startsWith("text://") || s.startsWith("inline://")) return "text"
+  return "file"
+}
+
+function FilterChecklist({
+  label,
+  options,
+  selected,
+  onToggle,
+  counts,
+}: {
+  label: string
+  options: string[]
+  selected: Set<string>
+  onToggle: (opt: string) => void
+  counts?: Record<string, number>
+}) {
   return (
-    <div className="space-y-2 opacity-60">
+    <div className="space-y-2">
       <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
@@ -494,10 +552,18 @@ function FilterStub({ label, options }: { label: string; options: string[] }) {
         {options.map((opt) => (
           <label
             key={opt}
-            className="flex items-center gap-2 text-[12.5px] text-foreground"
+            className="flex items-center gap-2 text-[12.5px] text-foreground hover:text-foreground/80"
           >
-            <Checkbox disabled />
-            {opt}
+            <Checkbox
+              checked={selected.has(opt)}
+              onCheckedChange={() => onToggle(opt)}
+            />
+            <span className="flex-1">{opt}</span>
+            {counts && counts[opt] !== undefined && (
+              <span className="font-mono tabular-nums text-[10.5px] text-muted-foreground">
+                {counts[opt]}
+              </span>
+            )}
           </label>
         ))}
       </div>

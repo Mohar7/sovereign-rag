@@ -7,6 +7,7 @@ import {
   DEFAULT_COMPOSER_CONFIG,
   type ComposerConfig,
 } from "@/components/ask/composer"
+import { ContextManagerSheet } from "@/components/ask/context-manager-sheet"
 import {
   PipelineStrip,
   emptyStages,
@@ -94,6 +95,7 @@ export function AskPage() {
     DEFAULT_COMPOSER_CONFIG,
   )
   const [inspectorTurnId, setInspectorTurnId] = useState<number | null>(null)
+  const [contextOpen, setContextOpen] = useState(false)
   const [restoredThreadId, setRestoredThreadId] = useState<string | null>(
     () => readThreadFromURL(),
   )
@@ -263,6 +265,10 @@ export function AskPage() {
   }
 
   const inspectedTurn = turns.find((t) => t.id === inspectorTurnId) ?? null
+  // The first turn carries the thread_id once the SSE done arrives; before
+  // that we may still have a restoredThreadId (from /?thread=...). Either
+  // is a valid anchor for the context manager.
+  const activeThreadId = turns[0]?.threadId ?? restoredThreadId ?? null
 
   const isRestoring = restoredThreadId !== null && turns.length === 0
   const isEmpty = turns.length === 0 && !isRestoring
@@ -287,6 +293,7 @@ export function AskPage() {
                 stats={corpus.data}
                 config={composerConfig}
                 onConfigChange={setComposerConfig}
+                onAttach={undefined /* no thread yet — context manager needs one */}
               />
             </div>
           </ScrollArea>
@@ -344,6 +351,7 @@ export function AskPage() {
                   onSubmit={handleSubmit}
                   config={composerConfig}
                   onConfigChange={setComposerConfig}
+                  onAttach={activeThreadId ? () => setContextOpen(true) : undefined}
                 />
               </div>
             </div>
@@ -371,6 +379,12 @@ export function AskPage() {
         open={inspectorTurnId !== null}
         onOpenChange={(o) => !o && setInspectorTurnId(null)}
       />
+
+      <ContextManagerSheet
+        threadId={activeThreadId}
+        open={contextOpen}
+        onOpenChange={setContextOpen}
+      />
     </div>
   )
 }
@@ -382,6 +396,7 @@ interface AskEmptyControlledProps {
   stats: ReturnType<typeof useCorpusStats>["data"]
   config: ComposerConfig
   onConfigChange: (next: ComposerConfig) => void
+  onAttach?: () => void
 }
 
 function AskEmptyControlled({
@@ -391,6 +406,7 @@ function AskEmptyControlled({
   stats,
   config,
   onConfigChange,
+  onAttach,
 }: AskEmptyControlledProps) {
   return (
     <div className="flex h-full flex-col justify-center gap-7 py-10">
@@ -403,6 +419,7 @@ function AskEmptyControlled({
           onSubmit={onSubmit}
           config={config}
           onConfigChange={onConfigChange}
+          onAttach={onAttach}
         />
       </div>
       <CorpusStatsFooter stats={stats} />

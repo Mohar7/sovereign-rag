@@ -351,6 +351,8 @@ export interface ComposerProps {
   /** Per-question config (model + retrieval knobs + graph). */
   config?: ComposerConfig
   onConfigChange?: (next: ComposerConfig) => void
+  /** Click on the paperclip — typically opens the thread's Context manager. */
+  onAttach?: () => void
 }
 
 export function Composer({
@@ -362,6 +364,7 @@ export function Composer({
   onSubmit,
   config,
   onConfigChange,
+  onAttach,
 }: ComposerProps) {
   const [draft, setDraft] = useState("")
   const controlled = value !== undefined
@@ -432,9 +435,11 @@ export function Composer({
       <div className="flex items-center gap-1.5">
         <button
           type="button"
-          aria-label="attach"
-          className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors duration-[120ms] hover:bg-muted hover:text-foreground"
-          disabled
+          aria-label={onAttach ? "open context manager" : "attach"}
+          className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors duration-[120ms] hover:bg-muted hover:text-foreground disabled:opacity-40"
+          onClick={onAttach}
+          disabled={!onAttach}
+          title={onAttach ? "Open context manager (pins + exclusions)" : "Attach"}
         >
           <Paperclip className="size-3.5" strokeWidth={2} />
         </button>

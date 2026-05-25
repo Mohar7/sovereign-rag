@@ -53,6 +53,11 @@ class ThreadSummary(BaseModel):
     answer_snippet: str | None = None
     citations: int = 0
     updated_at: str | None = None
+    # Joined from the runs audit table. Empty for threads that predate the
+    # runs feature or that never had a recorded run.
+    model: str | None = None
+    status: str = "ok"
+    error_count: int = 0
 
 
 class ThreadDetail(BaseModel):

@@ -82,10 +82,50 @@ def _extract_citations(values: dict[str, Any] | None) -> int:
     return 0
 
 
+async def _latest_run_per_thread(
+    conn: psycopg.AsyncConnection[tuple[Any, ...]],
+) -> dict[str, dict[str, Any]]:
+    """Map ``thread_id`` → most-recent run's ``{model, status, error_count}``.
+
+    The ``runs`` table is optional — if the table doesn't exist yet (brand-new
+    install) we return an empty map and the thread summary falls back to None.
+    Counts include every run for the thread, not just the latest, so the UI
+    can show a persistent error badge after one bad turn.
+    """
+    sql = """
+        WITH latest AS (
+            SELECT DISTINCT ON (thread_id) thread_id, model, status, created_at
+            FROM runs
+            ORDER BY thread_id, created_at DESC
+        ),
+        counts AS (
+            SELECT thread_id,
+                   SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END)::int AS errors
+            FROM runs
+            GROUP BY thread_id
+        )
+        SELECT l.thread_id, l.model, l.status, COALESCE(c.errors, 0) AS errors
+        FROM latest l
+        LEFT JOIN counts c ON c.thread_id = l.thread_id
+    """
+    try:
+        async with conn.cursor() as cur:
+            await cur.execute(sql)
+            rows = await cur.fetchall()
+    except psycopg.errors.UndefinedTable:
+        return {}
+    except Exception as exc:
+        logger.warning("_latest_run_per_thread failed: %s", exc)
+        return {}
+    return {r[0]: {"model": r[1], "status": r[2], "error_count": int(r[3] or 0)} for r in rows}
+
+
 async def list_threads(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
     """Return one row per distinct thread_id, latest checkpoint first.
 
-    The shape matches ``ThreadSummary`` in the router.
+    The shape matches ``ThreadSummary`` in the router. Joins with the
+    ``runs`` audit table to surface the most recent model + status per
+    thread so the Threads page can filter on those fields.
     """
     sql = """
         WITH latest AS (
@@ -107,12 +147,11 @@ async def list_threads(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
         LIMIT %s
     """
     try:
-        async with (
-            await psycopg.AsyncConnection.connect(pg_uri) as conn,
-            conn.cursor() as cur,
-        ):
-            await cur.execute(sql, (limit,))
-            rows = await cur.fetchall()
+        async with await psycopg.AsyncConnection.connect(pg_uri) as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(sql, (limit,))
+                rows = await cur.fetchall()
+            runs_index = await _latest_run_per_thread(conn)
     except psycopg.errors.UndefinedTable:
         # First boot — checkpointer.setup() hasn't run yet.
         return []
@@ -125,6 +164,7 @@ async def list_threads(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
         values = (_decode_checkpoint(checkpoint_blob) or {}).get("channel_values")
         answer = _extract_answer(values)
         snippet = (answer[:200] + "…") if answer and len(answer) > 200 else answer
+        run_meta = runs_index.get(thread_id) or {}
         out.append(
             {
                 "thread_id": thread_id,
@@ -132,6 +172,9 @@ async def list_threads(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
                 "answer_snippet": snippet,
                 "citations": _extract_citations(values),
                 "updated_at": str(checkpoint_id) if checkpoint_id else None,
+                "model": run_meta.get("model"),
+                "status": run_meta.get("status") or "ok",
+                "error_count": int(run_meta.get("error_count") or 0),
             }
         )
     return out

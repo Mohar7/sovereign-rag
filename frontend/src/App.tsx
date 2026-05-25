@@ -7,6 +7,7 @@ import { PageStub } from "@/components/page-stub"
 import { Topbar } from "@/components/topbar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AskPage } from "@/pages/Ask"
+import { EvalsPage } from "@/pages/Evals"
 import { GraphPage } from "@/pages/Graph"
 import { HistoryPage } from "@/pages/History"
 import { IngestPage } from "@/pages/Ingest"
@@ -71,6 +72,8 @@ export default function App() {
             <ThreadsPage />
           ) : page === "graph" ? (
             <GraphPage />
+          ) : page === "evals" ? (
+            <EvalsPage />
           ) : page === "history" ? (
             <HistoryPage />
           ) : page === "settings" ? (
