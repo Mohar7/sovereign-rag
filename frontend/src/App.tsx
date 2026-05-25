@@ -7,6 +7,7 @@ import { PageStub } from "@/components/page-stub"
 import { Topbar } from "@/components/topbar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AskPage } from "@/pages/Ask"
+import { GraphPage } from "@/pages/Graph"
 import { IngestPage } from "@/pages/Ingest"
 import { LibraryPage } from "@/pages/Library"
 import { SettingsPage } from "@/pages/Settings"
@@ -67,6 +68,8 @@ export default function App() {
             <IngestPage />
           ) : page === "threads" ? (
             <ThreadsPage />
+          ) : page === "graph" ? (
+            <GraphPage />
           ) : page === "settings" ? (
             <SettingsPage />
           ) : (

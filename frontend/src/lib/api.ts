@@ -30,6 +30,44 @@ function postJSON<T>(path: string, body: unknown): Promise<T> {
   })
 }
 
+// ---------- graph explorer ----------
+
+export interface GraphStats {
+  entities: number
+  relations: number
+  mentions: number
+}
+
+export interface EntityRow {
+  name: string
+  type?: string | null
+  description?: string | null
+  mentions: number
+}
+
+export interface GraphNode {
+  id: string
+  label: string
+  type?: string | null
+  description?: string | null
+  mentions: number
+  distance: number
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  type: string
+  description?: string | null
+}
+
+export interface Neighborhood {
+  seed: string
+  depth: number
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
 export class ApiError extends Error {
   status: number
   detail: string
@@ -274,6 +312,17 @@ export const api = {
     }),
   listModels: (provider: "ollama" | "openai") =>
     request<ModelChoice[]>(`/api/models?provider=${provider}`),
+
+  // graph explorer
+  graphStats: () => request<GraphStats>("/api/graph/stats"),
+  graphEntities: (q: string, limit = 20) =>
+    request<EntityRow[]>(
+      `/api/graph/entities?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
+  graphNeighborhood: (seed: string, depth = 2, limit = 80) =>
+    request<Neighborhood>(
+      `/api/graph/neighborhood?seed=${encodeURIComponent(seed)}&depth=${depth}&limit=${limit}`,
+    ),
 
   // root-mounted (no /api prefix)
   ask: (body: AskRequest) => postJSON<AskResponse>("/ask", body),
