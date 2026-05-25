@@ -26,8 +26,8 @@ from sovereign_rag.api.admin.router import router as admin_router
 from sovereign_rag.api.ask.router import router as ask_router
 from sovereign_rag.api.health.router import root_router as health_root_router
 from sovereign_rag.api.health.router import router as health_router
-from sovereign_rag.api.ingest.router import router as ingest_router
 from sovereign_rag.api.ingest.router import root_router as ingest_root_router
+from sovereign_rag.api.ingest.router import router as ingest_router
 from sovereign_rag.api.library.router import router as library_router
 from sovereign_rag.api.settings.router import router as settings_router
 from sovereign_rag.api.sources.router import router as sources_router

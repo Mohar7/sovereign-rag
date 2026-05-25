@@ -35,7 +35,7 @@ def _hydrate(doc: SourceDocument | dict[str, Any]) -> SourceDocument:
     """
     if isinstance(doc, SourceDocument):
         return doc
-    return SourceDocument(**doc)  # type: ignore[arg-type]
+    return SourceDocument(**doc)
 
 
 # ---------------------------------------------------------------------------
@@ -73,8 +73,8 @@ async def index_chunks(state: IndexerState) -> dict[str, object]:
         return {"chunks_indexed": 0, "kg_indexed": False}
 
     pipe = get_pipeline()
-    milvus = pipe._milvus  # type: ignore[attr-defined]
-    graph = pipe._graph  # type: ignore[attr-defined]
+    milvus = pipe._milvus
+    graph = pipe._graph
 
     await milvus.ensure_collection()
     tasks: list[Any] = [milvus.add_chunks(chunks)]

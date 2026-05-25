@@ -51,7 +51,7 @@ def _build_state_graph() -> StateGraph[RAGState]:
     return builder
 
 
-async def make_graph():  # noqa: ANN201 — LangGraph CLI introspects the return type
+async def make_graph() -> Any:
     """Build and compile the RAG QA graph without a checkpointer.
 
     Graph topology::

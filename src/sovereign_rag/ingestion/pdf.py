@@ -63,7 +63,9 @@ async def parse_file(path: str | Path) -> SourceDocument:
         RuntimeError: if Docling fails to convert the document.
     """
     file_path = Path(path)
-    if not file_path.exists():
+    # Path.exists() is a sync stat() call — fast enough not to need offloading,
+    # but ruff's ASYNC240 wants any disk touch off the event loop. Wrap it.
+    if not await asyncio.to_thread(file_path.exists):
         raise FileNotFoundError(f"File not found: {file_path}")
 
     logger.info("parsing file with docling: %s", file_path)

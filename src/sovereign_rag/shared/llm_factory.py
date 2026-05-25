@@ -98,7 +98,7 @@ def _reasoning_safe_chat_openai_cls() -> type:
         return _reasoning_safe_cls
     from langchain_openai import ChatOpenAI
 
-    class ReasoningSafeChatOpenAI(ChatOpenAI):  # type: ignore[misc, valid-type]
+    class ReasoningSafeChatOpenAI(ChatOpenAI):
         """gpt-5/o-series-friendly ChatOpenAI.
 
         Removes ``temperature`` and ``top_p`` from every outbound request body
@@ -146,7 +146,8 @@ def _build_openai(tier: ModelTier, temperature: float, **kwargs: Any) -> BaseCha
     # the instance; the subclass also strips per-call overrides.
     if not reasoning:
         init_kwargs["temperature"] = temperature
-    return cls(**init_kwargs)
+    instance: BaseChatModel = cls(**init_kwargs)
+    return instance
 
 
 @lru_cache(maxsize=8)

@@ -7,6 +7,8 @@ Topology::
 
 from __future__ import annotations
 
+from typing import Any
+
 from langgraph.graph import END, START, StateGraph
 
 from sovereign_rag.graphs.indexer.nodes import index_chunks, prepare_chunks
@@ -14,7 +16,7 @@ from sovereign_rag.graphs.indexer.state import IndexerState
 from sovereign_rag.shared.tracing import setup_tracing
 
 
-async def make_graph():  # noqa: ANN201 — LangGraph CLI introspects the return type
+async def make_graph() -> Any:
     """Build and compile the indexer graph.
 
     Graph topology::

@@ -106,10 +106,12 @@ async def list_threads(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
         LIMIT %s
     """
     try:
-        async with await psycopg.AsyncConnection.connect(pg_uri) as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(sql, (limit,))
-                rows = await cur.fetchall()
+        async with (
+            await psycopg.AsyncConnection.connect(pg_uri) as conn,
+            conn.cursor() as cur,
+        ):
+            await cur.execute(sql, (limit,))
+            rows = await cur.fetchall()
     except psycopg.errors.UndefinedTable:
         # First boot — checkpointer.setup() hasn't run yet.
         return []

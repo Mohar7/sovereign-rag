@@ -24,6 +24,7 @@ existing per-document ``delete_document`` methods for that.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 from typing import TypedDict
@@ -74,10 +75,8 @@ async def wipe_milvus() -> tuple[bool, int]:
             logger.info("Milvus collection %s absent — nothing to drop", s.milvus_collection)
             return (False, 0)
         # Releasing before dropping is good hygiene though not strictly required.
-        try:
+        with contextlib.suppress(Exception):
             await client.release_collection(collection_name=s.milvus_collection)
-        except Exception:  # noqa: BLE001
-            pass
         await client.drop_collection(collection_name=s.milvus_collection)
         logger.info("Dropped Milvus collection %s (had %d chunks)", s.milvus_collection, before)
         return (True, before)
@@ -175,7 +174,7 @@ def wipe_thread_context_json() -> tuple[bool, int]:
 
         raw = json.loads(path.read_text(encoding="utf-8") or "{}")
         entries = sum(len(v) for v in raw.values()) if isinstance(raw, dict) else 0
-    except Exception:  # noqa: BLE001
+    except Exception:
         entries = 0
     path.unlink()
     logger.info("Removed pins file %s (%d entries)", path, entries)

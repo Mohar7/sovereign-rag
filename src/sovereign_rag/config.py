@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     rerank_score_floor: float = 0.0
     adaptive_rerank: bool = False
     # Cross-encoder via sentence-transformers. Default: gte-reranker-modernbert-base
-    # — 149M params (~3.8× smaller than bge-reranker-v2-m3), Apache 2.0, multilingual
+    # — 149M params (~3.8x smaller than bge-reranker-v2-m3), Apache 2.0, multilingual
     # via ModernBERT; matches nemotron-rerank-1b on Hit@1 at a fraction of memory.
     # On Mac Mini / Apple Silicon it picks MPS, on CUDA boxes it picks GPU, else CPU.
     # Override to "BAAI/bge-reranker-v2-m3" for the older battle-tested baseline,
