@@ -96,7 +96,10 @@ async def _neo4j_counts() -> tuple[int, int]:
         rels_rec, _, _ = await driver.execute_query(
             "MATCH ()-[r]->() RETURN count(r) AS c", database_=s.neo4j_database
         )
-        return (int(nodes_rec[0]["c"]) if nodes_rec else 0, int(rels_rec[0]["c"]) if rels_rec else 0)
+        return (
+            int(nodes_rec[0]["c"]) if nodes_rec else 0,
+            int(rels_rec[0]["c"]) if rels_rec else 0,
+        )
     finally:
         await driver.close()
 
@@ -111,9 +114,7 @@ async def wipe_neo4j() -> tuple[bool, int, int]:
     try:
         # Single MATCH avoids loading the whole graph into memory.
         await driver.execute_query("MATCH (n) DETACH DELETE n", database_=s.neo4j_database)
-        logger.info(
-            "Wiped Neo4j: %d nodes, %d relationships removed", nodes_before, rels_before
-        )
+        logger.info("Wiped Neo4j: %d nodes, %d relationships removed", nodes_before, rels_before)
         return (True, nodes_before, rels_before)
     finally:
         await driver.close()

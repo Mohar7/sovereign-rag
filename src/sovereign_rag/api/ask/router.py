@@ -130,9 +130,7 @@ async def _stream_generator(
         try:
             snapshot = await graph.aget_state(config)
             final_state = (
-                snapshot.values
-                if snapshot is not None and hasattr(snapshot, "values")
-                else {}
+                snapshot.values if snapshot is not None and hasattr(snapshot, "values") else {}
             ) or {}
         except Exception as exc:
             logger.warning("aget_state failed: %s", exc)

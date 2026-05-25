@@ -215,9 +215,9 @@ async def read_thread_messages(checkpointer: Any, thread_id: str) -> list[dict[s
         if isinstance(cp, dict):
             values = cp.get("channel_values")
         else:
-            values = (
-                snap.get("channel_values") if isinstance(snap, dict) else None
-            ) or getattr(snap, "values", None)
+            values = (snap.get("channel_values") if isinstance(snap, dict) else None) or getattr(
+                snap, "values", None
+            )
         if not isinstance(values, dict):
             continue
         q = _extract_question(values)
@@ -254,12 +254,8 @@ async def delete_thread(pg_uri: str, thread_id: str) -> int:
                 await cur.execute(
                     "DELETE FROM checkpoint_writes WHERE thread_id = %s", (thread_id,)
                 )
-                await cur.execute(
-                    "DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,)
-                )
-                await cur.execute(
-                    "DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,)
-                )
+                await cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,))
+                await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
                 deleted_checkpoints = cur.rowcount or 0
             await conn.commit()
     except psycopg.errors.UndefinedTable:

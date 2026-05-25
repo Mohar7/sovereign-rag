@@ -107,8 +107,7 @@ async def search(query: str, max_results: int = 5) -> list[dict[str, str]]:
         logger.warning("SearXNG returned no usable results; falling back to ddgs")
     except Exception:
         logger.warning(
-            "SearXNG search failed (is JSON format enabled in settings.yml?); "
-            "falling back to ddgs",
+            "SearXNG search failed (is JSON format enabled in settings.yml?); falling back to ddgs",
             exc_info=True,
         )
 

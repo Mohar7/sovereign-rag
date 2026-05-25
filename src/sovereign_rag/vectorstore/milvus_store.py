@@ -253,7 +253,7 @@ class MilvusHybridStore:
         dense_vectors = await embed_texts([c.text for c in chunks])
         if len(dense_vectors) != len(chunks):
             raise ValueError(
-                f"embed_texts returned {len(dense_vectors)} vectors " f"for {len(chunks)} chunks"
+                f"embed_texts returned {len(dense_vectors)} vectors for {len(chunks)} chunks"
             )
 
         rows = [

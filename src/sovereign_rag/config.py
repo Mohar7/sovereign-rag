@@ -42,9 +42,9 @@ class Settings(BaseSettings):
     # The ``llm_model*`` envs above carry the model IDs across providers; these
     # exist as explicit overrides when someone wants to set them separately. If
     # blank, the factory falls back to the matching ``llm_model*`` setting.
-    openai_chat_model: str = ""        # tier=default
+    openai_chat_model: str = ""  # tier=default
     openai_chat_model_light: str = ""  # tier=light
-    openai_chat_model_nano: str = ""   # tier=nano
+    openai_chat_model_nano: str = ""  # tier=nano
 
     # ---- Embeddings ----
     # "ollama" (local bge-m3) or "openai" (Ollama Cloud has no embeddings API).
