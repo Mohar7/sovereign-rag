@@ -97,10 +97,18 @@ export interface CitationModel {
   snippet: string
 }
 
+export interface AskOverrides {
+  model?: string | null
+  retrieve_top_k?: number | null
+  rerank_top_k?: number | null
+  enable_graph_retrieval?: boolean | null
+}
+
 export interface AskRequest {
   question: string
   doc_id?: string | null
   thread_id?: string | null
+  overrides?: AskOverrides | null
 }
 
 export interface AskResponse {

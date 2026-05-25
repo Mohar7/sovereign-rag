@@ -1,4 +1,5 @@
-import { Copy, Eye, Pin, RefreshCw } from "lucide-react"
+import { Copy, Eye, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 
 import { BrandMark } from "@/components/brand-mark"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -27,6 +28,12 @@ export interface AssistantTurnProps {
   meta?: React.ReactNode
   compact?: boolean
   showActions?: boolean
+  /** Text to copy when the Copy button is clicked. Falls back to children rendering. */
+  copyText?: string
+  /** Re-submit handler — typically re-runs the original question with the same thread_id. */
+  onRegenerate?: () => void
+  /** Open the per-turn inspector. */
+  onOpenInspector?: () => void
 }
 
 export function AssistantTurn({
@@ -34,7 +41,18 @@ export function AssistantTurn({
   meta,
   compact = false,
   showActions = true,
+  copyText,
+  onRegenerate,
+  onOpenInspector,
 }: AssistantTurnProps) {
+  const handleCopy = () => {
+    if (!copyText) return
+    void navigator.clipboard
+      .writeText(copyText)
+      .then(() => toast.success("Copied."))
+      .catch(() => toast.error("Couldn't copy — clipboard permission?"))
+  }
+
   return (
     <div className="flex items-start gap-3">
       <div className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -46,22 +64,39 @@ export function AssistantTurn({
             {meta}
           </div>
         )}
-        <div className="text-[15px] leading-[1.65] text-foreground">
-          {children}
-        </div>
+        <div className="text-[15px] leading-[1.65] text-foreground">{children}</div>
         {!compact && showActions && (
           <div className="mt-3.5 flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="size-7" aria-label="copy">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              aria-label="copy"
+              onClick={handleCopy}
+              disabled={!copyText}
+              title="Copy answer text"
+            >
               <Copy className="size-3.5" strokeWidth={2} />
             </Button>
-            <Button variant="ghost" size="icon" className="size-7" aria-label="regenerate">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              aria-label="regenerate"
+              onClick={onRegenerate}
+              disabled={!onRegenerate}
+              title="Re-run this question"
+            >
               <RefreshCw className="size-3.5" strokeWidth={2} />
             </Button>
-            <Button variant="ghost" size="icon" className="size-7" aria-label="pin">
-              <Pin className="size-3.5" strokeWidth={2} />
-            </Button>
             <Separator orientation="vertical" className="mx-1 h-4" />
-            <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-[12px]">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-[12px]"
+              onClick={onOpenInspector}
+              disabled={!onOpenInspector}
+            >
               <Eye className="size-3.5" strokeWidth={2} />
               Open inspector
             </Button>
@@ -81,7 +116,9 @@ export function AssistantMeta({
     <>
       {parts.map((p, i) =>
         p.kind === "dot" ? (
-          <span key={i} aria-hidden>·</span>
+          <span key={i} aria-hidden>
+            ·
+          </span>
         ) : (
           <span key={i}>{p.text}</span>
         ),

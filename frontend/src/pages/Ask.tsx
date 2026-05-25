@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, Loader2, X } from "lucide-react"
 import { toast } from "sonner"
 
-import { Composer } from "@/components/ask/composer"
+import {
+  Composer,
+  DEFAULT_COMPOSER_CONFIG,
+  type ComposerConfig,
+} from "@/components/ask/composer"
 import {
   SourcesRail,
   type SourceItem,
@@ -10,6 +14,7 @@ import {
 import { AskEmptyHeader } from "@/components/ask/states"
 import { AssistantTurn, UserTurn } from "@/components/ask/turns"
 import { CitationChip, MonoTag } from "@/components/ask/citation-chip"
+import { TurnInspectorSheet } from "@/components/ask/turn-inspector-sheet"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -17,7 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useCorpusStats } from "@/hooks/use-ask"
 import { useAskStream } from "@/hooks/use-ask-stream"
 import { useThreadMessages } from "@/hooks/use-threads"
-import type { CitationModel } from "@/lib/api"
+import type { AskOverrides, CitationModel } from "@/lib/api"
 import type { CitationKind } from "@/components/ask/citation-chip"
 
 interface Turn {
@@ -30,6 +35,18 @@ interface Turn {
   used?: number
   error?: string
   threadId?: string
+  /** The overrides that were in effect when this turn was submitted. */
+  overrides?: AskOverrides | null
+}
+
+/** Convert a composer config to the wire-shape AskOverrides (drops nulls). */
+function buildOverrides(cfg: ComposerConfig): AskOverrides | null {
+  const o: AskOverrides = {}
+  if (cfg.model) o.model = cfg.model
+  if (cfg.retrieveTopK != null) o.retrieve_top_k = cfg.retrieveTopK
+  if (cfg.rerankTopK != null) o.rerank_top_k = cfg.rerankTopK
+  if (cfg.graphEnabled != null) o.enable_graph_retrieval = cfg.graphEnabled
+  return Object.keys(o).length > 0 ? o : null
 }
 
 /** Backend doesn't yet tag citations with a retrieval kind — default hybrid. */
@@ -58,6 +75,10 @@ function readThreadFromURL(): string | null {
 export function AskPage() {
   const [turns, setTurns] = useState<Turn[]>([])
   const [composerText, setComposerText] = useState("")
+  const [composerConfig, setComposerConfig] = useState<ComposerConfig>(
+    DEFAULT_COMPOSER_CONFIG,
+  )
+  const [inspectorTurnId, setInspectorTurnId] = useState<number | null>(null)
   const [restoredThreadId, setRestoredThreadId] = useState<string | null>(
     () => readThreadFromURL(),
   )
@@ -165,14 +186,41 @@ export function AskPage() {
     },
   })
 
-  const handleSubmit = (text: string) => {
+  const submitWithConfig = (text: string, cfg: ComposerConfig) => {
     const id = ++turnCounter.current
     currentTurnId.current = id
-    const placeholder: Turn = { id, question: text, status: "pending", answer: "", citations: [] }
+    const overrides = buildOverrides(cfg)
+    const placeholder: Turn = {
+      id,
+      question: text,
+      status: "pending",
+      answer: "",
+      citations: [],
+      overrides,
+    }
     setTurns((prev) => [...prev, placeholder])
     setComposerText("")
-    stream.submit({ question: text, thread_id: turns[0]?.threadId })
+    stream.submit({
+      question: text,
+      thread_id: turns[0]?.threadId,
+      overrides,
+    })
   }
+
+  const handleSubmit = (text: string) => submitWithConfig(text, composerConfig)
+
+  const handleRegenerate = (turn: Turn) => {
+    // Re-run the same question against the same thread; the LangGraph
+    // checkpoint history gets a fresh turn appended rather than overwritten.
+    submitWithConfig(turn.question, {
+      model: turn.overrides?.model ?? null,
+      retrieveTopK: turn.overrides?.retrieve_top_k ?? null,
+      rerankTopK: turn.overrides?.rerank_top_k ?? null,
+      graphEnabled: turn.overrides?.enable_graph_retrieval ?? null,
+    })
+  }
+
+  const inspectedTurn = turns.find((t) => t.id === inspectorTurnId) ?? null
 
   const isRestoring = restoredThreadId !== null && turns.length === 0
   const isEmpty = turns.length === 0 && !isRestoring
@@ -195,6 +243,8 @@ export function AskPage() {
                 onChange={setComposerText}
                 onSubmit={handleSubmit}
                 stats={corpus.data}
+                config={composerConfig}
+                onConfigChange={setComposerConfig}
               />
             </div>
           </ScrollArea>
@@ -226,7 +276,12 @@ export function AskPage() {
                   </div>
                 )}
                 {turns.map((t) => (
-                  <ConversationTurn key={t.id} turn={t} />
+                  <ConversationTurn
+                    key={t.id}
+                    turn={t}
+                    onRegenerate={() => handleRegenerate(t)}
+                    onOpenInspector={() => setInspectorTurnId(t.id)}
+                  />
                 ))}
               </div>
             </ScrollArea>
@@ -245,6 +300,8 @@ export function AskPage() {
                   value={composerText}
                   onChange={setComposerText}
                   onSubmit={handleSubmit}
+                  config={composerConfig}
+                  onConfigChange={setComposerConfig}
                 />
               </div>
             </div>
@@ -266,6 +323,12 @@ export function AskPage() {
           }
         />
       )}
+
+      <TurnInspectorSheet
+        turn={inspectedTurn}
+        open={inspectorTurnId !== null}
+        onOpenChange={(o) => !o && setInspectorTurnId(null)}
+      />
     </div>
   )
 }
@@ -275,6 +338,8 @@ interface AskEmptyControlledProps {
   onChange: (next: string) => void
   onSubmit: (text: string) => void
   stats: ReturnType<typeof useCorpusStats>["data"]
+  config: ComposerConfig
+  onConfigChange: (next: ComposerConfig) => void
 }
 
 function AskEmptyControlled({
@@ -282,12 +347,21 @@ function AskEmptyControlled({
   onChange,
   onSubmit,
   stats,
+  config,
+  onConfigChange,
 }: AskEmptyControlledProps) {
   return (
     <div className="flex h-full flex-col justify-center gap-7 py-10">
       <AskEmptyHeader onPickSuggestion={(text) => { onChange(text); onSubmit(text) }} />
       <div>
-        <Composer focused value={value} onChange={onChange} onSubmit={onSubmit} />
+        <Composer
+          focused
+          value={value}
+          onChange={onChange}
+          onSubmit={onSubmit}
+          config={config}
+          onConfigChange={onConfigChange}
+        />
       </div>
       <CorpusStatsFooter stats={stats} />
     </div>
@@ -330,7 +404,15 @@ function CorpusStatsFooter({
   )
 }
 
-function ConversationTurn({ turn }: { turn: Turn }) {
+function ConversationTurn({
+  turn,
+  onRegenerate,
+  onOpenInspector,
+}: {
+  turn: Turn
+  onRegenerate?: () => void
+  onOpenInspector?: () => void
+}) {
   return (
     <>
       <UserTurn>{turn.question}</UserTurn>
@@ -382,6 +464,9 @@ function ConversationTurn({ turn }: { turn: Turn }) {
 
       {turn.status === "ok" && (
         <AssistantTurn
+          copyText={turn.answer ?? ""}
+          onRegenerate={onRegenerate}
+          onOpenInspector={onOpenInspector}
           meta={
             <>
               <span>sovereign-rag</span>
@@ -389,6 +474,12 @@ function ConversationTurn({ turn }: { turn: Turn }) {
               <span className="tabular-nums">
                 {turn.used} of {turn.retrieved} chunks
               </span>
+              {turn.overrides?.model && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="text-primary/80">{turn.overrides.model}</span>
+                </>
+              )}
             </>
           }
         >
