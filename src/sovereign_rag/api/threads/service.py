@@ -19,6 +19,7 @@ listing purposes; the full historical timeline is reachable through
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import Any
@@ -170,18 +171,36 @@ async def read_thread(checkpointer: Any, thread_id: str) -> dict[str, Any] | Non
 def _normalize_citations(raw: Any) -> list[dict[str, Any]]:
     """Coerce a checkpoint's ``citations`` value to a list of plain dicts.
 
-    The graph state stores citations as Pydantic models, but the JSON
-    deserializer returns them as dicts already (with a ``lc_kwargs`` wrapper
-    for langchain types). We strip that envelope here.
+    The graph state stores citations as the ``Citation`` dataclass from
+    ``retrieval.pipeline``. ``AsyncPostgresSaver.alist`` deserialises them
+    back into the original Python type when the class is importable in this
+    process, so we get a ``list[Citation]`` here -- not a list of dicts. Older
+    snapshots (or runs where the class wasn't importable at deserialise time)
+    yield dicts, optionally wrapped in a langchain-serializer envelope. We
+    handle all three shapes.
     """
     if not isinstance(raw, list):
         return []
     out: list[dict[str, Any]] = []
     for item in raw:
+        # Pydantic v2 model (or anything with model_dump).
+        if hasattr(item, "model_dump"):
+            with contextlib.suppress(Exception):
+                out.append(item.model_dump())
+                continue
+        # Plain dataclass — use asdict if it looks like one, else __dict__.
+        if hasattr(item, "__dataclass_fields__"):
+            out.append({k: getattr(item, k) for k in item.__dataclass_fields__})
+            continue
         if isinstance(item, dict):
+            # langchain JSON-serializer envelopes wrap the payload in "kwargs".
             inner = item.get("kwargs") if "kwargs" in item else item
             if isinstance(inner, dict):
                 out.append(inner)
+            continue
+        # Fallback: best-effort __dict__ for unknown object types.
+        if hasattr(item, "__dict__"):
+            out.append({k: v for k, v in vars(item).items() if not k.startswith("_")})
     return out
 
 
