@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { AppSidebar, type NavKey } from "@/components/app-sidebar"
+import { CommandPalette, useCommandPalette } from "@/components/command-palette"
 import { PageStub } from "@/components/page-stub"
 import { Topbar } from "@/components/topbar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -36,6 +37,7 @@ const KEY_TO_PATH: Record<NavKey, string> = {
 export default function App() {
   const { t } = useTranslation()
   const [page, setPage] = useState<NavKey>(() => pathToKey(window.location.pathname))
+  const palette = useCommandPalette()
 
   useEffect(() => {
     const onPop = () => setPage(pathToKey(window.location.pathname))
@@ -55,7 +57,7 @@ export default function App() {
     <SidebarProvider>
       <AppSidebar active={page} onNavigate={onNavigate} />
       <SidebarInset className="min-w-0 overflow-hidden">
-        <Topbar page={page} />
+        <Topbar page={page} onOpenCommand={() => palette.setOpen(true)} />
         <main className="min-w-0 flex-1 overflow-hidden">
           {page === "ask" ? (
             <AskPage />
@@ -76,6 +78,7 @@ export default function App() {
           )}
         </main>
       </SidebarInset>
+      <CommandPalette open={palette.open} onOpenChange={palette.setOpen} />
     </SidebarProvider>
   )
 }

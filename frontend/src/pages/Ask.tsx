@@ -8,6 +8,12 @@ import {
   type ComposerConfig,
 } from "@/components/ask/composer"
 import {
+  PipelineStrip,
+  emptyStages,
+  type StageName,
+  type StageState,
+} from "@/components/ask/pipeline-strip"
+import {
   SourcesRail,
   type SourceItem,
 } from "@/components/ask/sources-rail"
@@ -37,6 +43,15 @@ interface Turn {
   threadId?: string
   /** The overrides that were in effect when this turn was submitted. */
   overrides?: AskOverrides | null
+  /** Per-node pipeline state, populated from the SSE node events. */
+  stages?: Record<StageName, StageState>
+  /** Total elapsed ms — populated on the final done event. */
+  totalMs?: number
+}
+
+/** Tag a stage name as known; everything else is a no-op. */
+function isKnownStage(name: string): name is StageName {
+  return name === "retrieve_local" || name === "rerank" || name === "generate"
 }
 
 /** Convert a composer config to the wire-shape AskOverrides (drops nulls). */
@@ -145,6 +160,21 @@ export function AskPage() {
         ),
       )
     },
+    onNode: (name, phase, elapsedMs) => {
+      const id = currentTurnId.current
+      if (id == null || !isKnownStage(name)) return
+      setTurns((prev) =>
+        prev.map((t) => {
+          if (t.id !== id) return t
+          const stages = { ...(t.stages ?? emptyStages()) }
+          stages[name] = {
+            phase: phase === "start" ? "running" : "done",
+            elapsedMs: phase === "done" ? elapsedMs : undefined,
+          }
+          return { ...t, stages }
+        }),
+      )
+    },
     onCitations: (items) => {
       const id = currentTurnId.current
       if (id == null) return
@@ -156,22 +186,33 @@ export function AskPage() {
       const id = currentTurnId.current
       if (id == null) return
       setTurns((prev) =>
-        prev.map((t) =>
-          t.id === id
-            ? {
-                ...t,
-                status: "ok",
-                // If the backend emitted tokens, t.answer is already populated;
-                // only overwrite if the streamed answer was empty.
-                answer:
-                  t.answer && t.answer.length > 0 ? t.answer : final.answer,
-                citations: final.citations.length > 0 ? final.citations : t.citations ?? [],
-                retrieved: final.retrieved,
-                used: final.used,
-                threadId: final.thread_id,
+        prev.map((t) => {
+          if (t.id !== id) return t
+          // Reconcile final stage timings with whatever we already have, so
+          // late `done` numbers replace running placeholders.
+          const stages = { ...(t.stages ?? emptyStages()) }
+          if (final.timings) {
+            for (const name of ["retrieve_local", "rerank", "generate"] as const) {
+              const v = final.timings[name]
+              if (typeof v === "number") {
+                stages[name] = { phase: "done", elapsedMs: v }
               }
-            : t,
-        ),
+            }
+          }
+          return {
+            ...t,
+            status: "ok",
+            // If the backend emitted tokens, t.answer is already populated;
+            // only overwrite if the streamed answer was empty.
+            answer: t.answer && t.answer.length > 0 ? t.answer : final.answer,
+            citations: final.citations.length > 0 ? final.citations : t.citations ?? [],
+            retrieved: final.retrieved,
+            used: final.used,
+            threadId: final.thread_id,
+            stages,
+            totalMs: final.timings?.total,
+          }
+        }),
       )
     },
     onError: (msg) => {
@@ -197,6 +238,7 @@ export function AskPage() {
       answer: "",
       citations: [],
       overrides,
+      stages: emptyStages(),
     }
     setTurns((prev) => [...prev, placeholder])
     setComposerText("")
@@ -435,6 +477,11 @@ function ConversationTurn({
             </>
           }
         >
+          {turn.stages && (
+            <div className="mb-3">
+              <PipelineStrip stages={turn.stages} />
+            </div>
+          )}
           {turn.answer && turn.answer.length > 0 ? (
             <AnswerWithCitations
               answer={turn.answer + "▍"}
@@ -474,6 +521,16 @@ function ConversationTurn({
               <span className="tabular-nums">
                 {turn.used} of {turn.retrieved} chunks
               </span>
+              {turn.totalMs !== undefined && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="tabular-nums">
+                    {turn.totalMs < 1000
+                      ? `${turn.totalMs}ms`
+                      : `${(turn.totalMs / 1000).toFixed(1)}s`}
+                  </span>
+                </>
+              )}
               {turn.overrides?.model && (
                 <>
                   <span aria-hidden>·</span>

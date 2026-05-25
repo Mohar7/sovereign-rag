@@ -1,4 +1,4 @@
-import { Bot, ExternalLink, FileText, Hash, Sparkles, User } from "lucide-react"
+import { Bot, Check, Clock, ExternalLink, FileText, Hash, Sparkles, User } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -9,7 +9,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import type { StageName, StageState } from "@/components/ask/pipeline-strip"
 import type { AskOverrides, CitationModel } from "@/lib/api"
+import { cn } from "@/lib/utils"
 
 export interface InspectableTurn {
   id: number
@@ -21,6 +23,10 @@ export interface InspectableTurn {
   threadId?: string
   /** The overrides that were in effect when this turn was sent. */
   overrides?: AskOverrides | null
+  /** Per-stage timing/phase data, populated by the SSE stream. */
+  stages?: Record<StageName, StageState>
+  /** Total wall-clock ms for the request, populated on the final done event. */
+  totalMs?: number
 }
 
 interface Props {
@@ -72,6 +78,22 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
           <div className="p-5 space-y-5">
             {turn && (
               <>
+                {turn.stages && (
+                  <Section
+                    icon={<Clock className="size-3.5" strokeWidth={2} />}
+                    label={
+                      turn.totalMs !== undefined
+                        ? `Pipeline · ${formatMs(turn.totalMs)} total`
+                        : "Pipeline"
+                    }
+                  >
+                    <PipelineTimeline
+                      stages={turn.stages}
+                      totalMs={turn.totalMs}
+                    />
+                  </Section>
+                )}
+
                 <Section
                   icon={<User className="size-3.5" strokeWidth={2} />}
                   label="Question"
@@ -176,6 +198,103 @@ function Section({
       {children}
     </section>
   )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Pipeline timeline — vertical list of nodes with duration + bar
+//
+// The bar width is proportional to the stage's share of total elapsed time,
+// making the slow leg visually obvious. When totalMs is unknown (e.g. for
+// turns rehydrated from the thread history that don't carry timings) we
+// fall back to the max single-stage value so the layout still works.
+// ─────────────────────────────────────────────────────────────────
+
+const STAGE_ROW_META: Record<StageName, { label: string; description: string }> = {
+  retrieve_local: {
+    label: "Retrieve",
+    description: "Milvus hybrid (dense + BM25) + Neo4j graph local search, fused via RRF.",
+  },
+  rerank: {
+    label: "Rerank",
+    description: "Cross-encoder reranks the candidate pool down to k_rerank.",
+  },
+  generate: {
+    label: "Generate",
+    description: "LLM synthesises a cited answer from the reranked context.",
+  },
+}
+
+function PipelineTimeline({
+  stages,
+  totalMs,
+}: {
+  stages: Record<StageName, StageState>
+  totalMs?: number
+}) {
+  const order: StageName[] = ["retrieve_local", "rerank", "generate"]
+  const known = order
+    .map((n) => stages[n]?.elapsedMs ?? 0)
+    .filter((v) => v > 0)
+  const max = Math.max(totalMs ?? 0, ...known, 1)
+  return (
+    <ol className="space-y-1.5">
+      {order.map((name) => {
+        const stage = stages[name]
+        const meta = STAGE_ROW_META[name]
+        const elapsed = stage.elapsedMs
+        const widthPct =
+          typeof elapsed === "number" && max > 0
+            ? Math.max(1, Math.min(100, Math.round((elapsed / max) * 100)))
+            : 0
+        const isDone = stage.phase === "done"
+        const isRunning = stage.phase === "running"
+        return (
+          <li
+            key={name}
+            className="rounded-lg border border-border bg-card px-3 py-2"
+          >
+            <div className="flex items-baseline gap-2 text-[12.5px]">
+              <span
+                aria-hidden
+                className={cn(
+                  "inline-flex size-5 shrink-0 items-center justify-center rounded-full",
+                  isDone && "bg-primary/15 text-primary",
+                  isRunning && "bg-primary/15 text-primary",
+                  !isDone && !isRunning && "bg-muted text-muted-foreground",
+                )}
+              >
+                {isDone ? <Check className="size-3" /> : <Clock className="size-3" />}
+              </span>
+              <span className="font-medium text-foreground">{meta.label}</span>
+              <span className="ml-auto font-mono text-[11.5px] tabular-nums">
+                {typeof elapsed === "number" ? formatMs(elapsed) : "—"}
+              </span>
+            </div>
+            <p className="ml-7 mt-0.5 text-[11.5px] leading-[1.4] text-muted-foreground">
+              {meta.description}
+            </p>
+            <div
+              aria-hidden
+              className="ml-7 mt-2 h-1 overflow-hidden rounded-full bg-muted"
+            >
+              <div
+                className={cn(
+                  "h-full rounded-full transition-[width] duration-200",
+                  isRunning ? "bg-primary/60" : "bg-primary",
+                )}
+                style={{ width: `${widthPct}%` }}
+              />
+            </div>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+function formatMs(n: number): string {
+  if (n < 1000) return `${n}ms`
+  return `${(n / 1000).toFixed(2)}s`
 }
 
 function OverridesList({ overrides }: { overrides: AskOverrides }) {

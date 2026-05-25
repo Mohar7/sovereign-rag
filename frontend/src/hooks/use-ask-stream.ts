@@ -6,9 +6,24 @@ import type { AskRequest, CitationModel } from "@/lib/api"
 // Event schema — must mirror api/ask/router.py:_stream_generator
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Per-stage timings reported by the backend. Each key is one of the graph's
+ * node names; values are elapsed milliseconds. `total` is wall-clock from
+ * the start of stream generation to the final done event.
+ *
+ * Keys are optional because a request that fails mid-stream may not have
+ * reached every node.
+ */
+export interface StageTimings {
+  retrieve_local?: number
+  rerank?: number
+  generate?: number
+  total?: number
+}
+
 export type StreamEvent =
   | { type: "open"; thread_id: string }
-  | { type: "node"; name: string; phase: "start" | "done" }
+  | { type: "node"; name: string; phase: "start" | "done"; elapsed_ms?: number }
   | { type: "token"; delta: string }
   | { type: "citations"; items: CitationModel[] }
   | {
@@ -18,6 +33,7 @@ export type StreamEvent =
       citations: CitationModel[]
       retrieved: number
       used: number
+      timings?: StageTimings
     }
   | { type: "error"; message: string }
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
@@ -160,6 +161,14 @@ async def _stream_generator(
     yield _sse({"type": "open", "thread_id": thread_id})
 
     final_state: dict[str, Any] = {}
+    # Wall-clock start times per node, populated on the start phase and read
+    # back on done. perf_counter is monotonic and microsecond-resolution.
+    node_started_at: dict[str, float] = {}
+    # Stage durations in milliseconds, surfaced both in per-node `done` events
+    # and in the final `done` event so the client can render the pipeline
+    # strip without recomputing.
+    stage_timings: dict[str, int] = {}
+    started_at = time.perf_counter()
     try:
         with _apply_overrides(overrides):
             async for event in graph.astream_events(initial, config=config, version="v2"):
@@ -177,6 +186,7 @@ async def _stream_generator(
                     "rerank",
                     "generate",
                 }:
+                    node_started_at[name] = time.perf_counter()
                     yield _sse({"type": "node", "name": name, "phase": "start"})
 
                 elif kind == "on_chain_end" and name in {
@@ -187,13 +197,23 @@ async def _stream_generator(
                     output = event.get("data", {}).get("output") or {}
                     if not isinstance(output, dict):
                         output = {}
+                    started = node_started_at.get(name)
+                    elapsed_ms = round((time.perf_counter() - started) * 1000) if started else 0
+                    stage_timings[name] = elapsed_ms
                     if name == "generate" and "citations" in output:
                         cites = [
                             asdict(c) if hasattr(c, "__dataclass_fields__") else c
                             for c in (output.get("citations") or [])
                         ]
                         yield _sse({"type": "citations", "items": cites})
-                    yield _sse({"type": "node", "name": name, "phase": "done"})
+                    yield _sse(
+                        {
+                            "type": "node",
+                            "name": name,
+                            "phase": "done",
+                            "elapsed_ms": elapsed_ms,
+                        },
+                    )
 
                 elif kind == "on_chain_end" and name == "LangGraph":
                     # Top-level graph finished; capture the final state.
@@ -221,6 +241,7 @@ async def _stream_generator(
         asdict(c) if hasattr(c, "__dataclass_fields__") else c
         for c in (final_state.get("citations") or [])
     ]
+    total_elapsed_ms = round((time.perf_counter() - started_at) * 1000)
     yield _sse(
         {
             "type": "done",
@@ -229,6 +250,11 @@ async def _stream_generator(
             "citations": citations,
             "retrieved": int(final_state.get("retrieved", 0)),
             "used": int(final_state.get("used", 0)),
+            "timings": {
+                # Per-node durations in ms. Keys that weren't reached stay absent.
+                **stage_timings,
+                "total": total_elapsed_ms,
+            },
         }
     )
 
