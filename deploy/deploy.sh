@@ -41,7 +41,14 @@ fi
 if [ "$fe_changed" = "1" ]; then
   echo "==> frontend deps + nothing to build (we run vite dev)"
   if [ "$lock_changed" = "1" ] || [ ! -d frontend/node_modules ]; then
-    (cd frontend && /opt/homebrew/bin/npm ci)
+    # Prefer `npm ci` for deterministic, lockfile-driven installs. Fall back
+    # to `npm install` if the lockfile drifts (e.g. when dev and CI use
+    # different npm versions and one omits a transitive optional dep). The
+    # fallback is annotated in the log so we can spot lockfile rot.
+    if ! (cd frontend && /opt/homebrew/bin/npm ci); then
+      echo "==> npm ci rejected the lockfile; falling back to npm install"
+      (cd frontend && /opt/homebrew/bin/npm install)
+    fi
   fi
 fi
 
