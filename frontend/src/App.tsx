@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import { AppSidebar, type NavKey } from "@/components/app-sidebar"
 import { CommandPalette, useCommandPalette } from "@/components/command-palette"
+import { MobileTabBar } from "@/components/mobile-tab-bar"
 import { PageStub } from "@/components/page-stub"
 import { Topbar } from "@/components/topbar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -87,6 +88,7 @@ export default function App() {
           )}
         </main>
       </SidebarInset>
+      <MobileTabBar active={page} />
       <CommandPalette open={palette.open} onOpenChange={palette.setOpen} />
     </SidebarProvider>
   )

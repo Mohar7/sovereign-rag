@@ -34,42 +34,135 @@
     "warn": "Some services degraded",
     "err": "Service outage"
   },
+  "actions": {
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "add": "Add",
+    "open": "Open",
+    "close": "Close",
+    "export": "Export",
+    "exportJson": "Export JSON",
+    "copy": "Copy",
+    "regenerate": "Regenerate",
+    "openInspector": "Open inspector",
+    "continue": "Continue",
+    "search": "Search",
+    "clear": "Clear",
+    "clearAll": "Clear all",
+    "reset": "Reset",
+    "send": "Send",
+    "send_hint": "↵ to send · ⇧↵ for newline",
+    "selected": "{{count}} selected",
+    "startFresh": "Start fresh"
+  },
+  "status": {
+    "all": "all",
+    "ok": "ok",
+    "error": "error",
+    "warn": "warn",
+    "pinned": "pinned",
+    "excluded": "excluded",
+    "live": "live",
+    "streaming": "streaming"
+  },
   "pages": {
     "ask": {
       "title": "Ask anything across your corpus.",
-      "subtitle": "Hybrid retrieval over graph and vector, reranked by cross-encoder, with inline citations."
+      "subtitle": "Hybrid retrieval over graph and vector, reranked by cross-encoder, with inline citations.",
+      "placeholder": "Ask anything across your corpus.",
+      "resuming": "resuming",
+      "restoring": "Restoring conversation history…",
+      "noAnswer": "(no answer text)",
+      "emptyAnswerFallback": "The model returned no answer text. Showing the {{count}} retrieved chunk(s) instead."
     },
     "library": {
       "title": "Library",
-      "empty": "No documents yet. Ingest a PDF or URL to get started."
+      "empty": "No documents yet. Ingest a PDF or URL to get started.",
+      "filters": "Filters",
+      "kind": "kind",
+      "status": "status",
+      "documents": "{{count}} documents",
+      "ofTotal": "{{filtered}} of {{total}}"
     },
     "ingest": {
       "title": "Ingest",
-      "empty": "Drop a file, paste a URL, or run a web search."
+      "empty": "Drop a file, paste a URL, or run a web search.",
+      "subtitle": "Bring a URL, a file, or web-search hits into the corpus. Indexing runs Milvus hybrid + Neo4j entity extraction on each document.",
+      "tabs": {
+        "url": "URL",
+        "file": "File",
+        "web": "Web search",
+        "text": "Paste text"
+      },
+      "recent": "Recent jobs",
+      "indexing": "Indexing…",
+      "parsing": "Parsing…",
+      "openInLibrary": "Open in Library"
     },
     "threads": {
       "title": "Threads",
-      "empty": "No threads yet."
+      "empty": "No threads yet.",
+      "noMatch": "No threads match your search.",
+      "deleted": "Thread deleted.",
+      "filters": "Filters",
+      "model": "model",
+      "anyModel": "Any model"
     },
     "graph": {
       "title": "Knowledge graph",
-      "empty": "The graph is empty. Index some documents to populate entities and relations."
+      "empty": "The graph is empty. Index some documents to populate entities and relations.",
+      "seedEntity": "seed entity",
+      "depth": "depth",
+      "selection": "Selection",
+      "selectionHint": "Click any node to inspect; click again to clear.",
+      "relations": "relations",
+      "recenterOnThis": "Re-center on this node",
+      "expanding": "expanding neighborhood…",
+      "pickSeed": "Pick a seed entity on the left to start."
     },
     "evals": {
       "title": "Evals",
-      "empty": "Retrieval quality dashboard will appear here once you've run an eval."
+      "empty": "Retrieval quality dashboard will appear here once you've run an eval.",
+      "noResults": "No eval results yet",
+      "perQuestion": "Per-question retrieval",
+      "perQuestionHint": "Metrics computed against the gold-label qa_pairs.json fixture for each question.",
+      "ragas": "RAGAS scores",
+      "ragasHint": "Answer-quality metrics from the RAGAS framework, computed once per eval run.",
+      "dataset": "dataset"
     },
     "history": {
       "title": "Run history",
-      "empty": "Every query you run gets an audit row here."
+      "empty": "Every query you run gets an audit row here.",
+      "subtitle": "Every /ask writes one row. Errors are kept too — useful for tracking down model failures or retrieval misses.",
+      "ofTotal": "{{ok}} ok · {{err}} errors",
+      "search": "question, answer, model, id…",
+      "pipelineTimings": "Pipeline timings",
+      "overridesUsed": "Overrides used",
+      "answer": "Answer",
+      "citations": "Citations · {{count}}"
     },
     "settings": {
       "title": "Settings",
-      "subtitle": "Models, retrieval knobs, services."
+      "subtitle": "Live retrieval knobs. Changes apply immediately in-process — values reset on server restart until persistence is wired.",
+      "tabs": {
+        "retrieval": "Retrieval",
+        "model": "Model",
+        "indexing": "Indexing",
+        "rerank": "Rerank",
+        "services": "Services",
+        "danger": "Danger"
+      }
     }
   },
   "common": {
     "loading": "Loading…",
-    "comingSoon": "coming soon"
+    "comingSoon": "coming soon",
+    "untitled": "untitled",
+    "chunks": "chunks",
+    "citations": "citation",
+    "citationsPlural": "citations"
   }
 }

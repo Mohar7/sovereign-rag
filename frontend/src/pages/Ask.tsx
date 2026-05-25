@@ -281,7 +281,7 @@ export function AskPage() {
   const sourcesLoading = !!latestTurn && latestTurn.status === "pending"
 
   return (
-    <div className="flex h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
+    <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         {isEmpty ? (
           <ScrollArea className="flex-1">

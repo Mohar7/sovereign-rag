@@ -124,7 +124,7 @@ export function ThreadsPage() {
   const total = (threads.data ?? []).length
 
   return (
-    <div className="flex h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
+    <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
       <ThreadsFilterRail
         statusFilter={statusFilter}
         onStatusChange={setStatusFilter}

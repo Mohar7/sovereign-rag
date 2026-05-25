@@ -29,7 +29,7 @@ export function EvalsPage() {
 
   if (evals.isLoading) {
     return (
-      <div className="flex h-[calc(100svh-4rem)] items-center justify-center text-muted-foreground">
+      <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] items-center justify-center text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
         <span className="ml-2 text-[13px]">loading evals…</span>
       </div>
@@ -42,7 +42,7 @@ export function EvalsPage() {
   }
 
   return (
-    <div className="flex h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
+    <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 border-b border-border px-6 py-3">
           <h1 className="text-[15px] font-semibold tracking-tight">Evals</h1>
@@ -333,7 +333,7 @@ function RagasFootnote({ data }: { data: EvalsResults }) {
 
 function EmptyState({ onRefresh }: { onRefresh: () => void }) {
   return (
-    <div className="flex h-[calc(100svh-4rem)] flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+    <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] flex-col items-center justify-center gap-3 text-center text-muted-foreground">
       <span className="inline-flex size-10 items-center justify-center rounded-xl bg-muted">
         <BarChart3 className="size-5" strokeWidth={1.75} />
       </span>

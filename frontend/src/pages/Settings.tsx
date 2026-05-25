@@ -81,7 +81,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="h-[calc(100svh-4rem)] min-h-0 w-full">
+    <div className="h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full">
       <ScrollArea className="h-full">
         <div className="mx-auto w-full max-w-4xl p-6">
           <header className="mb-6">
@@ -93,7 +93,7 @@ export function SettingsPage() {
           </header>
 
           <Tabs defaultValue="retrieval">
-            <TabsList className="mb-5">
+            <TabsList className="mb-5 w-full max-w-full overflow-x-auto">
               <TabsTrigger value="retrieval">Retrieval</TabsTrigger>
               <TabsTrigger value="model">Model</TabsTrigger>
               <TabsTrigger value="indexing">Indexing</TabsTrigger>

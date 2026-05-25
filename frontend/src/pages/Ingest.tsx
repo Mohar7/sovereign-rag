@@ -82,7 +82,7 @@ export function IngestPage() {
   }
 
   return (
-    <div className="flex h-[calc(100svh-4rem)] min-h-0 w-full">
+    <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full">
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-border px-6 py-4">
           <h1 className="text-[15px] font-semibold tracking-tight">Ingest</h1>
@@ -95,7 +95,7 @@ export function IngestPage() {
         <ScrollArea className="flex-1">
           <div className="mx-auto w-full max-w-3xl p-6">
             <Tabs defaultValue="url">
-              <TabsList className="mb-5">
+              <TabsList className="mb-5 w-full max-w-full overflow-x-auto">
                 <TabsTrigger value="url" className="gap-1.5">
                   <LinkIcon className="size-3.5" strokeWidth={2} /> URL
                 </TabsTrigger>

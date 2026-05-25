@@ -275,7 +275,7 @@ export function LibraryPage() {
   }
 
   return (
-    <div className="flex h-[calc(100svh-4rem)] min-h-0 w-full">
+    <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full">
       {/* filter rail */}
       <aside className="hidden w-[240px] shrink-0 flex-col border-r border-border bg-background lg:flex">
         <div className="border-b border-border px-4 py-3">
