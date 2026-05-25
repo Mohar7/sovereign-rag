@@ -54,9 +54,9 @@ export default function App() {
   return (
     <SidebarProvider>
       <AppSidebar active={page} onNavigate={onNavigate} />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 overflow-hidden">
         <Topbar page={page} />
-        <main className="flex-1">
+        <main className="min-w-0 flex-1 overflow-hidden">
           {page === "ask" ? (
             <AskPage />
           ) : page === "library" ? (
