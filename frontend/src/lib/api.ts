@@ -1,197 +1,276 @@
-// Thin client for the FastAPI /api/* surface.
-// Used by useCorpusStats / useHealth / useSettings / useDocumentsSearch /
-// useChunkNeighbours / useEntities — see ../hooks/.
+/**
+ * Minimal client for the sovereign-rag FastAPI backend.
+ *
+ * The Vite dev server proxies `/api/*` and `/ask`, `/health`, `/documents/*`,
+ * `/ingest/*`, `/admin/*` to the backend (see ``vite.config.ts``). In
+ * production the SPA is served from the same nginx that proxies the backend,
+ * so same-origin requests work without CORS round-trips.
+ */
 
-const BASE = "/api";
-
-export interface CorpusStats {
-  documents: number;
-  chunks: number;
-  entities: number;
-  relations: number;
-  last_indexed: string | null;
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const r = await fetch(path, init)
+  if (!r.ok) {
+    let detail: string
+    try {
+      const body = await r.json()
+      detail = body?.detail ?? r.statusText
+    } catch {
+      detail = r.statusText
+    }
+    throw new ApiError(r.status, detail, path)
+  }
+  return (await r.json()) as T
 }
 
+function postJSON<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+}
+
+export class ApiError extends Error {
+  status: number
+  detail: string
+  path: string
+  constructor(status: number, detail: string, path: string) {
+    super(`${status} ${detail} — ${path}`)
+    this.name = "ApiError"
+    this.status = status
+    this.detail = detail
+    this.path = path
+  }
+}
+
+// ---------- types (mirror the backend Pydantic schemas) ----------
+
+export interface CorpusStats {
+  documents: number
+  chunks: number
+  entities: number
+  relations: number
+  last_indexed?: string
+}
+
+export type ServiceState = "ok" | "warn" | "err"
+
 export interface ServiceStatus {
-  name: string;
-  state: "ok" | "warn" | "err";
-  latency_ms: number | null;
-  endpoint: string | null;
-  note: string | null;
+  name: string
+  state: ServiceState
+  latency_ms?: number
+  endpoint?: string
+  note?: string
 }
 
 export interface HealthResponse {
-  services: ServiceStatus[];
+  services: ServiceStatus[]
 }
-
-export type FusionStrategy = "rrf" | "weighted" | "borda";
-export type RerankerDevice = "auto" | "mps" | "cuda" | "cpu";
-
-export interface Settings {
-  llm_model: string;
-  embed_provider: string;
-  embed_model: string;
-  embed_dim: number;
-  retrieve_top_k: number;
-  rerank_top_k: number;
-  rrf_k: number;
-  enable_graph_retrieval: boolean;
-  enable_contextual_retrieval: boolean;
-  dense_enabled: boolean;
-  sparse_enabled: boolean;
-  fusion_strategy: FusionStrategy;
-  fusion_graph_weight: number;
-  fusion_vector_weight: number;
-  graph_depth: number;
-  graph_max_nodes: number;
-  rerank_score_floor: number;
-  adaptive_rerank: boolean;
-  reranker_model: string;
-  reranker_device: RerankerDevice;
-  web_fallback_min_chunks: number;
-  web_fallback_max_urls: number;
-}
-
-export type SettingsPatch = Partial<
-  Pick<
-    Settings,
-    | "retrieve_top_k"
-    | "rerank_top_k"
-    | "rrf_k"
-    | "enable_graph_retrieval"
-    | "enable_contextual_retrieval"
-    | "dense_enabled"
-    | "sparse_enabled"
-    | "fusion_strategy"
-    | "fusion_graph_weight"
-    | "fusion_vector_weight"
-    | "graph_depth"
-    | "graph_max_nodes"
-    | "rerank_score_floor"
-    | "adaptive_rerank"
-    | "reranker_device"
-    | "web_fallback_min_chunks"
-    | "web_fallback_max_urls"
-  >
->;
 
 export interface DocumentSummary {
-  doc_id: string;
-  title: string;
-  source_uri: string;
-  chunks: number;
+  doc_id: string
+  title: string
+  source_uri: string
+  chunks: number
 }
 
-export interface ChunkSummary {
-  chunk_id: string;
-  doc_id: string;
-  position: number;
-  page: number | null;
-  raw_text: string;
+export interface DeleteResult {
+  doc_id: string
+  chunks_deleted: number
+  graph_deleted: boolean
+  error?: string | null
 }
 
-export interface NeighbourResponse {
-  chunk: ChunkSummary;
-  prev: ChunkSummary | null;
-  next: ChunkSummary | null;
+export interface DeleteResponse {
+  ok: boolean
+  total_chunks_deleted: number
+  results: DeleteResult[]
 }
 
-export interface EntityItem {
-  name: string;
-  type: string;
-  description: string | null;
+export interface CitationModel {
+  chunk_id: string
+  doc_id: string
+  title: string
+  source_uri: string
+  page: number | null
+  score: number
+  snippet: string
 }
 
-export interface EntitiesResponse {
-  entities: EntityItem[];
-  /** [subject, predicate, object] triples. */
-  relations: [string, string, string][];
+export interface AskRequest {
+  question: string
+  doc_id?: string | null
+  thread_id?: string | null
 }
 
-export type PinAction = "pinned" | "excluded";
-
-export interface PinEntry {
-  chunk_id: string;
-  action: PinAction;
-  note: string | null;
-  created_at: string;
+export interface AskResponse {
+  thread_id: string
+  status: "ok"
+  answer: string | null
+  citations: CitationModel[]
+  retrieved: number
+  used: number
 }
 
-export interface ThreadContextDoc {
-  thread_id: string;
-  pins: PinEntry[];
+export interface ThreadSummary {
+  thread_id: string
+  question?: string | null
+  answer_snippet?: string | null
+  citations: number
+  updated_at?: string | null
 }
+
+export interface ThreadDetail {
+  thread_id: string
+  question: string | null
+  answer: string | null
+  citations: number
+  retrieved: number
+  used: number
+  updated_at: string | null
+}
+
+export interface ThreadMessage {
+  role: "user" | "assistant"
+  content: string
+  citations: CitationModel[]
+  retrieved: number
+  used: number
+}
+
+export interface IngestUrlRequest {
+  type: "url"
+  value: string
+  title?: string
+}
+
+export interface IngestTextRequest {
+  type: "text"
+  value: string
+  title?: string
+}
+
+export type IngestBody = IngestUrlRequest | IngestTextRequest
 
 export interface IngestResponse {
-  doc_id: string;
-  title: string;
-  chunks_indexed: number;
-  source_uri: string;
+  doc_id: string
+  title: string
+  chunks_indexed: number
+  source_uri?: string | null
 }
 
 export interface WebSearchHit {
-  url: string;
-  title: string;
-  snippet: string;
+  url: string
+  title: string
+  snippet: string
 }
 
-async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init);
-  if (!res.ok) {
-    throw new Error(`${init?.method || "GET"} /api${path} → ${res.status}`);
-  }
-  return res.json() as Promise<T>;
+export interface SettingsResponse {
+  // LLM
+  llm_provider: "ollama" | "openai"
+  llm_model: string
+  llm_model_light: string
+  llm_model_nano: string
+  openai_chat_model: string
+  openai_chat_model_light: string
+  openai_chat_model_nano: string
+  llm_temperature: number
+  // Embeddings
+  embed_provider: string
+  embed_model: string
+  embed_dim: number
+  // Retrieval
+  retrieve_top_k: number
+  rerank_top_k: number
+  rrf_k: number
+  enable_graph_retrieval: boolean
+  enable_contextual_retrieval: boolean
+  dense_enabled: boolean
+  sparse_enabled: boolean
+  fusion_strategy: string
+  fusion_graph_weight: number
+  fusion_vector_weight: number
+  graph_depth: number
+  graph_max_nodes: number
+  // Rerank
+  rerank_score_floor: number
+  adaptive_rerank: boolean
+  reranker_model: string
+  reranker_device: "auto" | "mps" | "cuda" | "cpu"
 }
+
+export type SettingsPatch = Partial<SettingsResponse>
+
+export interface ModelChoice {
+  id: string
+  label: string
+  family?: string | null
+  size?: string | null
+  note?: string | null
+}
+
+// ---------- api ----------
 
 export const api = {
-  corpusStats: () => getJSON<CorpusStats>("/corpus/stats"),
-  health: () => getJSON<HealthResponse>("/health"),
-  settings: () => getJSON<Settings>("/settings"),
+  // /api/*
+  corpusStats: () => request<CorpusStats>("/api/corpus/stats"),
+  health: () => request<HealthResponse>("/api/health"),
+  documentsSearch: (q: string, limit = 20) =>
+    request<DocumentSummary[]>(
+      `/api/documents/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
+  documentDelete: (docId: string) =>
+    request<DeleteResult>(`/api/library/${encodeURIComponent(docId)}`, {
+      method: "DELETE",
+    }),
+  documentsDeleteBulk: (doc_ids: string[]) =>
+    postJSON<DeleteResponse>("/api/library/delete", { doc_ids }),
+  documentChunks: (docId: string, limit = 2000) =>
+    request<
+      Array<{
+        chunk_id: string
+        doc_id: string
+        position: number
+        page: number | null
+        raw_text: string
+      }>
+    >(`/api/library/${encodeURIComponent(docId)}/chunks?limit=${limit}`),
+  threadsList: (limit = 50) =>
+    request<ThreadSummary[]>(`/api/threads?limit=${limit}`),
+  threadDetail: (id: string) =>
+    request<ThreadDetail>(`/api/threads/${encodeURIComponent(id)}`),
+  threadMessages: (id: string) =>
+    request<ThreadMessage[]>(`/api/threads/${encodeURIComponent(id)}/messages`),
+  threadDelete: (id: string) =>
+    request<Record<string, unknown>>(`/api/threads/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  ingest: (body: IngestBody) => postJSON<IngestResponse>("/api/ingest", body),
+  ingestFile: (file: File) => {
+    const fd = new FormData()
+    fd.append("file", file)
+    return request<IngestResponse>("/documents/file", { method: "POST", body: fd })
+  },
+  webSearch: (q: string, max_results = 10) =>
+    request<WebSearchHit[]>(
+      `/api/search?q=${encodeURIComponent(q)}&max_results=${max_results}`,
+    ),
+
+  getSettings: () => request<SettingsResponse>("/api/settings"),
   patchSettings: (patch: SettingsPatch) =>
-    getJSON<Settings>("/settings", {
+    request<SettingsResponse>("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     }),
-  documentsSearch: (q: string, limit = 10) =>
-    getJSON<DocumentSummary[]>(
-      `/documents/search?q=${encodeURIComponent(q)}&limit=${limit}`
-    ),
-  chunkNeighbours: (chunkId: string) =>
-    getJSON<NeighbourResponse>(`/chunks/${chunkId}/neighbours`),
-  entities: (docId: string) =>
-    getJSON<EntitiesResponse>(`/entities?doc_id=${encodeURIComponent(docId)}`),
-  threadContext: (threadId: string) =>
-    getJSON<ThreadContextDoc>(`/threads/${encodeURIComponent(threadId)}/context`),
-  pinChunk: (threadId: string, chunkId: string, action: PinAction = "pinned", note?: string) =>
-    getJSON<PinEntry>(`/threads/${encodeURIComponent(threadId)}/context`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chunk_id: chunkId, action, note }),
-    }),
-  unpinChunk: (threadId: string, chunkId: string) =>
-    getJSON<{ ok: boolean }>(
-      `/threads/${encodeURIComponent(threadId)}/context/${encodeURIComponent(chunkId)}`,
-      { method: "DELETE" },
-    ),
-  clearThreadContext: (threadId: string) =>
-    getJSON<{ removed: number }>(`/threads/${encodeURIComponent(threadId)}/context`, {
-      method: "DELETE",
-    }),
-  ingest: (body: { type: "url" | "text"; value: string; title?: string }) =>
-    getJSON<IngestResponse>("/ingest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  searchWeb: (q: string, maxResults = 8) =>
-    getJSON<WebSearchHit[]>(
-      `/search?q=${encodeURIComponent(q)}&max_results=${maxResults}`,
-    ),
+  listModels: (provider: "ollama" | "openai") =>
+    request<ModelChoice[]>(`/api/models?provider=${provider}`),
+
+  // root-mounted (no /api prefix)
+  ask: (body: AskRequest) => postJSON<AskResponse>("/ask", body),
+
+  // admin
   wipe: (scope: "all" | "corpus" | "threads" = "all") =>
-    getJSON<Record<string, unknown>>("/admin/wipe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scope, confirm: "wipe" }),
-    }),
-};
+    postJSON<Record<string, unknown>>("/admin/wipe", { scope, confirm: "wipe" }),
+}

@@ -1,125 +1,73 @@
-# sovereign-rag — Web UI
+# React + TypeScript + Vite
 
-The Ask-screen frontend for [sovereign-rag](../). Talks to the LangGraph
-deployment of the QA graph (`sovereign_qa`) via the official
-**`@langchain/langgraph-sdk`** — no custom HTTP layer, no FastAPI ingestion
-to maintain on this side.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-Visual design ported from the Claude Design handoff in
-`docs/ui-design-brief.md` (and the matching mocks under `assisstant/`).
+Currently, two official plugins are available:
 
-## Screens
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-The Ask screen renders five states; the design is the same across all of them, only
-the conversation content changes:
+## React Compiler
 
-| | |
-|---|---|
-| **Hero** — multi-turn conversation, sources rail populated | ![Hero](../docs/screenshots/01-hero.png) |
-| **Empty** — fresh thread, suggestion buttons, corpus stats | ![Empty](../docs/screenshots/02-empty.png) |
-| **Mid-stream** — answer streaming, pipeline-status bar live | ![Mid-stream](../docs/screenshots/03-mid-stream.png) |
-| **HITL** — graph paused at `interrupt`, URL approval card    | ![HITL](../docs/screenshots/04-hitl.png) |
-| **Error** — degraded run, retry actions, trace log           | ![Error](../docs/screenshots/05-error.png) |
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-These are captured automatically by `frontend/scripts/capture-artboards.py`
-(playwright; runs against the `/artboards` route).
+## Expanding the ESLint configuration
 
-## Running locally
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-You need two processes — the LangGraph dev server and Vite.
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-```bash
-# 1. Backend — LangGraph dev server on :2024 (from the repo root)
-uv run langgraph dev --allow-blocking
-#   → http://127.0.0.1:2024 + Studio UI link in the terminal
-#
-# `--allow-blocking` is needed because RAGPipeline init reads `.env`
-# synchronously via pydantic-settings; the call happens once on first
-# request. For a `langgraph build` / Platform deployment, set
-# BG_JOB_ISOLATED_LOOPS=true in the environment instead.
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-# 2. Frontend — Vite dev server on :5173
-cd frontend
-npm install
-npm run dev
-#   → http://127.0.0.1:5173
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-The Vite config proxies `/lg/*` → `http://127.0.0.1:2024` so the browser
-sees a same-origin server (no CORS). Override the backend URL by setting
-`VITE_LANGGRAPH_URL` in `.env`.
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-## Routes
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-| Route | What it is |
-|---|---|
-| `/`           | The live Ask screen. Talks to the LangGraph deployment. Five visual states emerge naturally as the run evolves: empty → streaming → done (Hero) → interrupted (HITL) → error. |
-| `/artboards`  | Portfolio view — the same five states rendered with mock data, side by side. Useful for screenshots and visual QA without standing up a backend. |
-
-## Architecture
-
-- **Control plane**: the QA `StateGraph` lives on the LangGraph server. The
-  SDK gives us threads, streaming, interrupt detection and resume
-  primitives — `useThreads`, `useRun` wrap them.
-- **Data plane**: untouched on the front-end side. The graph still uses
-  the project's own Milvus / Neo4j / Ollama / FlashRank / Postgres-
-  checkpointer machinery; we just consume its emitted state.
-- **Streaming**: `client.runs.stream(..., streamMode: ["values",
-  "updates", "messages-tuple"])`. The hook accumulates streamed token
-  text from `messages-tuple`, watches `updates` for node transitions
-  (drives the pipeline-status bar), and falls back to the final `values`
-  snapshot for citations / metadata.
-- **HITL**: when the graph emits an `interrupt` event with
-  `reason: "approve_urls"`, the assistant turn enters `status:
-  "interrupted"` and the inline `ApprovalCard` lets the user pick URLs;
-  approval calls `client.runs.stream(..., command: { resume: {
-  approved_urls } })`.
-
-## Visual language (from the design)
-
-- **Typefaces** — IBM Plex Mono (UI chrome, metadata, citation chips) +
-  IBM Plex Serif (assistant prose, user questions). Loaded from Google
-  Fonts in `index.html`.
-- **Two-accent system** — citation chips are tinted *both* with
-  graph-blue (`#7aa2f7`) and vector-lavender (`#bb9af7`) when a chunk
-  came through both retrievers; one side only when one retriever
-  dominated; warm orange (`#ff9e64`) reserved for HITL moments
-  (`web` chips, approval card border, "needs approval" thread badge).
-- **Density** — 12 px chrome, 14 px serif body, 0–2 px corners, hairline
-  rules. Closer to a terminal than a chat-bot.
-
-## Deploying
-
-For a production deployment, set:
-
-```env
-VITE_LANGGRAPH_URL=https://<your-langgraph-deployment>
-VITE_LANGGRAPH_API_KEY=<key>      # if your deployment is gated
-VITE_LANGGRAPH_ASSISTANT=sovereign_qa
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
-
-then `npm run build`. The output in `dist/` is a static SPA you can serve
-from anywhere (Vercel, Netlify, Caddy, nginx, S3+CloudFront, …). LangGraph
-itself is deployed separately — either via the LangGraph Platform
-(`langgraph deploy`) or by running `langgraph build` to produce a Docker
-image you self-host.
-
-## Status
-
-What's wired live:
-- Thread list (create / select; per-thread state)
-- Send question → streaming answer with inline `[n]` citations
-- Stop streaming mid-flight (cancels the SDK stream)
-- HITL approval card → resume via `Command(resume=...)`
-- Sources rail with cross-encoder score, snippet, copy URI
-- Empty state + corpus stats
-- Error banner on stream failures
-- Pipeline status bar (driven by node-update events)
-
-What still uses mock data and is honest about it:
-- Corpus stats in the TopBar / Empty state (no `/corpus/stats` endpoint yet)
-- Service health pills (no `/health/detailed` yet)
-- Resuming a previously-completed thread doesn't re-hydrate its turns
-  (would need a `threads.getState` round trip)
-
-These are not bugs — they're tracked as follow-ups in `docs/ui-design-brief.md`.

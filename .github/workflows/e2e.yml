@@ -1,14 +1,20 @@
 # Frontend end-to-end tests against the live LangGraph deployment.
-# Runs on the same self-hosted Mac Mini as integration.yml so we get a
-# real browser + a real LangGraph server. Triggered manually
-# (workflow_dispatch) or as part of nightly cron alongside the eval.
+#
+# NOTE - the test selectors (.threads, .composer textarea, .source-card,
+# .palette, .ab artboards) target the legacy DOM produced by the previous
+# Vite SPA. The current frontend/ is the new TanStack + shadcn build, so
+# this workflow's tests no longer match. Cron schedule disabled until the
+# suite is ported - rewrite frontend/tests/e2e/*.spec.ts against the new
+# components (data-test ids + accessible roles), then restore the schedule
+# block below.
 
-name: E2E (self-hosted)
+name: E2E (self-hosted, manual-only)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "47 3 * * *"
+  # Disabled until the suite is ported to the new shadcn DOM.
+  # schedule:
+  #   - cron: "47 3 * * *"
 
 jobs:
   e2e:

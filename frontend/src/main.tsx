@@ -1,13 +1,29 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
-import "./styles/tokens.css";
-import "./styles/ask.css";
+import "@fontsource-variable/inter/index.css"
+import "@fontsource-variable/jetbrains-mono/index.css"
+import "./index.css"
+import "./lib/i18n"
 
-const root = document.getElementById("root");
-if (!root) throw new Error("missing #root in index.html");
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+import { StrictMode } from "react"
+import { createRoot } from "react-dom/client"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { Toaster } from "@/components/ui/sonner"
+
+import App from "./App.tsx"
+import { ThemeProvider } from "./lib/theme"
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 30_000, retry: 1 },
+  },
+})
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <App />
+        <Toaster />
+      </QueryClientProvider>
+    </ThemeProvider>
+  </StrictMode>,
+)
