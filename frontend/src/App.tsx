@@ -8,6 +8,7 @@ import { Topbar } from "@/components/topbar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AskPage } from "@/pages/Ask"
 import { GraphPage } from "@/pages/Graph"
+import { HistoryPage } from "@/pages/History"
 import { IngestPage } from "@/pages/Ingest"
 import { LibraryPage } from "@/pages/Library"
 import { SettingsPage } from "@/pages/Settings"
@@ -70,6 +71,8 @@ export default function App() {
             <ThreadsPage />
           ) : page === "graph" ? (
             <GraphPage />
+          ) : page === "history" ? (
+            <HistoryPage />
           ) : page === "settings" ? (
             <SettingsPage />
           ) : (

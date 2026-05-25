@@ -30,6 +30,29 @@ function postJSON<T>(path: string, body: unknown): Promise<T> {
   })
 }
 
+// ---------- run history ----------
+
+export interface RunRow {
+  id: number
+  thread_id: string
+  question: string
+  answer: string | null
+  retrieved: number
+  used: number
+  citations: CitationModel[]
+  timings: {
+    retrieve_local?: number
+    rerank?: number
+    generate?: number
+    total?: number
+  }
+  overrides: Record<string, unknown> | null
+  model: string | null
+  status: "ok" | "error"
+  error: string | null
+  created_at: string | null
+}
+
 // ---------- graph explorer ----------
 
 export interface GraphStats {
@@ -312,6 +335,9 @@ export const api = {
     }),
   listModels: (provider: "ollama" | "openai") =>
     request<ModelChoice[]>(`/api/models?provider=${provider}`),
+
+  // run history
+  runsList: (limit = 50) => request<RunRow[]>(`/api/runs?limit=${limit}`),
 
   // graph explorer
   graphStats: () => request<GraphStats>("/api/graph/stats"),

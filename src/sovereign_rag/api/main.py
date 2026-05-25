@@ -30,6 +30,8 @@ from sovereign_rag.api.health.router import router as health_router
 from sovereign_rag.api.ingest.router import root_router as ingest_root_router
 from sovereign_rag.api.ingest.router import router as ingest_router
 from sovereign_rag.api.library.router import router as library_router
+from sovereign_rag.api.runs import ensure_runs_table
+from sovereign_rag.api.runs.router import router as runs_router
 from sovereign_rag.api.settings.router import router as settings_router
 from sovereign_rag.api.sources.router import router as sources_router
 from sovereign_rag.api.threads.router import router as threads_router
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     async with AsyncPostgresSaver.from_conn_string(s.langgraph_pg_uri) as checkpointer:
         await checkpointer.setup()  # idempotent
+        await ensure_runs_table(s.langgraph_pg_uri)  # creates runs table + indexes
         app.state.graph = build_graph(checkpointer=checkpointer)
         app.state.checkpointer = checkpointer  # exposed so /api/threads can list/read
         logger.info("sovereign-rag pipeline + LangGraph ready")
@@ -96,6 +99,7 @@ app.include_router(sources_router)
 app.include_router(threads_router)
 app.include_router(ingest_router)
 app.include_router(graph_router)
+app.include_router(runs_router)
 
 
 @app.get("/")

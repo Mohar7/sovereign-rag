@@ -30,6 +30,7 @@ from sovereign_rag.api.ask.schemas import (
     CitationModel,
 )
 from sovereign_rag.api.dependencies import GraphDep
+from sovereign_rag.api.runs import record_run
 from sovereign_rag.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -121,14 +122,54 @@ async def ask(req: AskRequest, graph: GraphDep) -> AskResponse:
     config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
     initial = {"question": req.question, "doc_id": req.doc_id}
 
+    started = time.perf_counter()
+    settings_at_call = get_settings()
     try:
         with _apply_overrides(req.overrides):
             state = await graph.ainvoke(initial, config=config)
     except Exception as exc:
         logger.exception("graph invocation failed")
+        # Persist the failed run so the history page surfaces errors too.
+        await record_run(
+            settings_at_call.langgraph_pg_uri,
+            thread_id=thread_id,
+            question=req.question,
+            answer=None,
+            retrieved=0,
+            used=0,
+            citations=[],
+            timings={"total": round((time.perf_counter() - started) * 1000)},
+            overrides=req.overrides.model_dump(exclude_none=True) if req.overrides else None,
+            model=(
+                req.overrides.model
+                if (req.overrides and req.overrides.model)
+                else settings_at_call.llm_model
+            ),
+            status="error",
+            error=f"{type(exc).__name__}: {exc}",
+        )
         raise HTTPException(500, f"Graph failed: {exc}") from exc
 
-    return _build_response(thread_id, state)
+    response = _build_response(thread_id, state)
+    # Best-effort persistence; errors are swallowed inside record_run.
+    await record_run(
+        settings_at_call.langgraph_pg_uri,
+        thread_id=response.thread_id,
+        question=req.question,
+        answer=response.answer,
+        retrieved=response.retrieved,
+        used=response.used,
+        citations=[c.model_dump() for c in response.citations],
+        timings={"total": round((time.perf_counter() - started) * 1000)},
+        overrides=req.overrides.model_dump(exclude_none=True) if req.overrides else None,
+        model=(
+            req.overrides.model
+            if (req.overrides and req.overrides.model)
+            else settings_at_call.llm_model
+        ),
+        status="ok",
+    )
+    return response
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -222,6 +263,21 @@ async def _stream_generator(
                         final_state = output
     except Exception as exc:
         logger.exception("stream failed")
+        # Record the failed run so it shows up in /api/runs.
+        await record_run(
+            get_settings().langgraph_pg_uri,
+            thread_id=thread_id,
+            question=str(initial.get("question") or ""),
+            answer=None,
+            retrieved=0,
+            used=0,
+            citations=[],
+            timings={**stage_timings, "total": round((time.perf_counter() - started_at) * 1000)},
+            overrides=overrides.model_dump(exclude_none=True) if overrides else None,
+            model=(overrides.model if overrides and overrides.model else get_settings().llm_model),
+            status="error",
+            error=f"{type(exc).__name__}: {exc}",
+        )
         yield _sse({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
         return
 
@@ -242,6 +298,22 @@ async def _stream_generator(
         for c in (final_state.get("citations") or [])
     ]
     total_elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+    timings_payload = {**stage_timings, "total": total_elapsed_ms}
+    # Persist before yielding done so the run is in the audit log by the
+    # time the client navigates to /history.
+    await record_run(
+        get_settings().langgraph_pg_uri,
+        thread_id=thread_id,
+        question=str(initial.get("question") or ""),
+        answer=final_state.get("answer"),
+        retrieved=int(final_state.get("retrieved", 0)),
+        used=int(final_state.get("used", 0)),
+        citations=citations,
+        timings=timings_payload,
+        overrides=overrides.model_dump(exclude_none=True) if overrides else None,
+        model=(overrides.model if overrides and overrides.model else get_settings().llm_model),
+        status="ok",
+    )
     yield _sse(
         {
             "type": "done",
@@ -250,11 +322,7 @@ async def _stream_generator(
             "citations": citations,
             "retrieved": int(final_state.get("retrieved", 0)),
             "used": int(final_state.get("used", 0)),
-            "timings": {
-                # Per-node durations in ms. Keys that weren't reached stay absent.
-                **stage_timings,
-                "total": total_elapsed_ms,
-            },
+            "timings": timings_payload,
         }
     )
 
