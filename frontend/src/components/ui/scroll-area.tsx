@@ -16,7 +16,13 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        // The `[&>div]:!block` flips Radix's inner content wrapper away from
+        // its default `display: table; min-width: 100%`. That table layout
+        // lets the wrapper grow to its widest content (long URLs, mono IDs)
+        // which then forces the surrounding column wider than the viewport.
+        // Forcing block keeps children at viewport width so `w-full` and
+        // `truncate` / `line-clamp-*` resolve correctly.
+        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 [&>div]:!block"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
