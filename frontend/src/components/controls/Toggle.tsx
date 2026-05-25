@@ -1,18 +1,24 @@
 interface Props {
   on: boolean;
+  disabled?: boolean;
   onChange?: (next: boolean) => void;
 }
 
-export function Toggle({ on, onChange }: Props) {
+export function Toggle({ on, disabled, onChange }: Props) {
+  const handle = () => {
+    if (disabled || !onChange) return;
+    onChange(!on);
+  };
   return (
     <span
-      className={`toggle ${on ? "on" : ""}`}
+      className={`toggle ${on ? "on" : ""} ${disabled ? "disabled" : ""}`}
       role={onChange ? "switch" : undefined}
       aria-checked={onChange ? on : undefined}
-      tabIndex={onChange ? 0 : undefined}
-      onClick={() => onChange?.(!on)}
+      aria-disabled={disabled || undefined}
+      tabIndex={onChange && !disabled ? 0 : undefined}
+      onClick={handle}
       onKeyDown={(e) => {
-        if (!onChange) return;
+        if (disabled || !onChange) return;
         if (e.key === " " || e.key === "Enter") {
           e.preventDefault();
           onChange(!on);

@@ -16,7 +16,9 @@ import { NumInput } from "../components/controls/NumInput";
 import { PillSelect } from "../components/controls/PillSelect";
 import { Segmented } from "../components/controls/Segmented";
 import { Slider } from "../components/controls/Slider";
+import { Toast } from "../components/controls/Toast";
 import { Toggle } from "../components/controls/Toggle";
+import { api } from "../lib/api";
 import type {
   FusionStrategy,
   RerankerDevice,
@@ -75,6 +77,41 @@ export function SettingsPanel({ settings, onPatch, onClose }: Props) {
   const [scope, setScope] = useState<"thread" | "global">("thread");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Wipe flow — two-click arming so a misclick can't nuke the corpus.
+  type WipeScope = "all" | "corpus" | "threads";
+  const [wipeArmed, setWipeArmed] = useState<WipeScope | null>(null);
+  const [wipeBusy, setWipeBusy] = useState<WipeScope | null>(null);
+  const [wipeToast, setWipeToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  const fireWipe = async (s: WipeScope) => {
+    if (wipeArmed !== s) {
+      setWipeArmed(s);
+      window.setTimeout(() => setWipeArmed((cur) => (cur === s ? null : cur)), 4000);
+      return;
+    }
+    setWipeArmed(null);
+    setWipeBusy(s);
+    try {
+      const report = await api.wipe(s);
+      const parts: string[] = [];
+      if (typeof report["milvus_chunks_before"] === "number") {
+        parts.push(`${report["milvus_chunks_before"]} chunks`);
+      }
+      if (typeof report["neo4j_nodes_before"] === "number") {
+        parts.push(`${report["neo4j_nodes_before"]} nodes`);
+      }
+      if (typeof report["pg_threads_before"] === "number") {
+        parts.push(`${report["pg_threads_before"]} threads`);
+      }
+      const summary = parts.length ? `· ${parts.join(" · ")}` : "";
+      setWipeToast({ kind: "ok", msg: `wiped ${s} ${summary}` });
+    } catch (e) {
+      setWipeToast({ kind: "err", msg: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setWipeBusy(null);
+    }
+  };
 
   const [draft, setDraft] = useState<Settings>(settings ?? DEFAULTS);
   useEffect(() => {
@@ -465,15 +502,58 @@ export function SettingsPanel({ settings, onPatch, onClose }: Props) {
           )}
 
           {tab === "Services" && (
-            <div className="drawer-section">
-              <div className="h">◗ services</div>
-              <div style={{ color: "var(--muted)", fontSize: "11px", lineHeight: 1.6 }}>
-                Live status is in the top-bar service dots. This panel is for read-only
-                inspection: ports, endpoints, and per-service health probes are surfaced
-                in <code className="mono">GET /api/health</code> — open the network tab
-                or hover the dots for latency.
+            <>
+              <div className="drawer-section">
+                <div className="h">◗ services</div>
+                <div style={{ color: "var(--muted)", fontSize: "11px", lineHeight: 1.6 }}>
+                  Live status is in the top-bar service dots. This panel is for read-only
+                  inspection: ports, endpoints, and per-service health probes are surfaced
+                  in <code className="mono">GET /api/health</code> — open the network tab
+                  or hover the dots for latency.
+                </div>
               </div>
-            </div>
+              <div
+                className="drawer-section"
+                style={{
+                  border: "1px solid color-mix(in oklab, var(--err) 30%, var(--hair-strong))",
+                  background: "color-mix(in oklab, var(--err) 4%, transparent)",
+                  padding: 14,
+                  borderRadius: 3,
+                  marginTop: 6,
+                }}
+              >
+                <div className="h" style={{ color: "var(--err)" }}>◗ danger zone</div>
+                <div style={{ color: "var(--muted)", fontSize: "11px", lineHeight: 1.6, marginBottom: 12 }}>
+                  Each button takes two clicks. The first arms it for 4 seconds; the second
+                  fires the wipe. Operations are irreversible — they hit the shared
+                  Milvus / Neo4j / Postgres stack the API is pointed at.
+                </div>
+                {(["corpus", "threads", "all"] as const).map((s) => {
+                  const armed = wipeArmed === s;
+                  const busying = wipeBusy === s;
+                  const labels: Record<typeof s, [string, string]> = {
+                    corpus: ["wipe corpus", "click again to confirm · drops docs + chunks + graph"],
+                    threads: ["wipe threads", "click again to confirm · drops conversations + pins"],
+                    all: ["wipe everything", "click again to confirm · full reset"],
+                  };
+                  return (
+                    <div key={s} style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+                      <button
+                        className="chip-btn danger"
+                        type="button"
+                        disabled={busying}
+                        onClick={() => void fireWipe(s)}
+                      >
+                        {busying ? "wiping…" : armed ? "confirm?" : labels[s][0]}
+                      </button>
+                      <span style={{ fontSize: 10.5, color: armed ? "var(--err)" : "var(--muted)" }}>
+                        {labels[s][1]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {err && (
@@ -490,6 +570,11 @@ export function SettingsPanel({ settings, onPatch, onClose }: Props) {
             >
               patch failed — {err}
             </div>
+          )}
+          {wipeToast && (
+            <Toast kind={wipeToast.kind} autoDismissMs={5000} onClose={() => setWipeToast(null)}>
+              {wipeToast.msg}
+            </Toast>
           )}
         </div>
 

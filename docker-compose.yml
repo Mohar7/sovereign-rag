@@ -27,6 +27,7 @@ services:
       timeout: 20s
       retries: 3
     networks: [sovereign]
+    restart: unless-stopped
 
   milvus-minio:
     image: minio/minio:RELEASE.2024-05-28T17-19-04Z
@@ -42,6 +43,7 @@ services:
       timeout: 20s
       retries: 3
     networks: [sovereign]
+    restart: unless-stopped
 
   milvus:
     image: milvusdb/milvus:v2.6.16
@@ -64,6 +66,7 @@ services:
       - milvus-etcd
       - milvus-minio
     networks: [sovereign]
+    restart: unless-stopped
 
   # ---------- Neo4j Community (has native vector index) ----------
   neo4j:
@@ -83,6 +86,7 @@ services:
       timeout: 10s
       retries: 5
     networks: [sovereign]
+    restart: unless-stopped
 
   # ---------- Postgres (LangGraph checkpoint store) ----------
   postgres:
@@ -103,6 +107,7 @@ services:
       timeout: 5s
       retries: 5
     networks: [sovereign]
+    restart: unless-stopped
 
   # ---------- SearXNG (self-hosted metasearch, no API key) ----------
   searxng:
@@ -114,6 +119,7 @@ services:
     ports:
       - "${SEARXNG_HOST_PORT:-8082}:8080"
     networks: [sovereign]
+    restart: unless-stopped
 
   # ---------- The API (opt-in via `--profile app`) ----------
   app:
@@ -141,6 +147,7 @@ services:
       postgres:
         condition: service_healthy
     networks: [sovereign]
+    restart: unless-stopped
 
   # ---------- LangGraph server (opt-in via `--profile ui`) ----------
   # Same image as `app`; just a different entrypoint. The frontend talks
@@ -188,6 +195,7 @@ services:
       postgres:
         condition: service_healthy
     networks: [sovereign]
+    restart: unless-stopped
 
   # ---------- Web UI (opt-in via `--profile ui`) ----------
   # Static SPA served by nginx; nginx proxies /lg/* to the LangGraph
@@ -206,6 +214,7 @@ services:
     depends_on:
       - langgraph
     networks: [sovereign]
+    restart: unless-stopped
 
 volumes:
   etcd-data:

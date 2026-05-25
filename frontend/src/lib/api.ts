@@ -188,4 +188,10 @@ export const api = {
     getJSON<WebSearchHit[]>(
       `/search?q=${encodeURIComponent(q)}&max_results=${maxResults}`,
     ),
+  wipe: (scope: "all" | "corpus" | "threads" = "all") =>
+    getJSON<Record<string, unknown>>("/admin/wipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope, confirm: "wipe" }),
+    }),
 };

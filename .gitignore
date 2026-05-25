@@ -42,7 +42,16 @@ deploy/searxng/limiter.toml
 deploy/searxng/*.db
 deploy/searxng/uwsgi.ini
 
+# LangGraph dev-server runtime checkpoint cache (in-memory store snapshots).
+.langgraph_api/
+
+# Local tool config (Claude Code workspace + cached skills).
+.agents/
+.claude/
+skills-lock.json
+
 # IDE / OS
 .idea/
 .vscode/
 .DS_Store
+.envrc

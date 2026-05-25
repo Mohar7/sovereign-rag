@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="32" viewBox="0 0 180 32" fill="none">
+  <rect x="3" y="3" width="16" height="16" rx="3" fill="currentColor" opacity="0.85"></rect>
+  <rect x="13" y="13" width="16" height="16" rx="3" fill="currentColor"></rect>
+  <text x="40" y="22" font-family="Inter, -apple-system, sans-serif" font-size="17" font-weight="600" letter-spacing="-0.014em" fill="currentColor">sovereign rag</text>
+</svg>

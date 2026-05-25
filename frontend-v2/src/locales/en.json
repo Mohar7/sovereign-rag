@@ -1,0 +1,75 @@
+{
+  "brand": {
+    "name": "sovereign rag",
+    "tagline": "Hybrid retrieval over your corpus."
+  },
+  "nav": {
+    "ask": "ask",
+    "library": "library",
+    "ingest": "ingest",
+    "threads": "threads",
+    "graph": "graph",
+    "evals": "evals",
+    "history": "history",
+    "settings": "settings"
+  },
+  "topbar": {
+    "search": "Search…",
+    "commandPalette": "Command palette",
+    "openCommandPalette": "Open command palette",
+    "user": "User"
+  },
+  "userMenu": {
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "language": "Language",
+    "languageEn": "English",
+    "languageRu": "Русский",
+    "about": "About sovereign rag"
+  },
+  "health": {
+    "ok": "All services healthy",
+    "warn": "Some services degraded",
+    "err": "Service outage"
+  },
+  "pages": {
+    "ask": {
+      "title": "Ask anything across your corpus.",
+      "subtitle": "Hybrid retrieval over graph and vector, reranked by cross-encoder, with inline citations."
+    },
+    "library": {
+      "title": "Library",
+      "empty": "No documents yet. Ingest a PDF or URL to get started."
+    },
+    "ingest": {
+      "title": "Ingest",
+      "empty": "Drop a file, paste a URL, or run a web search."
+    },
+    "threads": {
+      "title": "Threads",
+      "empty": "No threads yet."
+    },
+    "graph": {
+      "title": "Knowledge graph",
+      "empty": "The graph is empty. Index some documents to populate entities and relations."
+    },
+    "evals": {
+      "title": "Evals",
+      "empty": "Retrieval quality dashboard will appear here once you've run an eval."
+    },
+    "history": {
+      "title": "Run history",
+      "empty": "Every query you run gets an audit row here."
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Models, retrieval knobs, services."
+    }
+  },
+  "common": {
+    "loading": "Loading…",
+    "comingSoon": "coming soon"
+  }
+}

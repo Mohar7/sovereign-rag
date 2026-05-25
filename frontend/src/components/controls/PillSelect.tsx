@@ -3,13 +3,15 @@ interface Props {
   k?: string;
   /** The displayed value. */
   v: string;
+  /** Open state — rotates the chevron. */
+  open?: boolean;
   onClick?: () => void;
 }
 
-export function PillSelect({ k, v, onClick }: Props) {
+export function PillSelect({ k, v, open, onClick }: Props) {
   return (
     <span
-      className="pill-select"
+      className={`pill-select ${open ? "open" : ""}`}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}

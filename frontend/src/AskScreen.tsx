@@ -282,6 +282,11 @@ export function AskScreen() {
           rerankK={settings?.rerank_top_k ?? 5}
           graphOn={settings?.enable_graph_retrieval ?? true}
           fallbackMin={settings?.web_fallback_min_chunks ?? 3}
+          onModelChange={(v) => void patchSettings({ llm_model: v })}
+          onRetrieveKChange={(v) => void patchSettings({ retrieve_top_k: v })}
+          onRerankKChange={(v) => void patchSettings({ rerank_top_k: v })}
+          onGraphChange={(v) => void patchSettings({ enable_graph_retrieval: v })}
+          onFallbackChange={(v) => void patchSettings({ web_fallback_min_chunks: v })}
         />
       </main>
 

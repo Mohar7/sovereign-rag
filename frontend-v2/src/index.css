@@ -1,0 +1,238 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─────────────────────────────────────────────────────────────────
+   Sovereign RAG — Design Tokens (from Claude Design handoff)
+   Brand accent: indigo-600 / indigo-400
+   Neutrals: zinc 0–950
+   Fonts: Inter + JetBrains Mono (Cyrillic subset)
+   ───────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Raw palette ──────────────────────────────────────────────── */
+  --indigo-50:  #eef2ff;
+  --indigo-100: #e0e7ff;
+  --indigo-200: #c7d2fe;
+  --indigo-300: #a5b4fc;
+  --indigo-400: #818cf8;
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5;
+  --indigo-700: #4338ca;
+  --indigo-800: #3730a3;
+  --indigo-900: #312e81;
+  --indigo-950: #1e1b4b;
+
+  --zinc-50:   #fafafa;
+  --zinc-100:  #f4f4f5;
+  --zinc-200:  #e4e4e7;
+  --zinc-300:  #d4d4d8;
+  --zinc-400:  #a1a1aa;
+  --zinc-500:  #71717a;
+  --zinc-600:  #52525b;
+  --zinc-700:  #3f3f46;
+  --zinc-800:  #27272a;
+  --zinc-900:  #18181b;
+  --zinc-950:  #09090b;
+
+  --emerald-400: #34d399;
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+  --amber-400:   #fbbf24;
+  --amber-500:   #f59e0b;
+  --amber-600:   #d97706;
+  --rose-400:    #fb7185;
+  --rose-500:    #f43f5e;
+  --rose-600:    #e11d48;
+
+  /* ── shadcn contract — LIGHT ──────────────────────────────────── */
+  --background:           var(--zinc-50);
+  --foreground:           var(--zinc-950);
+  --card:                 #ffffff;
+  --card-foreground:      var(--zinc-950);
+  --popover:              #ffffff;
+  --popover-foreground:   var(--zinc-950);
+  --muted:                var(--zinc-100);
+  --muted-foreground:     var(--zinc-500);
+  --accent:               var(--zinc-100);
+  --accent-foreground:    var(--zinc-900);
+  --border:               var(--zinc-200);
+  --input:                var(--zinc-200);
+
+  --primary:              var(--indigo-600);
+  --primary-foreground:   #ffffff;
+  --secondary:            var(--zinc-100);
+  --secondary-foreground: var(--zinc-900);
+  --ring:                 var(--indigo-600);
+
+  --destructive:            var(--rose-600);
+  --destructive-foreground: #ffffff;
+  --success:                var(--emerald-600);
+  --success-foreground:     #ffffff;
+  --warning:                var(--amber-600);
+  --warning-foreground:     #ffffff;
+
+  --sidebar:                    #ffffff;
+  --sidebar-foreground:         var(--zinc-700);
+  --sidebar-primary:            var(--indigo-600);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent:             var(--zinc-100);
+  --sidebar-accent-foreground:  var(--zinc-900);
+  --sidebar-border:             var(--zinc-200);
+  --sidebar-ring:               var(--indigo-600);
+
+  --chart-1: #c7d2fe;
+  --chart-2: #a5b4fc;
+  --chart-3: #818cf8;
+  --chart-4: #6366f1;
+  --chart-5: #4338ca;
+
+  --radius-xs:   2px;
+  --radius-sm:   6px;
+  --radius:      8px;
+  --radius-lg:   12px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.06),
+               0 2px 4px -2px rgb(0 0 0 / 0.04);
+  --shadow-lg: 0 16px 36px -8px rgb(0 0 0 / 0.10),
+               0 4px 8px -4px rgb(0 0 0 / 0.06);
+
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system,
+               BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono",
+               Menlo, Consolas, monospace;
+}
+
+.dark {
+  --background:           var(--zinc-950);
+  --foreground:           var(--zinc-50);
+  --card:                 var(--zinc-900);
+  --card-foreground:      var(--zinc-50);
+  --popover:              var(--zinc-900);
+  --popover-foreground:   var(--zinc-50);
+  --muted:                var(--zinc-800);
+  --muted-foreground:     var(--zinc-400);
+  --accent:               var(--zinc-800);
+  --accent-foreground:    var(--zinc-50);
+  --border:               var(--zinc-800);
+  --input:                var(--zinc-800);
+
+  --primary:              var(--indigo-400);
+  --primary-foreground:   var(--zinc-950);
+  --secondary:            var(--zinc-800);
+  --secondary-foreground: var(--zinc-50);
+  --ring:                 var(--indigo-400);
+
+  --destructive:            var(--rose-400);
+  --destructive-foreground: var(--zinc-950);
+  --success:                var(--emerald-400);
+  --success-foreground:     var(--zinc-950);
+  --warning:                var(--amber-400);
+  --warning-foreground:     var(--zinc-950);
+
+  --sidebar:                    var(--zinc-900);
+  --sidebar-foreground:         var(--zinc-300);
+  --sidebar-primary:            var(--indigo-400);
+  --sidebar-primary-foreground: var(--zinc-950);
+  --sidebar-accent:             var(--zinc-800);
+  --sidebar-accent-foreground:  var(--zinc-50);
+  --sidebar-border:             var(--zinc-800);
+  --sidebar-ring:               var(--indigo-400);
+
+  --chart-1: #312e81;
+  --chart-2: #4338ca;
+  --chart-3: #6366f1;
+  --chart-4: #818cf8;
+  --chart-5: #a5b4fc;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.35),
+               0 2px 4px -2px rgb(0 0 0 / 0.25);
+  --shadow-lg: 0 16px 36px -8px rgb(0 0 0 / 0.5),
+               0 4px 8px -4px rgb(0 0 0 / 0.3);
+}
+
+/* Tailwind v4 token bridge — expose CSS vars as Tailwind theme. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-xs:   var(--radius-xs);
+  --radius-sm:   var(--radius-sm);
+  --radius:      var(--radius);
+  --radius-lg:   var(--radius-lg);
+  --radius-full: var(--radius-full);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html, body, #root {
+    margin: 0;
+    padding: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Ask-page motion primitives
+   ─────────────────────────────────────────────────────────────── */
+@keyframes sr-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.6; transform: scale(1.15); }
+}
+@keyframes sr-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}

@@ -26,6 +26,9 @@ interface Props {
   /** Seed the search box on mount — e.g. when the SourceDetailDrawer's
    * "open in library" button routes here with a doc title prefilled. */
   initialQuery?: string;
+  /** Called when a document row is activated. Defaults to navigating to
+   *  the library detail page for that doc. */
+  onSelectDoc?: (doc: DocumentSummary) => void;
 }
 
 export function CommandPalette({
@@ -34,6 +37,7 @@ export function CommandPalette({
   onOpenSettings,
   onClose,
   initialQuery = "",
+  onSelectDoc,
 }: Props) {
   const [q, setQ] = useState(initialQuery);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -117,7 +121,8 @@ export function CommandPalette({
     } else if (row.kind === "action") {
       row.a.onSelect();
     } else {
-      // doc click — no-op until /documents endpoint
+      if (onSelectDoc) onSelectDoc(row.d);
+      else window.location.hash = `library/${row.d.doc_id}`;
       onClose();
     }
   };

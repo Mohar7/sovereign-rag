@@ -10,7 +10,14 @@ import { AppShell } from "../components/AppShell";
 import { AppTopBar } from "../components/AppTopBar";
 import { Toggle } from "../components/controls/Toggle";
 import { KnobRow } from "../components/controls/KnobRow";
+import { Segmented } from "../components/controls/Segmented";
+import { Slider } from "../components/controls/Slider";
+import { NumInput } from "../components/controls/NumInput";
+import { PillSelect } from "../components/controls/PillSelect";
 import { useCorpusStats, useHealth, useSettings } from "../hooks/useCorpus";
+
+type ChunkStrategy = "Structure" | "Recursive" | "Semantic";
+type FailurePolicy = "retry" | "skip" | "halt";
 
 const TABS = [
   "Services",
@@ -30,6 +37,16 @@ export function GlobalSettings() {
   const { data: corpus } = useCorpusStats();
   const { data: settings, patch: patchSettings } = useSettings();
   const [tab, setTab] = useState<Tab>("Services");
+
+  // Ingest tab local state — TODO: persist to /api/settings
+  const [ingestStrategy, setIngestStrategy] = useState<ChunkStrategy>("Structure");
+  const [ingestChunkSize, setIngestChunkSize] = useState<number>(512);
+  const [ingestOverlap, setIngestOverlap] = useState<number>(64);
+  const [ingestConcurrency, setIngestConcurrency] = useState<number>(4);
+  const [ingestEmbedOpen, setIngestEmbedOpen] = useState<boolean>(false);
+  const [ingestExtractEntities, setIngestExtractEntities] = useState<boolean>(true);
+  const [ingestDedupe, setIngestDedupe] = useState<boolean>(false);
+  const [ingestFailurePolicy, setIngestFailurePolicy] = useState<FailurePolicy>("retry");
 
   const healthMap = health
     ? Object.fromEntries(health.services.map((s) => [s.name, s.state]))
@@ -173,7 +190,153 @@ export function GlobalSettings() {
           </div>
         )}
 
-        {(tab === "Ingest" || tab === "Theme" || tab === "Keyboard" || tab === "Security" || tab === "About") && (
+        {tab === "Ingest" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="ingest-panel">
+              <KnobRow label="Default chunking strategy">
+                <Segmented<ChunkStrategy>
+                  options={["Structure", "Recursive", "Semantic"]}
+                  active={ingestStrategy}
+                  onChange={(v) => {
+                    // TODO: persist to /api/settings
+                    setIngestStrategy(v);
+                  }}
+                />
+              </KnobRow>
+
+              <KnobRow label="Default chunk size" help="Tokens per chunk.">
+                <Slider
+                  min={128}
+                  max={2048}
+                  step={64}
+                  value={ingestChunkSize}
+                  bubble
+                  suffix=" tok"
+                  onChange={(v) => {
+                    // TODO: persist to /api/settings
+                    setIngestChunkSize(v);
+                  }}
+                />
+              </KnobRow>
+
+              <KnobRow label="Default overlap" help="Tokens shared between adjacent chunks.">
+                <Slider
+                  min={0}
+                  max={256}
+                  step={16}
+                  value={ingestOverlap}
+                  bubble
+                  suffix=" tok"
+                  onChange={(v) => {
+                    // TODO: persist to /api/settings
+                    setIngestOverlap(v);
+                  }}
+                />
+              </KnobRow>
+
+              <KnobRow label="Concurrency" help="Jobs in parallel — bound by Milvus + Ollama capacity.">
+                <NumInput
+                  value={ingestConcurrency}
+                  min={1}
+                  max={16}
+                  onChange={(v) => {
+                    // TODO: persist to /api/settings
+                    setIngestConcurrency(v);
+                  }}
+                />
+              </KnobRow>
+
+              <KnobRow label="Embeddings model" help="Default for new ingests. Per-job override allowed.">
+                <PillSelect
+                  k="model:"
+                  v="bge-large-en-v1.5"
+                  open={ingestEmbedOpen}
+                  onClick={() => {
+                    // TODO: open model picker popover
+                    setIngestEmbedOpen((o) => !o);
+                    console.log("ingest: embeddings model picker (stub)");
+                  }}
+                />
+              </KnobRow>
+
+              <KnobRow label="Auto-extract entities" help="Run NER + relation extraction into Neo4j.">
+                <Toggle
+                  on={ingestExtractEntities}
+                  onChange={(v) => {
+                    // TODO: persist to /api/settings
+                    setIngestExtractEntities(v);
+                  }}
+                />
+              </KnobRow>
+
+              <KnobRow label="Auto-deduplicate" help="MinHash near-dupe detection across the corpus.">
+                <Toggle
+                  on={ingestDedupe}
+                  onChange={(v) => {
+                    // TODO: persist to /api/settings
+                    setIngestDedupe(v);
+                  }}
+                />
+              </KnobRow>
+
+              <KnobRow label="Failure policy" help="What happens when a stage fails (parse error, OOM, etc.).">
+                <Segmented<FailurePolicy>
+                  options={["retry", "skip", "halt"]}
+                  active={ingestFailurePolicy}
+                  tooltips={{
+                    retry: "Retry up to 3 times with backoff.",
+                    skip: "Skip the failed document and continue.",
+                    halt: "Stop the entire ingest job.",
+                  }}
+                  onChange={(v) => {
+                    // TODO: persist to /api/settings
+                    setIngestFailurePolicy(v);
+                  }}
+                />
+              </KnobRow>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "4px 2px",
+                gap: "12px",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10.5px",
+                  color: "var(--muted)",
+                }}
+              >
+                scope: global · these defaults apply to every new ingest
+              </span>
+              <button
+                className="btn warm"
+                style={{ padding: "4px 12px", fontSize: "11px" }}
+                onClick={() => {
+                  // TODO: persist to /api/settings
+                  console.log("ingest: save defaults", {
+                    strategy: ingestStrategy,
+                    chunk_size: ingestChunkSize,
+                    overlap: ingestOverlap,
+                    concurrency: ingestConcurrency,
+                    extract_entities: ingestExtractEntities,
+                    deduplicate: ingestDedupe,
+                    failure_policy: ingestFailurePolicy,
+                  });
+                }}
+              >
+                save defaults
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(tab === "Theme" || tab === "Keyboard" || tab === "Security" || tab === "About") && (
           <div
             style={{
               padding: "40px 12px",
