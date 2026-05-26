@@ -1,4 +1,4 @@
-import { Box, Globe, Share2, Sparkles, type LucideIcon } from "lucide-react"
+import { ArrowUpRight, Box, Globe, Share2, Sparkles, type LucideIcon } from "lucide-react"
 
 import {
   Popover,
@@ -23,6 +23,13 @@ export interface CitationChipProps {
   page?: number
   snippet?: string
   className?: string
+  /**
+   * If provided, the popover footer becomes a real button that opens the
+   * full source detail (the same drawer the Library uses). Without it the
+   * chip is preview-only — keeps the docs-page / states.tsx demo content
+   * from accidentally implying an action when there isn't one wired up.
+   */
+  onOpen?: () => void
 }
 
 export function CitationChip({
@@ -32,6 +39,7 @@ export function CitationChip({
   page,
   snippet,
   className,
+  onOpen,
 }: CitationChipProps) {
   const { icon: Icon, label } = KIND_META[kind]
   return (
@@ -77,10 +85,26 @@ export function CitationChip({
             {snippet}
           </p>
         )}
-        <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-2 text-xs text-muted-foreground">
-          <span className="font-mono">open in source detail</span>
-          <kbd className="font-mono">↵</kbd>
-        </div>
+        {onOpen ? (
+          <button
+            type="button"
+            onClick={onOpen}
+            className={cn(
+              "mt-3 flex w-full items-center justify-between border-t border-border/60 pt-2",
+              "font-mono text-xs text-muted-foreground transition-colors",
+              "hover:text-primary focus-visible:text-primary",
+              "focus-visible:outline-none",
+            )}
+          >
+            <span>open in source detail</span>
+            <ArrowUpRight className="size-3.5" strokeWidth={2} />
+          </button>
+        ) : (
+          <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-2 text-xs text-muted-foreground">
+            <span className="font-mono">open in source detail</span>
+            <kbd className="font-mono">↵</kbd>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   )

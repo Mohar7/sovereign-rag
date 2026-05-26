@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react"
 import { Download, ExternalLink, FileText, Layers, Loader2, Network, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -15,19 +16,49 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useDeleteDocument } from "@/hooks/use-library"
 import { useDocumentChunks, useEntities } from "@/hooks/use-source-detail"
 import type { DocumentSummary } from "@/lib/api"
-import { downloadJSON } from "@/lib/utils"
+import { cn, downloadJSON } from "@/lib/utils"
 
 interface Props {
   doc: DocumentSummary | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onDeleted?: () => void
+  /**
+   * When set, the drawer auto-switches to the "Chunks" tab, scrolls the
+   * matching chunk into view, and rings it with a primary border. Used by
+   * the Ask page so clicking a citation lands the reader on the exact chunk
+   * that backed the answer.
+   */
+  focusChunkId?: string | null
 }
 
-export function SourceDrawer({ doc, open, onOpenChange, onDeleted }: Props) {
+export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId }: Props) {
   const chunks = useDocumentChunks(doc?.doc_id ?? null)
   const entities = useEntities(doc?.doc_id ?? null)
   const deleteDoc = useDeleteDocument()
+  const [activeTab, setActiveTab] = useState<string>("chunks")
+  const focusedChunkRef = useRef<HTMLElement | null>(null)
+
+  // When opened with a focusChunkId, ensure the Chunks tab is showing.
+  useEffect(() => {
+    if (open && focusChunkId) setActiveTab("chunks")
+  }, [open, focusChunkId])
+
+  // Once chunks have loaded, scroll the focused chunk into view. We can't do
+  // this purely with CSS because the ring needs to be measurable after a
+  // DOM commit, and ScrollArea wraps the content in its own viewport — so we
+  // walk to the closest scroll container and use scrollIntoView on the
+  // matching <article>.
+  useEffect(() => {
+    if (!focusChunkId || !chunks.data) return
+    const el = focusedChunkRef.current
+    if (!el) return
+    // Defer to next frame so the ScrollArea has finished layout.
+    const id = window.requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "center" })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [focusChunkId, chunks.data])
 
   const handleExport = () => {
     if (!doc) return
@@ -97,7 +128,10 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted }: Props) {
             <>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
                 <Badge variant="secondary" className="font-mono text-[10.5px]">
-                  {doc.chunks} chunks
+                  {/* Prefer the live chunks count from the loaded data so this
+                      stays correct when the drawer is opened with a partial
+                      DocumentSummary built from a citation (chunks=0). */}
+                  {chunks.data ? chunks.data.length : doc.chunks} chunks
                 </Badge>
                 <Badge variant="outline" className="font-mono text-[10.5px]">
                   {doc.doc_id.slice(0, 8)}
@@ -144,7 +178,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted }: Props) {
           )}
         </SheetHeader>
 
-        <Tabs defaultValue="chunks" className="flex flex-1 flex-col min-h-0">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col min-h-0">
           <TabsList className="rounded-none border-b border-border bg-transparent justify-start px-4 py-0 h-10">
             <TabsTrigger value="chunks" className="data-[state=active]:bg-transparent gap-1.5">
               <Layers className="size-3.5" strokeWidth={2} />
@@ -184,10 +218,18 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted }: Props) {
                     No chunks indexed for this document.
                   </div>
                 )}
-                {(chunks.data ?? []).map((c) => (
+                {(chunks.data ?? []).map((c) => {
+                  const isFocused = c.chunk_id === focusChunkId
+                  return (
                   <article
                     key={c.chunk_id}
-                    className="rounded-lg border border-border bg-card p-3"
+                    ref={isFocused ? focusedChunkRef : undefined}
+                    className={cn(
+                      "rounded-lg border bg-card p-3 transition-colors",
+                      isFocused
+                        ? "border-primary ring-2 ring-primary/40 bg-primary/[0.04]"
+                        : "border-border",
+                    )}
                   >
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                       <span className="inline-flex size-5 items-center justify-center rounded-[4px] bg-primary/10 font-mono text-[10.5px] font-semibold text-primary">
@@ -206,7 +248,8 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted }: Props) {
                       {c.raw_text || "(empty chunk)"}
                     </p>
                   </article>
-                ))}
+                  )
+                })}
               </div>
             </ScrollArea>
           </TabsContent>

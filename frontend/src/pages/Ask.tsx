@@ -22,6 +22,7 @@ import { AskEmptyHeader } from "@/components/ask/states"
 import { AssistantTurn, UserTurn } from "@/components/ask/turns"
 import { CitationChip, MonoTag } from "@/components/ask/citation-chip"
 import { TurnInspectorSheet } from "@/components/ask/turn-inspector-sheet"
+import { SourceDrawer } from "@/components/library/source-drawer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -29,7 +30,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useCorpusStats } from "@/hooks/use-ask"
 import { useAskStream } from "@/hooks/use-ask-stream"
 import { useThreadMessages } from "@/hooks/use-threads"
-import type { AskOverrides, CitationModel } from "@/lib/api"
+import type { AskOverrides, CitationModel, DocumentSummary } from "@/lib/api"
 import type { CitationKind } from "@/components/ask/citation-chip"
 
 interface Turn {
@@ -96,6 +97,11 @@ export function AskPage() {
   )
   const [inspectorTurnId, setInspectorTurnId] = useState<number | null>(null)
   const [contextOpen, setContextOpen] = useState(false)
+  // The citation the user clicked "open in source detail" on. We hold the
+  // whole CitationModel (not just the chunk_id) so we can synthesize a
+  // DocumentSummary header without an extra round-trip; the drawer fetches
+  // the actual chunks list lazily via /api/library/{doc_id}/chunks.
+  const [sourceCitation, setSourceCitation] = useState<CitationModel | null>(null)
   const [restoredThreadId, setRestoredThreadId] = useState<string | null>(
     () => readThreadFromURL(),
   )
@@ -330,6 +336,7 @@ export function AskPage() {
                     turn={t}
                     onRegenerate={() => handleRegenerate(t)}
                     onOpenInspector={() => setInspectorTurnId(t.id)}
+                    onOpenSource={setSourceCitation}
                   />
                 ))}
               </div>
@@ -385,8 +392,29 @@ export function AskPage() {
         open={contextOpen}
         onOpenChange={setContextOpen}
       />
+
+      <SourceDrawer
+        doc={citationToDocSummary(sourceCitation)}
+        focusChunkId={sourceCitation?.chunk_id}
+        open={sourceCitation !== null}
+        onOpenChange={(o) => !o && setSourceCitation(null)}
+      />
     </div>
   )
+}
+
+/** Synthesize a DocumentSummary from a citation so SourceDrawer can render
+ * its header without a separate round-trip. The chunks count is a
+ * placeholder; the drawer replaces it with the real count once the chunks
+ * query resolves. */
+function citationToDocSummary(c: CitationModel | null): DocumentSummary | null {
+  if (!c) return null
+  return {
+    doc_id: c.doc_id,
+    title: c.title || "untitled",
+    source_uri: c.source_uri || "",
+    chunks: 0,
+  }
 }
 
 interface AskEmptyControlledProps {
@@ -467,10 +495,12 @@ function ConversationTurn({
   turn,
   onRegenerate,
   onOpenInspector,
+  onOpenSource,
 }: {
   turn: Turn
   onRegenerate?: () => void
   onOpenInspector?: () => void
+  onOpenSource?: (cite: CitationModel) => void
 }) {
   return (
     <>
@@ -503,6 +533,7 @@ function ConversationTurn({
             <AnswerWithCitations
               answer={turn.answer + "▍"}
               citations={turn.citations ?? []}
+              onOpenSource={onOpenSource}
             />
           ) : (
             <p className="text-muted-foreground">
@@ -560,6 +591,7 @@ function ConversationTurn({
           <AnswerWithCitations
             answer={turn.answer ?? ""}
             citations={turn.citations ?? []}
+            onOpenSource={onOpenSource}
           />
         </AssistantTurn>
       )}
@@ -644,9 +676,11 @@ function ErrorBanner({ message }: { message: string }) {
 function AnswerWithCitations({
   answer,
   citations,
+  onOpenSource,
 }: {
   answer: string
   citations: CitationModel[]
+  onOpenSource?: (cite: CitationModel) => void
 }) {
   if (!answer) {
     return <EmptyAnswerFallback citations={citations} />
@@ -670,6 +704,7 @@ function AnswerWithCitations({
           doc={cite.title}
           page={cite.page ?? undefined}
           snippet={cite.snippet}
+          onOpen={onOpenSource ? () => onOpenSource(cite) : undefined}
         />
       ) : (
         <MonoTag key={`m-${key++}`}>[{n}]</MonoTag>
