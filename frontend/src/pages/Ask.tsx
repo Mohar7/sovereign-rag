@@ -284,7 +284,7 @@ export function AskPage() {
     <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         {isEmpty ? (
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="mx-auto h-full w-full max-w-3xl px-6">
               <AskEmptyControlled
                 value={composerText}

@@ -92,7 +92,7 @@ export function IngestPage() {
           </p>
         </header>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="mx-auto w-full max-w-3xl p-6">
             <Tabs defaultValue="url">
               <TabsList className="mb-5 w-full max-w-full overflow-x-auto">
@@ -588,7 +588,7 @@ function KnobsRail({
           Applied to every ingest. Change them in Settings.
         </p>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-1.5">
           {loading && (
             <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">

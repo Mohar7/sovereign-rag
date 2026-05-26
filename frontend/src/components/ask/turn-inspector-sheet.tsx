@@ -74,7 +74,7 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
           )}
         </SheetHeader>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="p-5 space-y-5">
             {turn && (
               <>

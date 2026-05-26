@@ -134,7 +134,7 @@ export function ThreadDetailSheet({
           )}
         </SheetHeader>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="p-5 space-y-4">
             {messages.isLoading && (
               <div className="flex items-center gap-2 text-[13px] text-muted-foreground">

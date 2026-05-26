@@ -284,7 +284,7 @@ export function LibraryPage() {
             Filters
           </div>
         </div>
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="p-4 space-y-5">
             <div className="space-y-2">
               <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
