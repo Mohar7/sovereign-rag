@@ -18,12 +18,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from sovereign_rag.chunking import chunk_document, contextualize
 from sovereign_rag.config import Settings, get_settings
-from sovereign_rag.documents import RetrievedChunk, SourceDocument
+from sovereign_rag.documents import Chunk, RetrievedChunk, SourceDocument
 from sovereign_rag.graph.neo4j_store import Neo4jGraphStore
 from sovereign_rag.providers.reranker import rerank
 from sovereign_rag.shared.llm_factory import get_chat_model
@@ -96,14 +97,26 @@ class RAGPipeline:
             return 0
         if self._s.enable_contextual_retrieval:
             chunks = await contextualize(doc, chunks)
+        return await self.index_chunks(chunks)
 
+    async def index_chunks(self, chunks: list[Chunk]) -> int:
+        """Index a list of already-chunked ``Chunk``s into Milvus (+ graph).
+
+        Callers that want fine-grained control over chunking (e.g. the
+        structured PRODUCT.md ingester which routes by section type) build
+        their own chunks and skip ``index_document``'s recursive splitter
+        and LLM-based contextualization — the section path is already in
+        each chunk's ``text``.
+        """
+        if not chunks:
+            return 0
         await self._milvus.ensure_collection()
-        tasks = [self._milvus.add_chunks(chunks)]
+        tasks: list[Any] = [self._milvus.add_chunks(chunks)]
         if self._graph is not None:
             await self._graph.ensure_schema()
             tasks.append(self._graph.add_chunks(chunks))
         await asyncio.gather(*tasks)
-        logger.info("Indexed %d chunks from doc %s", len(chunks), doc.doc_id)
+        logger.info("Indexed %d chunks", len(chunks))
         return len(chunks)
 
     async def delete_document(self, doc_id: str) -> dict[str, int]:

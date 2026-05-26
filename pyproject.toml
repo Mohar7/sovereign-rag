@@ -94,6 +94,11 @@ ignore = ["E501", "S101", "B008", "S105", "S104"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S", "T20"]
 "eval/**/*.py" = ["T20"]
+# PRODUCT.md is a Russian-language corpus — the parser intentionally matches
+# Cyrillic markers (В:, О:) that ruff flags as visually ambiguous with B/O.
+"src/sovereign_rag/ingestion/product_md.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_product_md_parser.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/ingest_product_md.py" = ["T20"]
 
 [tool.mypy]
 python_version = "3.12"
