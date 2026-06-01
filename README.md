@@ -10,7 +10,7 @@
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-black.svg)](https://ollama.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Local-dev (default).** Everything runs on your own machine — the LLM (Ollama), the embeddings (Ollama `bge-m3`), the reranker (`BAAI/bge-reranker-v2-m3` cross-encoder, runs on MPS / CUDA / CPU), the vector DB (Milvus), the graph DB (Neo4j), and web search (SearXNG) are all local or self-hosted. No paid keys required. The defaults in `config.py` reflect this.
+**Local-dev (default).** Everything runs on your own machine — the LLM (Ollama), the embeddings (Ollama `bge-m3`), the reranker (`Alibaba-NLP/gte-reranker-modernbert-base` cross-encoder, runs on MPS / CUDA / CPU), the vector DB (Milvus), the graph DB (Neo4j), and web search (SearXNG) are all local or self-hosted. No paid keys required. The defaults in `config.py` reflect this.
 
 **Honest caveat.** The CI integration tier on a self-hosted Mac Mini runner swaps the LLM to **Ollama Cloud** and embeddings to **OpenAI** — the Mac Mini can't reasonably host a local Ollama daemon, and Ollama Cloud doesn't expose an embeddings endpoint. So "sovereign-rag" is the *architecture* and the *local-dev path*; the CI integration job is not. Details in [Two-tier CI](#two-tier-ci).
 
@@ -34,7 +34,7 @@ The interface is a from-scratch design system in the register of **Linear · Ver
 | Technique | What it buys | Here |
 |---|---|---|
 | **Hybrid search** (dense + BM25, RRF) | BM25 catches exact tokens (codes, names, IDs) dense embeddings miss | Native in Milvus 2.6 — one `hybrid_search` call, server-side BM25 |
-| **Cross-encoder reranking** | Biggest quality-per-line jump; re-scores top-50 -> top-5 | `BAAI/bge-reranker-v2-m3` via sentence-transformers — multilingual, ~568M params, MPS/CUDA/CPU, no API |
+| **Cross-encoder reranking** | Biggest quality-per-line jump; re-scores top-50 -> top-5 | `Alibaba-NLP/gte-reranker-modernbert-base` via sentence-transformers — multilingual (ModernBERT), ~149M params, Apache 2.0, MPS/CUDA/CPU, no API |
 | **Contextual Retrieval** (Anthropic, 2024) | Prepends chunk-situating context before indexing; ~-35% retrieval failures | Local LLM generates the prefix |
 | **GraphRAG local-search** | Multi-hop questions vector search can't answer | Neo4j entity graph: vector-seed -> 1-hop traverse |
 | **Evaluation harness** | Proves the above instead of cargo-culting it | RAGAS (Ollama judge) + retrieval precision@k |
@@ -65,7 +65,7 @@ The interface is a from-scratch design system in the register of **Linear · Ver
                                 |                         |
                                 v                         |
                           +-----------+                   |
-                          |  rerank   |<------------------+   bge-reranker-v2-m3 (MPS/CUDA/CPU)
+                          |  rerank   |<------------------+   gte-reranker-modernbert-base (MPS/CUDA/CPU)
                           +-----+-----+
                                 |
                                 v
@@ -100,7 +100,7 @@ The interface is a from-scratch design system in the register of **Linear · Ver
   State: Postgres (LangGraph checkpoints, threads, interrupt resumes)         |
 ```
 
-**Stack.** Python 3.12 · **LangGraph 1.x** (StateGraph, conditional edges, HITL, AsyncPostgresSaver) · LangChain 1.x (splitters/contracts) · **Milvus 2.6** (`pymilvus`, AsyncMilvusClient) · **Neo4j 5 Community** (`neo4j-graphrag`) · **Postgres 16** (LangGraph checkpoints) · **Ollama** (`langchain-ollama`; qwen2.5:7b + bge-m3) · **`BAAI/bge-reranker-v2-m3`** cross-encoder via sentence-transformers · **Docling** (IBM, layout-aware parsing) · **Crawl4AI** + **SearXNG** ingestion · **RAGAS** eval · FastAPI · uv · ruff/mypy/pytest.
+**Stack.** Python 3.12 · **LangGraph 1.x** (StateGraph, conditional edges, HITL, AsyncPostgresSaver) · LangChain 1.x (splitters/contracts) · **Milvus 2.6** (`pymilvus`, AsyncMilvusClient) · **Neo4j 5 Community** (`neo4j-graphrag`) · **Postgres 16** (LangGraph checkpoints) · **Ollama** (`langchain-ollama`; qwen2.5:7b + bge-m3) · **`Alibaba-NLP/gte-reranker-modernbert-base`** cross-encoder via sentence-transformers · **Docling** (IBM, layout-aware parsing) · **Crawl4AI** + **SearXNG** ingestion · **RAGAS** eval · FastAPI · uv · ruff/mypy/pytest.
 
 ## Quick start
 
@@ -162,7 +162,7 @@ The QA path is a LangGraph `StateGraph` (see `src/sovereign_rag/agent/`):
 1. **`retrieve_local`** — Milvus `hybrid_search` (dense ANN + native BM25, fused with `RRFRanker`) and Neo4j `local_search` (vector-seed chunks → traverse `MENTIONS` edges 1 hop → append relation facts) run concurrently and get deduped by `chunk_id`.
 2. **Conditional edge** — if the deduped candidate count is below `WEB_FALLBACK_MIN_CHUNKS` and we haven't already tried, the graph routes through `web_fallback`; otherwise straight to `rerank`.
 3. **`web_fallback` (HITL)** — searches SearXNG, then `interrupt()`s with the candidate URLs. The client resumes with `approved_urls` via `/ask/resume`; the node crawls those, indexes them via `RAGPipeline.index_document`, re-runs local retrieval, and continues.
-4. **`rerank`** — `BAAI/bge-reranker-v2-m3` cross-encoder (sentence-transformers) re-scores the union and keeps top-`RERANK_TOP_K` on MPS / CUDA / CPU.
+4. **`rerank`** — `Alibaba-NLP/gte-reranker-modernbert-base` cross-encoder (sentence-transformers) re-scores the union and keeps top-`RERANK_TOP_K` on MPS / CUDA / CPU.
 5. **`generate`** — the LLM answers using only the numbered passages, citing `[n]` inline; the API returns structured citations.
 
 Each thread is checkpointed in Postgres (`AsyncPostgresSaver`), so interrupted runs survive restarts and can be resumed from a different request. Every layer is toggle-able via env (`ENABLE_GRAPH_RETRIEVAL`, `ENABLE_CONTEXTUAL_RETRIEVAL`, `WEB_FALLBACK_MIN_CHUNKS=0` to disable fallback) so the eval harness can A/B their contribution.
@@ -193,7 +193,7 @@ src/sovereign_rag/
   config.py           # pydantic-settings, local-by-default
   providers/
     ollama.py         # ChatOllama + OllamaEmbeddings
-    reranker.py       # bge-reranker-v2-m3 via sentence-transformers (MPS/CUDA/CPU)
+    reranker.py       # gte-reranker-modernbert-base via sentence-transformers (MPS/CUDA/CPU)
   chunking.py         # recursive split + contextual-retrieval prefixing
   ingestion/          # docling (pdf) . crawl4ai (web) . searxng (search)
   vectorstore/

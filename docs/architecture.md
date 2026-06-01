@@ -41,7 +41,7 @@ flowchart TB
 
   subgraph PROV["MODEL PROVIDERS"]
     LLM["LLM · Ollama Cloud<br/>minimax-m3"]
-    RER["Reranker<br/>bge-reranker-v2-m3"]
+    RER["Reranker<br/>gte-reranker-modernbert-base"]
     EMB["Embeddings · OpenAI<br/>text-embedding-3-large (3072-d)"]
   end
 
@@ -73,6 +73,6 @@ flowchart TB
 | **Control plane** | LangGraph `StateGraph` (`graphs/rag_qa`): `retrieve_local` → conditional `web_fallback` (HITL `interrupt()`) → `rerank` → `generate`. Checkpointed in Postgres via a **pooled** `AsyncPostgresSaver`, so threads + interrupts survive restarts. |
 | **Data plane** | Raw async clients (not LangChain wrappers): **Milvus 2.6** dense HNSW + native BM25, fused with RRF; **Neo4j 5** chunk+entity graph, vector-seed then 1-hop traverse. |
 | **Ingestion** | Docling (PDF/DOCX) · Crawl4AI (web) · SearXNG (search) · text → recursive chunk → contextual prefix → index into both stores. |
-| **Providers** | LLM: Ollama Cloud `minimax-m3`. Embeddings: OpenAI `text-embedding-3-large` (3072-d). Reranker: `BAAI/bge-reranker-v2-m3` cross-encoder (MPS/CUDA/CPU). |
+| **Providers** | LLM: Ollama Cloud `minimax-m3`. Embeddings: OpenAI `text-embedding-3-large` (3072-d). Reranker: `Alibaba-NLP/gte-reranker-modernbert-base` cross-encoder (~149M, multilingual, MPS/CUDA/CPU). |
 | **Persistence** | Postgres 16 (one shared psycopg pool): LangGraph checkpoints, the `runs` audit log, and `thread_context` pins/exclusions. |
 | **Eval & deploy** | RAGAS + precision@k/nDCG harness (`eval/`); deployed on a Mac Mini (Tailscale) as launchd services, auto-deployed on push to `main`. |

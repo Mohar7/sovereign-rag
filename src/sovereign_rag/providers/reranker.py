@@ -6,9 +6,10 @@ Milvus (and the graph), then rerank with a cross-encoder that scores each
 similarity used for first-stage retrieval — and keep the top
 `rerank_top_k`.
 
-The default model is **BAAI/bge-reranker-v2-m3**: ~568M parameters,
-multilingual (RU/UZ/EN/CN/…), one of the strongest open-source
-cross-encoders on BEIR. It runs on Apple Silicon (MPS), CUDA, or CPU —
+The default model is **Alibaba-NLP/gte-reranker-modernbert-base**: ~149M
+parameters (~3.8x smaller than bge-reranker-v2-m3), Apache 2.0, multilingual
+via ModernBERT — override to ``BAAI/bge-reranker-v2-m3`` for the older
+battle-tested baseline. It runs on Apple Silicon (MPS), CUDA, or CPU —
 device is auto-selected unless `RERANKER_DEVICE` is set explicitly. No
 network calls at inference time; the weights are downloaded once from
 HuggingFace and cached locally.
