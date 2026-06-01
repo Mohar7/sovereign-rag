@@ -80,6 +80,7 @@ jobs:
       # Opt-in flags the integration tests gate on.
       RUN_NEO4J_IT: "1"
       RUN_INGESTION_IT: "1"
+      RUN_PG_IT: "1"
     steps:
       - uses: actions/checkout@v4
 
