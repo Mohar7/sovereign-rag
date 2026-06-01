@@ -259,7 +259,9 @@ def chunk_product_md(
             for plan in _plan_prose(section, position):
                 plans.append(plan)
                 position += 1
-    return [_plan_to_chunk(p, doc_id=doc_id, source_uri=source_uri, title=document_title) for p in plans]
+    return [
+        _plan_to_chunk(p, doc_id=doc_id, source_uri=source_uri, title=document_title) for p in plans
+    ]
 
 
 def _plan_prose(section: Section, start_position: int) -> list[_ChunkPlan]:
@@ -346,9 +348,7 @@ def _plan_mixed(section: Section, start_position: int) -> list[_ChunkPlan]:
     return out
 
 
-def _plan_to_chunk(
-    plan: _ChunkPlan, *, doc_id: str, source_uri: str, title: str
-) -> Chunk:
+def _plan_to_chunk(plan: _ChunkPlan, *, doc_id: str, source_uri: str, title: str) -> Chunk:
     """Build the public ``Chunk`` — text carries the breadcrumb prefix.
 
     ``chunk_id`` is deterministic per ``doc_id`` + position + content hash,
@@ -478,9 +478,7 @@ def _denormalize_rows(table: list[list[str]]) -> list[str]:
         cells = [_strip_md(c) for c in row]
         # Pad short rows so we never IndexError on ragged input.
         cells += [""] * max(0, len(headers) - len(cells))
-        lines = [
-            f"{header}: {cell}" for header, cell in zip(headers, cells, strict=False) if cell
-        ]
+        lines = [f"{header}: {cell}" for header, cell in zip(headers, cells, strict=False) if cell]
         if lines:
             out.append("\n".join(lines))
     return out

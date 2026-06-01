@@ -177,9 +177,7 @@ def _snapshot() -> SettingsResponse:
         # Report the embedder actually in use: OpenAI setups embed with
         # ``openai_embed_model`` (text-embedding-3-large), not the local
         # ``embed_model`` (bge-m3) which is only the Ollama fallback.
-        embed_model=(
-            s.openai_embed_model if s.embed_provider == "openai" else s.embed_model
-        ),
+        embed_model=(s.openai_embed_model if s.embed_provider == "openai" else s.embed_model),
         embed_dim=s.embed_dim,
         retrieve_top_k=s.retrieve_top_k,
         rerank_top_k=s.rerank_top_k,

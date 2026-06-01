@@ -119,9 +119,7 @@ def test_classify_prose_table_and_faq() -> None:
 
 
 def test_chunk_product_md_emits_one_chunk_per_faq_pair() -> None:
-    chunks = chunk_product_md(
-        _MD, doc_id="test-dbp", source_uri="file:///tmp/PRODUCT.md"
-    )
+    chunks = chunk_product_md(_MD, doc_id="test-dbp", source_uri="file:///tmp/PRODUCT.md")
     faq_chunks = [c for c in chunks if c.metadata["doc_type"] == "faq"]
     # Three FAQ pairs in the fixture (2 under Аутентификация, 1 under Платежи).
     assert len(faq_chunks) == 3
@@ -131,9 +129,7 @@ def test_chunk_product_md_emits_one_chunk_per_faq_pair() -> None:
 
 
 def test_chunk_product_md_emits_one_chunk_per_table_row() -> None:
-    chunks = chunk_product_md(
-        _MD, doc_id="test-dbp", source_uri="file:///tmp/PRODUCT.md"
-    )
+    chunks = chunk_product_md(_MD, doc_id="test-dbp", source_uri="file:///tmp/PRODUCT.md")
     table_chunks = [c for c in chunks if c.metadata["doc_type"] == "table"]
     assert len(table_chunks) == 2  # two glossary rows
     # Denormalized: "Термин: ИНН\nРасшифровка: ..."
@@ -143,12 +139,9 @@ def test_chunk_product_md_emits_one_chunk_per_table_row() -> None:
 
 
 def test_chunk_text_carries_breadcrumb_but_raw_text_stays_clean() -> None:
-    chunks = chunk_product_md(
-        _MD, doc_id="test-dbp", source_uri="file:///tmp/PRODUCT.md"
-    )
+    chunks = chunk_product_md(_MD, doc_id="test-dbp", source_uri="file:///tmp/PRODUCT.md")
     faq_chunk = next(
-        c for c in chunks
-        if c.metadata["doc_type"] == "faq" and "забыл логин" in c.raw_text
+        c for c in chunks if c.metadata["doc_type"] == "faq" and "забыл логин" in c.raw_text
     )
     # text starts with [§27. FAQ > §Аутентификация ...] breadcrumb.
     assert faq_chunk.text.startswith("[§27. FAQ >")
