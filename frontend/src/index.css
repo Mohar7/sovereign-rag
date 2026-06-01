@@ -11,6 +11,11 @@
    ───────────────────────────────────────────────────────────────── */
 
 :root {
+  /* Tells the UA to paint native widgets (scrollbars, form controls,
+     spinners) in the light palette. Without this the OS scrollbar renders
+     light even when our tokens are dark — see ``.dark`` below. */
+  color-scheme: light;
+
   /* ── Raw palette ──────────────────────────────────────────────── */
   --indigo-50:  #eef2ff;
   --indigo-100: #e0e7ff;
@@ -135,6 +140,11 @@
 }
 
 .dark {
+  /* The fix: paint native scrollbars + form controls in the dark palette.
+     ``.dark`` is toggled on <html> (see lib/theme.tsx), so this lands on the
+     root element where ``color-scheme`` belongs. */
+  color-scheme: dark;
+
   --background:           var(--zinc-950);
   --foreground:           var(--zinc-50);
   --card:                 var(--zinc-900);
@@ -252,6 +262,34 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     min-height: 100vh;
+  }
+
+  /* Themed scrollbars. ``color-scheme`` (above) already fixes the native
+     light-in-dark bar on macOS/Chromium; this gives a consistent, subtle
+     thumb across Windows/Linux Chromium (thick default bars) and Firefox.
+     The tokens flip with the theme, so no per-mode override is needed. */
+  * {
+    scrollbar-width: thin;                              /* Firefox */
+    scrollbar-color: var(--border) transparent;         /* thumb / track */
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+    border: 2px solid transparent;                      /* inset the thumb */
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 
