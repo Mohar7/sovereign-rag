@@ -117,6 +117,7 @@ async def test_persist_then_load_round_trip() -> None:
     s = get_settings()
     async with AsyncConnectionPool[AsyncConnection[DictRow]](
         conninfo=s.langgraph_pg_uri,
+        min_size=1,
         max_size=2,
         open=False,
         kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
