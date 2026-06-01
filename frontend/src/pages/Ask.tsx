@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, Loader2, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import {
@@ -21,7 +22,7 @@ import {
 import { AskEmptyHeader } from "@/components/ask/states"
 import { AssistantTurn, UserTurn } from "@/components/ask/turns"
 import { CitationChip, MonoTag } from "@/components/ask/citation-chip"
-import { TurnInspectorSheet } from "@/components/ask/turn-inspector-sheet"
+import { TurnInspectorSheet, type InspectableTurn } from "@/components/ask/turn-inspector-sheet"
 import { SourceDrawer } from "@/components/library/source-drawer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useCorpusStats } from "@/hooks/use-ask"
 import { useAskStream } from "@/hooks/use-ask-stream"
 import { useThreadMessages } from "@/hooks/use-threads"
+import { formatCount } from "@/lib/format"
+import i18n from "@/lib/i18n"
 import type { AskOverrides, CitationModel, DocumentSummary } from "@/lib/api"
 import type { CitationKind } from "@/components/ask/citation-chip"
 
@@ -75,7 +78,7 @@ function citationToSource(c: CitationModel, i: number): SourceItem {
   return {
     n: i + 1,
     kind: pickKind(c),
-    title: c.title || "untitled",
+    title: c.title || i18n.t("common.untitled"),
     doc: c.source_uri || c.doc_id,
     page: c.page ?? undefined,
     score: c.score,
@@ -90,6 +93,7 @@ function readThreadFromURL(): string | null {
 }
 
 export function AskPage() {
+  const { t } = useTranslation()
   const [turns, setTurns] = useState<Turn[]>([])
   const [composerText, setComposerText] = useState("")
   const [composerConfig, setComposerConfig] = useState<ComposerConfig>(
@@ -270,7 +274,21 @@ export function AskPage() {
     })
   }
 
-  const inspectedTurn = turns.find((t) => t.id === inspectorTurnId) ?? null
+  const inspectedTurnRaw = turns.find((t) => t.id === inspectorTurnId) ?? null
+  const inspectedTurn: InspectableTurn | null = inspectedTurnRaw
+    ? {
+        id: inspectedTurnRaw.id,
+        question: inspectedTurnRaw.question,
+        answer: inspectedTurnRaw.answer ?? null,
+        citations: inspectedTurnRaw.citations ?? [],
+        retrieved: inspectedTurnRaw.retrieved ?? 0,
+        used: inspectedTurnRaw.used ?? 0,
+        threadId: inspectedTurnRaw.threadId,
+        overrides: inspectedTurnRaw.overrides,
+        stages: inspectedTurnRaw.stages,
+        totalMs: inspectedTurnRaw.totalMs,
+      }
+    : null
   // The first turn carries the thread_id once the SSE done arrives; before
   // that we may still have a restoredThreadId (from /?thread=...). Either
   // is a valid anchor for the context manager.
@@ -310,7 +328,7 @@ export function AskPage() {
                 {restoredThreadId && (
                   <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-[12px]">
                     <Badge variant="outline" className="font-mono text-[10.5px]">
-                      resuming
+                      {t("pages.ask.resuming")}
                     </Badge>
                     <span className="truncate font-mono text-[11.5px] text-muted-foreground">
                       {restoredThreadId}
@@ -320,14 +338,14 @@ export function AskPage() {
                       onClick={startFresh}
                       className="ml-auto text-[12px] text-primary hover:underline"
                     >
-                      Start fresh
+                      {t("actions.startFresh")}
                     </button>
                   </div>
                 )}
                 {isRestoring && (
                   <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
                     <Loader2 className="size-3.5 animate-spin" />
-                    Restoring conversation history…
+                    {t("pages.ask.restoring")}
                   </div>
                 )}
                 {turns.map((t) => (
@@ -370,12 +388,15 @@ export function AskPage() {
         <SourcesRail
           sources={sources}
           loading={sourcesLoading}
-          title="Sources"
+          title={t("pages.ask.sourcesTitle")}
           subtitle={
             sourcesLoading
-              ? "retrieving"
+              ? t("pages.ask.retrieving")
               : sources.length > 0
-                ? `${sources.length} of ${sources.length}`
+                ? t("pages.ask.sourcesCount", {
+                    used: formatCount(sources.length),
+                    total: formatCount(sources.length),
+                  })
                 : undefined
           }
         />
@@ -411,7 +432,7 @@ function citationToDocSummary(c: CitationModel | null): DocumentSummary | null {
   if (!c) return null
   return {
     doc_id: c.doc_id,
-    title: c.title || "untitled",
+    title: c.title || i18n.t("common.untitled"),
     source_uri: c.source_uri || "",
     chunks: 0,
   }
@@ -460,6 +481,7 @@ function CorpusStatsFooter({
 }: {
   stats: ReturnType<typeof useCorpusStats>["data"]
 }) {
+  const { t } = useTranslation()
   if (!stats) {
     return (
       <div
@@ -467,15 +489,15 @@ function CorpusStatsFooter({
         className="flex items-center justify-center gap-2 font-mono text-[12px] text-muted-foreground"
       >
         <Loader2 className="size-3.5 animate-spin" />
-        loading corpus stats…
+        {t("pages.ask.loadingCorpusStats")}
       </div>
     )
   }
   const rows: Array<[string, string]> = [
-    [stats.documents.toLocaleString(), "documents"],
-    [stats.chunks.toLocaleString(), "chunks"],
-    [stats.entities.toLocaleString(), "entities"],
-    [stats.relations.toLocaleString(), "relations"],
+    [formatCount(stats.documents), t("pages.ask.statDocuments")],
+    [formatCount(stats.chunks), t("pages.ask.statChunks")],
+    [formatCount(stats.entities), t("pages.ask.statEntities")],
+    [formatCount(stats.relations), t("pages.ask.statRelations")],
   ]
   return (
     <div className="flex flex-wrap items-baseline justify-center gap-x-8 gap-y-2 pt-2 font-mono text-[12px] text-muted-foreground">
@@ -502,6 +524,7 @@ function ConversationTurn({
   onOpenInspector?: () => void
   onOpenSource?: (cite: CitationModel) => void
 }) {
+  const { t } = useTranslation()
   return (
     <>
       <UserTurn>{turn.question}</UserTurn>
@@ -520,7 +543,7 @@ function ConversationTurn({
                   animation: "sr-pulse 1.4s ease-in-out infinite",
                 }}
               />
-              <span className="text-primary">streaming</span>
+              <span className="text-primary">{t("status.streaming")}</span>
             </>
           }
         >
@@ -537,7 +560,7 @@ function ConversationTurn({
             />
           ) : (
             <p className="text-muted-foreground">
-              Retrieving and reranking
+              {t("pages.ask.retrievingReranking")}
               <span
                 aria-hidden
                 className="ml-1 inline-block align-[-3px]"
@@ -554,7 +577,7 @@ function ConversationTurn({
       )}
 
       {turn.status === "error" && (
-        <ErrorBanner message={turn.error ?? "Request failed."} />
+        <ErrorBanner message={turn.error ?? t("pages.ask.requestFailed")} />
       )}
 
       {turn.status === "ok" && (
@@ -567,7 +590,10 @@ function ConversationTurn({
               <span>sovereign-rag</span>
               <span aria-hidden>·</span>
               <span className="tabular-nums">
-                {turn.used} of {turn.retrieved} chunks
+                {t("pages.ask.chunksUsed", {
+                  used: formatCount(turn.used ?? 0),
+                  total: formatCount(turn.retrieved ?? 0),
+                })}
               </span>
               {turn.totalMs !== undefined && (
                 <>
@@ -600,11 +626,12 @@ function ConversationTurn({
 }
 
 function EmptyAnswerFallback({ citations }: { citations: CitationModel[] }) {
+  const { t } = useTranslation()
   if (citations.length === 0) {
     return (
       <Card className="bg-muted/50">
         <CardContent className="p-4 text-sm text-muted-foreground">
-          The model returned no answer and no sources matched.
+          {t("pages.ask.noAnswerNoSources")}
         </CardContent>
       </Card>
     )
@@ -612,8 +639,7 @@ function EmptyAnswerFallback({ citations }: { citations: CitationModel[] }) {
   return (
     <div className="space-y-3">
       <p className="text-sm italic text-muted-foreground">
-        The model returned no answer text. Showing the {citations.length}{" "}
-        retrieved chunk{citations.length === 1 ? "" : "s"} instead.
+        {t("pages.ask.emptyAnswerFallback", { count: citations.length })}
       </p>
       <ol className="space-y-2.5">
         {citations.map((c, i) => (
@@ -626,7 +652,7 @@ function EmptyAnswerFallback({ citations }: { citations: CitationModel[] }) {
                 [{i + 1}]
               </span>
               <span className="truncate font-medium text-foreground">
-                {c.title || "untitled"}
+                {c.title || t("common.untitled")}
               </span>
               {c.page !== null && c.page !== undefined && (
                 <span className="font-mono tabular-nums">p.{c.page}</span>
@@ -646,6 +672,7 @@ function EmptyAnswerFallback({ citations }: { citations: CitationModel[] }) {
 }
 
 function ErrorBanner({ message }: { message: string }) {
+  const { t } = useTranslation()
   return (
     <div
       className="flex items-start gap-3 rounded-xl border p-4"
@@ -660,13 +687,13 @@ function ErrorBanner({ message }: { message: string }) {
       />
       <div className="min-w-0 flex-1">
         <div className="text-[14px] font-semibold text-foreground">
-          The /ask call failed.
+          {t("pages.ask.askCallFailed")}
         </div>
         <div className="mt-1 break-words font-mono text-[12px] leading-[1.55] text-muted-foreground">
           {message}
         </div>
       </div>
-      <Button variant="ghost" size="icon" className="size-8" aria-label="dismiss">
+      <Button variant="ghost" size="icon" className="size-8" aria-label={t("pages.ask.dismiss")}>
         <X className="size-3.5" strokeWidth={2} />
       </Button>
     </div>

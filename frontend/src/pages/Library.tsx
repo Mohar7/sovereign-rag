@@ -15,6 +15,7 @@ import {
   ArrowUpDown,
   Filter,
   FileText,
+  Globe,
   Loader2,
   RefreshCw,
   Search,
@@ -22,6 +23,7 @@ import {
   X,
 } from "lucide-react"
 import { toast } from "sonner"
+import { Trans, useTranslation } from "react-i18next"
 
 import { SourceDrawer } from "@/components/library/source-drawer"
 import { Badge } from "@/components/ui/badge"
@@ -53,13 +55,16 @@ import {
 } from "@/hooks/use-library"
 import { useIngest } from "@/hooks/use-ingest"
 import { api, type DocumentSummary } from "@/lib/api"
+import { formatCount } from "@/lib/format"
 import { cn, downloadJSON } from "@/lib/utils"
 
 // ─────────────────────────────────────────────────────────────────
 // Columns
 // ─────────────────────────────────────────────────────────────────
 
-function makeColumns(): ColumnDef<DocumentSummary>[] {
+type TFunc = ReturnType<typeof useTranslation>["t"]
+
+function makeColumns(t: TFunc): ColumnDef<DocumentSummary>[] {
   return [
     {
       id: "select",
@@ -73,7 +78,7 @@ function makeColumns(): ColumnDef<DocumentSummary>[] {
                 : false
           }
           onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
-          aria-label="select all"
+          aria-label={t("pages.library.selectAll")}
         />
       ),
       cell: ({ row }) => (
@@ -81,7 +86,7 @@ function makeColumns(): ColumnDef<DocumentSummary>[] {
           checked={row.getIsSelected()}
           onCheckedChange={(v) => row.toggleSelected(!!v)}
           onClick={(e) => e.stopPropagation()}
-          aria-label="select row"
+          aria-label={t("pages.library.selectRow")}
         />
       ),
       enableSorting: false,
@@ -89,21 +94,38 @@ function makeColumns(): ColumnDef<DocumentSummary>[] {
     },
     {
       accessorKey: "title",
-      header: "Title",
+      header: t("pages.library.colTitle"),
       cell: ({ row }) => (
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
             <FileText className="size-3.5" strokeWidth={2} />
           </span>
           <span className="truncate font-medium text-foreground">
-            {row.original.title || "untitled"}
+            {row.original.title || t("common.untitled")}
           </span>
         </div>
       ),
     },
     {
+      id: "kind",
+      header: t("pages.library.colKind"),
+      accessorFn: (row) => inferDocKind(row.source_uri),
+      enableSorting: false,
+      size: 96,
+      cell: ({ row }) => {
+        const kind = inferDocKind(row.original.source_uri)
+        const Icon = kind === "web" ? Globe : FileText
+        return (
+          <Badge variant="secondary" className="gap-1 font-mono text-[10px] uppercase tracking-wide">
+            <Icon className="size-3" strokeWidth={2} />
+            {kind}
+          </Badge>
+        )
+      },
+    },
+    {
       accessorKey: "source_uri",
-      header: "Source",
+      header: t("pages.library.colSource"),
       cell: ({ row }) => (
         <span className="truncate font-mono text-[12px] text-muted-foreground">
           {row.original.source_uri || "—"}
@@ -111,11 +133,24 @@ function makeColumns(): ColumnDef<DocumentSummary>[] {
       ),
     },
     {
+      id: "status",
+      header: t("pages.library.colStatus"),
+      enableSorting: false,
+      size: 96,
+      // A document only appears in the library once it's fully indexed, so its
+      // status is always "ready". (No async indexing queue is surfaced here.)
+      cell: () => (
+        <Badge variant="success" className="font-mono text-[10px] uppercase tracking-wide">
+          {t("pages.library.statusReady")}
+        </Badge>
+      ),
+    },
+    {
       accessorKey: "chunks",
-      header: "Chunks",
+      header: t("pages.library.colChunks"),
       cell: ({ row }) => (
         <span className="font-mono tabular-nums text-foreground">
-          {row.original.chunks}
+          {formatCount(row.original.chunks)}
         </span>
       ),
     },
@@ -127,6 +162,7 @@ function makeColumns(): ColumnDef<DocumentSummary>[] {
 // ─────────────────────────────────────────────────────────────────
 
 export function LibraryPage() {
+  const { t } = useTranslation()
   const [query, setQuery] = useState("")
   const [sorting, setSorting] = useState<SortingState>([
     { id: "chunks", desc: true },
@@ -173,7 +209,7 @@ export function LibraryPage() {
     if (found) setDrawerDoc(found)
   }, [data, drawerDoc])
 
-  const columns = useMemo(makeColumns, [])
+  const columns = useMemo(() => makeColumns(t), [t])
   const table = useReactTable({
     data,
     columns,
@@ -200,14 +236,14 @@ export function LibraryPage() {
     const urlDocs = selectedDocs.filter((d) => /^https?:\/\//.test(d.source_uri))
     const skipped = selectedDocs.length - urlDocs.length
     if (urlDocs.length === 0) {
-      toast.error("Nothing to re-index", {
-        description: "Re-index only supports docs with an http(s) source_uri.",
+      toast.error(t("pages.library.reindexNothingTitle"), {
+        description: t("pages.library.reindexNothingDesc"),
       })
       return
     }
     if (skipped > 0) {
-      toast(`${urlDocs.length} URL docs queued, ${skipped} skipped`, {
-        description: "Skipped docs were ingested from file or pasted text.",
+      toast(t("pages.library.reindexQueued", { queued: urlDocs.length, skipped }), {
+        description: t("pages.library.reindexQueuedDesc"),
       })
     }
     let ok = 0
@@ -218,13 +254,13 @@ export function LibraryPage() {
         ok++
       } catch (err) {
         fail++
-        toast.error(`Re-index failed for ${d.title}: ${(err as Error).message}`)
+        toast.error(t("pages.library.reindexFailedOne", { title: d.title, message: (err as Error).message }))
       }
     }
     if (fail === 0) {
-      toast.success(`Re-indexed ${ok} document${ok === 1 ? "" : "s"}.`)
+      toast.success(t("pages.library.reindexDone", { count: ok }))
     } else {
-      toast.error(`${ok} re-indexed, ${fail} failed.`)
+      toast.error(t("pages.library.reindexPartial", { ok, fail }))
     }
     setRowSelection({})
     void docs.refetch()
@@ -238,23 +274,29 @@ export function LibraryPage() {
       const errors = res.results.filter((r) => r.error).length
       if (errors === 0) {
         toast.success(
-          `Deleted ${res.results.length} document${res.results.length === 1 ? "" : "s"} (${res.total_chunks_deleted} chunks).`,
+          t("pages.library.deleteDone", {
+            count: res.results.length,
+            chunks: formatCount(res.total_chunks_deleted),
+          }),
         )
       } else {
         toast.error(
-          `${res.results.length - errors} deleted, ${errors} failed.`,
+          t("pages.library.deletePartial", {
+            deleted: res.results.length - errors,
+            failed: errors,
+          }),
         )
       }
       setRowSelection({})
       setConfirmDelete(false)
     } catch (err) {
-      toast.error(`Delete failed: ${(err as Error).message}`)
+      toast.error(t("pages.library.deleteFailed", { message: (err as Error).message }))
     }
   }
 
   const onBulkExport = async () => {
     if (selectedDocs.length === 0) return
-    const tid = toast.loading(`Exporting ${selectedDocs.length} document${selectedDocs.length === 1 ? "" : "s"}…`)
+    const tid = toast.loading(t("pages.library.exportLoading", { count: selectedDocs.length }))
     try {
       const exported = await Promise.all(
         selectedDocs.map(async (d) => ({
@@ -268,9 +310,9 @@ export function LibraryPage() {
         documents: exported,
       }
       downloadJSON(payload, `library-export-${exported.length}docs.json`)
-      toast.success(`Exported ${exported.length} document${exported.length === 1 ? "" : "s"}.`, { id: tid })
+      toast.success(t("pages.library.exportDone", { count: exported.length }), { id: tid })
     } catch (err) {
-      toast.error(`Export failed: ${(err as Error).message}`, { id: tid })
+      toast.error(t("pages.library.exportFailed", { message: (err as Error).message }), { id: tid })
     }
   }
 
@@ -281,14 +323,14 @@ export function LibraryPage() {
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2 text-[14px] font-semibold">
             <Filter className="size-3.5 text-muted-foreground" strokeWidth={2} />
-            Filters
+            {t("pages.library.filters")}
           </div>
         </div>
         <ScrollArea className="flex-1 min-h-0">
           <div className="p-4 space-y-5">
             <div className="space-y-2">
               <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-                search
+                {t("pages.library.search")}
               </div>
               <div className="relative">
                 <Search
@@ -296,7 +338,7 @@ export function LibraryPage() {
                   strokeWidth={2}
                 />
                 <Input
-                  placeholder="title or url"
+                  placeholder={t("pages.library.searchPlaceholder")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className="pl-8 h-9 text-[13px]"
@@ -306,7 +348,7 @@ export function LibraryPage() {
                     type="button"
                     onClick={() => setQuery("")}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label="clear"
+                    aria-label={t("actions.clear")}
                   >
                     <X className="size-3" strokeWidth={2} />
                   </button>
@@ -314,16 +356,17 @@ export function LibraryPage() {
               </div>
             </div>
             <FilterChecklist
-              label="kind"
+              label={t("pages.library.kind")}
               options={["pdf", "docx", "web", "text", "file"]}
               selected={kindFilters}
               onToggle={toggleKind}
               counts={kindCounts}
             />
             <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[11.5px] leading-[1.5] text-muted-foreground">
-              Kind is derived from <code className="font-mono">source_uri</code>{" "}
-              client-side. Status + indexed_at land when the backend grows
-              those columns.
+              <Trans
+                i18nKey="pages.library.kindNote"
+                components={{ code: <code className="font-mono" /> }}
+              />
             </div>
           </div>
         </ScrollArea>
@@ -333,11 +376,11 @@ export function LibraryPage() {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* top toolbar */}
         <div className="flex items-center gap-3 border-b border-border px-6 py-3">
-          <h1 className="text-[15px] font-semibold tracking-tight">Library</h1>
+          <h1 className="text-[15px] font-semibold tracking-tight">{t("pages.library.heading")}</h1>
           <span className="font-mono text-[11.5px] text-muted-foreground">
             {docs.isLoading
-              ? "loading…"
-              : `${total} document${total === 1 ? "" : "s"}`}
+              ? t("common.loading")
+              : t("pages.library.documentCount", { count: total, formattedCount: formatCount(total) })}
           </span>
           {selectedCount > 0 && (
             <BulkActionBar
@@ -359,12 +402,12 @@ export function LibraryPage() {
               className={cn("size-3.5", docs.isFetching && "animate-spin")}
               strokeWidth={2}
             />
-            Refresh
+            {t("actions.refresh")}
           </Button>
         </div>
 
         {/* table */}
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="relative flex-1 min-h-0 overflow-hidden">
           <ScrollArea className="h-full">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
@@ -378,7 +421,7 @@ export function LibraryPage() {
                           key={h.id}
                           style={{ width: h.getSize() }}
                           className={cn(
-                            "h-10 text-[12px] font-medium text-muted-foreground",
+                            "h-10 font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground",
                             canSort && "cursor-pointer select-none",
                           )}
                           onClick={canSort ? h.column.getToggleSortingHandler() : undefined}
@@ -401,8 +444,8 @@ export function LibraryPage() {
                   : table.getRowModel().rows.length === 0
                     ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="py-10 text-center text-[13px] text-muted-foreground">
-                          No documents match the current filters.
+                        <TableCell colSpan={6} className="py-10 text-center text-[13px] text-muted-foreground">
+                          {t("pages.library.noMatch")}
                         </TableCell>
                       </TableRow>
                     )
@@ -410,8 +453,16 @@ export function LibraryPage() {
                         <TableRow
                           key={row.id}
                           data-state={row.getIsSelected() ? "selected" : undefined}
-                          className="cursor-pointer hover:bg-muted/40"
+                          tabIndex={0}
+                          role="button"
+                          className="cursor-pointer outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                           onClick={() => setDrawerDoc(row.original)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault()
+                              setDrawerDoc(row.original)
+                            }
+                          }}
                         >
                           {row.getVisibleCells().map((cell) => (
                             <TableCell key={cell.id}>
@@ -423,14 +474,28 @@ export function LibraryPage() {
               </TableBody>
             </Table>
           </ScrollArea>
+          {/* protection gradients — fade rows under the sticky header / above the footer */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-10 z-20 h-10"
+            style={{ background: "linear-gradient(to bottom, var(--background), transparent)" }}
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-10"
+            style={{ background: "linear-gradient(to top, var(--background), transparent)" }}
+          />
         </div>
 
         {/* foot */}
         <div className="flex items-center justify-between border-t border-border px-6 py-2.5 text-[12px] text-muted-foreground">
           <span>
             {selectedCount > 0
-              ? `${selectedCount} selected of ${total}`
-              : `${total} document${total === 1 ? "" : "s"}`}
+              ? t("pages.library.selectedOfTotal", {
+                  selected: formatCount(selectedCount),
+                  total: formatCount(total),
+                })
+              : t("pages.library.documentCount", { count: total, formattedCount: formatCount(total) })}
           </span>
           <span className="font-mono text-[11px]">/api/documents/search</span>
         </div>
@@ -456,12 +521,10 @@ export function LibraryPage() {
               <span className="inline-flex size-8 items-center justify-center rounded-md bg-destructive/10 text-destructive">
                 <AlertTriangle className="size-4" strokeWidth={2} />
               </span>
-              Delete {selectedCount} document{selectedCount === 1 ? "" : "s"}?
+              {t("pages.library.deleteDialogTitle", { count: selectedCount })}
             </DialogTitle>
             <DialogDescription>
-              This wipes every chunk + entity belonging to the selected
-              document{selectedCount === 1 ? "" : "s"} from Milvus and Neo4j.
-              The action is irreversible.
+              {t("pages.library.deleteDialogDesc", { count: selectedCount })}
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted/30 p-2 text-[12px]">
@@ -471,22 +534,22 @@ export function LibraryPage() {
                   key={d.doc_id}
                   className="flex items-baseline justify-between gap-2"
                 >
-                  <span className="truncate text-foreground">{d.title || "untitled"}</span>
+                  <span className="truncate text-foreground">{d.title || t("common.untitled")}</span>
                   <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground">
-                    {d.chunks} chunks
+                    {t("pages.library.chunksCount", { count: d.chunks, formattedCount: formatCount(d.chunks) })}
                   </span>
                 </li>
               ))}
               {selectedDocs.length > 30 && (
                 <li className="text-muted-foreground">
-                  …and {selectedDocs.length - 30} more
+                  {t("pages.library.andMore", { count: selectedDocs.length - 30, formattedCount: formatCount(selectedDocs.length - 30) })}
                 </li>
               )}
             </ul>
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("actions.cancel")}</Button>
             </DialogClose>
             <Button
               variant="destructive"
@@ -498,7 +561,7 @@ export function LibraryPage() {
               ) : (
                 <Trash2 className="size-3.5" strokeWidth={2} />
               )}
-              Delete {selectedCount}
+              {t("pages.library.deleteN", { count: selectedCount, formattedCount: formatCount(selectedCount) })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -584,14 +647,15 @@ function BulkActionBar({
   onExport: () => void
   onClear: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center gap-1.5">
-      <Badge className="font-mono text-[10.5px]">{count} selected</Badge>
+      <Badge className="font-mono text-[10.5px]">{t("actions.selected", { count })}</Badge>
       <Button variant="outline" size="sm" className="h-7 gap-1.5" onClick={onReindex}>
-        <RefreshCw className="size-3" strokeWidth={2} /> Re-index
+        <RefreshCw className="size-3" strokeWidth={2} /> {t("pages.library.reindex")}
       </Button>
       <Button variant="outline" size="sm" className="h-7" onClick={onExport}>
-        Export
+        {t("actions.export")}
       </Button>
       <Button
         variant="outline"
@@ -599,9 +663,9 @@ function BulkActionBar({
         className="h-7 gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
         onClick={onDelete}
       >
-        <Trash2 className="size-3" strokeWidth={2} /> Delete
+        <Trash2 className="size-3" strokeWidth={2} /> {t("actions.delete")}
       </Button>
-      <Button variant="ghost" size="icon" className="size-7" onClick={onClear} aria-label="clear selection">
+      <Button variant="ghost" size="icon" className="size-7" onClick={onClear} aria-label={t("pages.library.clearSelection")}>
         <X className="size-3.5" strokeWidth={2} />
       </Button>
     </div>
@@ -621,7 +685,13 @@ function SkeletonRow() {
         </div>
       </TableCell>
       <TableCell>
+        <Skeleton className="h-5 w-14 rounded-sm" />
+      </TableCell>
+      <TableCell>
         <Skeleton className="h-3 w-64" />
+      </TableCell>
+      <TableCell>
+        <Skeleton className="h-5 w-14 rounded-sm" />
       </TableCell>
       <TableCell>
         <Skeleton className="h-3 w-8" />

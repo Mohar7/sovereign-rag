@@ -1,4 +1,5 @@
 import { ArrowRight, Bot, Copy, Download, Loader2, MessageSquare, Trash2, User } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +15,7 @@ import {
 import { useDeleteThread, useThreadMessages } from "@/hooks/use-threads"
 import type { ThreadMessage, ThreadSummary } from "@/lib/api"
 import { downloadJSON } from "@/lib/utils"
+import { formatCount, formatDecimal } from "@/lib/format"
 
 interface Props {
   thread: ThreadSummary | null
@@ -30,6 +32,7 @@ export function ThreadDetailSheet({
   onContinue,
   onDeleted,
 }: Props) {
+  const { t } = useTranslation()
   const messages = useThreadMessages(thread?.thread_id ?? null)
   const deleteThread = useDeleteThread()
 
@@ -37,7 +40,7 @@ export function ThreadDetailSheet({
     if (!thread) return
     try {
       await deleteThread.mutateAsync(thread.thread_id)
-      toast.success("Thread deleted.")
+      toast.success(t("pages.threads.deleted"))
       onOpenChange(false)
       onDeleted?.()
     } catch (err) {
@@ -61,7 +64,7 @@ export function ThreadDetailSheet({
       },
       `thread-${thread.thread_id.slice(0, 8)}.json`,
     )
-    toast.success("Exported.")
+    toast.success(t("pages.threads.exported"))
   }
 
   return (
@@ -77,7 +80,7 @@ export function ThreadDetailSheet({
             </span>
             <div className="min-w-0 flex-1">
               <SheetTitle className="line-clamp-2 text-[15px] font-semibold leading-[1.35]">
-                {thread?.question || "Thread"}
+                {thread?.question || t("pages.threads.threadLabel")}
               </SheetTitle>
               {thread && (
                 <SheetDescription className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground">
@@ -90,12 +93,13 @@ export function ThreadDetailSheet({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {thread.citations > 0 && (
                 <Badge variant="secondary" className="font-mono text-[10.5px]">
-                  {thread.citations} citation{thread.citations === 1 ? "" : "s"}
+                  {t("pages.threads.citationCount", { count: thread.citations })}
                 </Badge>
               )}
               <Badge variant="outline" className="font-mono text-[10.5px]">
-                {(messages.data ?? []).length} message
-                {(messages.data ?? []).length === 1 ? "" : "s"}
+                {t("pages.threads.messageCount", {
+                  count: (messages.data ?? []).length,
+                })}
               </Badge>
               <Button
                 variant="default"
@@ -103,7 +107,7 @@ export function ThreadDetailSheet({
                 className="ml-auto h-7 gap-1.5"
                 onClick={handleContinue}
               >
-                Continue
+                {t("actions.continue")}
                 <ArrowRight className="size-3" strokeWidth={2} />
               </Button>
               <Button
@@ -114,7 +118,7 @@ export function ThreadDetailSheet({
                 disabled={messages.isLoading}
               >
                 <Download className="size-3" strokeWidth={2} />
-                Export
+                {t("actions.export")}
               </Button>
               <Button
                 variant="outline"
@@ -128,7 +132,7 @@ export function ThreadDetailSheet({
                 ) : (
                   <Trash2 className="size-3" strokeWidth={2} />
                 )}
-                Delete
+                {t("actions.delete")}
               </Button>
             </div>
           )}
@@ -138,7 +142,7 @@ export function ThreadDetailSheet({
           <div className="p-5 space-y-4">
             {messages.isLoading && (
               <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" /> loading conversation…
+                <Loader2 className="size-3.5 animate-spin" /> {t("pages.threads.loadingConversation")}
               </div>
             )}
             {messages.error && (
@@ -148,7 +152,7 @@ export function ThreadDetailSheet({
             )}
             {!messages.isLoading && (messages.data?.length ?? 0) === 0 && !messages.error && (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center text-[13px] text-muted-foreground">
-                No messages stored for this thread.
+                {t("pages.threads.noMessages")}
               </div>
             )}
             {(messages.data ?? []).map((m, i) => (
@@ -162,6 +166,7 @@ export function ThreadDetailSheet({
 }
 
 function MessageBlock({ message }: { message: ThreadMessage }) {
+  const { t } = useTranslation()
   const isUser = message.role === "user"
   return (
     <article className="flex gap-3">
@@ -181,21 +186,24 @@ function MessageBlock({ message }: { message: ThreadMessage }) {
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span className="font-medium uppercase tracking-wide">
-            {isUser ? "You" : "Assistant"}
+            {isUser ? t("pages.threads.roleYou") : t("pages.threads.roleAssistant")}
           </span>
           {!isUser && message.retrieved > 0 && (
             <span className="font-mono tabular-nums">
-              {message.used} of {message.retrieved} chunks
+              {t("pages.threads.chunksUsed", {
+                used: formatCount(message.used),
+                retrieved: formatCount(message.retrieved),
+              })}
             </span>
           )}
           <button
             type="button"
             onClick={() => {
               void navigator.clipboard.writeText(message.content)
-              toast.success("Copied.")
+              toast.success(t("pages.threads.copied"))
             }}
             className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-muted"
-            aria-label="copy message"
+            aria-label={t("pages.threads.copyMessage")}
           >
             <Copy className="size-3" strokeWidth={2} />
           </button>
@@ -208,14 +216,13 @@ function MessageBlock({ message }: { message: ThreadMessage }) {
           }
         >
           {message.content || (
-            <span className="italic text-muted-foreground">(empty)</span>
+            <span className="italic text-muted-foreground">{t("pages.threads.emptyMessage")}</span>
           )}
         </div>
         {!isUser && message.citations.length > 0 && (
           <details className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-[12px]">
             <summary className="cursor-pointer select-none font-medium text-foreground">
-              {message.citations.length} citation
-              {message.citations.length === 1 ? "" : "s"}
+              {t("pages.threads.citationCount", { count: message.citations.length })}
             </summary>
             <ol className="mt-2 space-y-1.5">
               {message.citations.map((c, i) => (
@@ -225,10 +232,12 @@ function MessageBlock({ message }: { message: ThreadMessage }) {
                     {c.title || c.source_uri || c.doc_id || c.chunk_id}
                   </span>
                   {c.page !== null && c.page !== undefined && (
-                    <span className="font-mono text-muted-foreground">p.{c.page}</span>
+                    <span className="font-mono text-muted-foreground">
+                      {t("pages.threads.pageLabel", { page: c.page })}
+                    </span>
                   )}
                   <span className="ml-auto font-mono tabular-nums text-muted-foreground">
-                    {c.score.toFixed(2)}
+                    {formatDecimal(c.score)}
                   </span>
                 </li>
               ))}

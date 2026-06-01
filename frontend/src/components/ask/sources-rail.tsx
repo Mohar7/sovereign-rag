@@ -13,9 +13,12 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { useTranslation } from "react-i18next"
+
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { formatDecimal } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { CitationKind } from "./citation-chip"
 
@@ -57,6 +60,7 @@ const KIND_LABEL: Record<CitationKind, string> = {
 // ─────────────────────────────────────────────────────────────────
 
 function SourceCard({ s }: { s: SourceItem }) {
+  const { t } = useTranslation()
   const Icon = KIND_ICON[s.kind]
   return (
     <button
@@ -81,7 +85,7 @@ function SourceCard({ s }: { s: SourceItem }) {
         </span>
         {s.used && (
           <span className="ml-auto rounded-[2px] bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-primary">
-            used
+            {t("pages.ask.used")}
           </span>
         )}
         <span
@@ -90,7 +94,7 @@ function SourceCard({ s }: { s: SourceItem }) {
             s.used ? "" : "ml-auto",
           )}
         >
-          {s.score.toFixed(2)}
+          {formatDecimal(s.score)}
         </span>
       </div>
 
@@ -137,11 +141,13 @@ export interface SourcesRailProps {
 export function SourcesRail({
   sources = [],
   loading = false,
-  title = "Sources",
+  title,
   subtitle,
   defaultCollapsed = false,
 }: SourcesRailProps) {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
+  const effectiveTitle = title ?? t("pages.ask.sourcesTitle")
 
   if (collapsed) {
     return (
@@ -150,7 +156,7 @@ export function SourcesRail({
           variant="ghost"
           size="icon"
           className="size-7"
-          aria-label="expand sources"
+          aria-label={t("pages.ask.expandSources")}
           onClick={() => setCollapsed(false)}
         >
           <PanelRightOpen className="size-3.5" strokeWidth={2} />
@@ -159,7 +165,7 @@ export function SourcesRail({
           className="mt-1 select-none font-mono text-[10px] uppercase tracking-wide text-muted-foreground"
           style={{ writingMode: "vertical-rl" }}
         >
-          {title} · {sources.length}
+          {effectiveTitle} · {sources.length}
         </span>
       </aside>
     )
@@ -167,26 +173,25 @@ export function SourcesRail({
 
   return (
     <aside
-      // Responsive width: 280px on small lg, 320px on lg, 360px on xl+. Keeps
-      // the main column readable when the rail is open on narrower screens.
-      className="hidden w-[280px] shrink-0 flex-col border-l border-border bg-background lg:flex xl:w-[320px] 2xl:w-[360px]"
+      // Fixed 360px sources rail per the design system (chrome.jsx default).
+      className="hidden w-[360px] shrink-0 flex-col border-l border-border bg-background lg:flex"
     >
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{title}</h2>
+        <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{effectiveTitle}</h2>
         {subtitle && (
           <span className="truncate font-mono text-[11px] text-muted-foreground">
             {subtitle}
           </span>
         )}
         <span className="ml-auto inline-flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="size-7" aria-label="filter sources">
+          <Button variant="ghost" size="icon" className="size-7" aria-label={t("pages.ask.filterSources")}>
             <Filter className="size-3.5" strokeWidth={2} />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             className="size-7"
-            aria-label="collapse sources"
+            aria-label={t("pages.ask.collapseSources")}
             onClick={() => setCollapsed(true)}
           >
             <PanelRightClose className="size-3.5" strokeWidth={2} />
@@ -212,7 +217,7 @@ export function SourcesRail({
             : sources.length === 0
               ? (
                 <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center text-[12.5px] text-muted-foreground">
-                  No sources for this turn.
+                  {t("pages.ask.noSourcesForTurn")}
                 </div>
               )
               : sources.map((s) => <SourceCard key={`${s.n}-${s.doc}`} s={s} />)}
@@ -225,12 +230,12 @@ export function SourcesRail({
           onClick={() => setCollapsed(true)}
           className="inline-flex items-center gap-1 hover:text-foreground"
         >
-          collapse
+          {t("pages.ask.collapse")}
           <ChevronRight className="size-3" strokeWidth={2} />
         </button>
         <span className="ml-2 inline-flex items-center gap-1">
           <ExternalLink className="size-3" strokeWidth={2} />
-          inspector opens per-turn details
+          {t("pages.ask.inspectorHint")}
         </span>
       </div>
     </aside>

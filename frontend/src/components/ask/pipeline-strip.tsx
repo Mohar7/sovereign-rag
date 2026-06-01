@@ -1,4 +1,5 @@
 import { Check, CircleDot, Loader2, ScanSearch, Sparkles, Wand2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 
@@ -30,16 +31,17 @@ export interface PipelineStripProps {
 
 const STAGE_ORDER: StageName[] = ["retrieve_local", "rerank", "generate"]
 
-const STAGE_META: Record<StageName, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
-  retrieve_local: { label: "retrieve", icon: ScanSearch },
-  rerank: { label: "rerank", icon: Wand2 },
-  generate: { label: "generate", icon: Sparkles },
+const STAGE_META: Record<StageName, { labelKey: string; icon: React.ComponentType<{ className?: string }> }> = {
+  retrieve_local: { labelKey: "pages.ask.pipeline.retrieve", icon: ScanSearch },
+  rerank: { labelKey: "pages.ask.pipeline.rerank", icon: Wand2 },
+  generate: { labelKey: "pages.ask.pipeline.generate", icon: Sparkles },
 }
 
 export function PipelineStrip({ stages }: PipelineStripProps) {
+  const { t } = useTranslation()
   return (
     <ol
-      aria-label="retrieval pipeline progress"
+      aria-label={t("pages.ask.pipeline.progress")}
       className="flex items-center gap-1.5 rounded-full border border-border bg-card/60 px-2 py-1.5 text-[12px]"
     >
       {STAGE_ORDER.map((name, i) => {
@@ -65,7 +67,7 @@ function StagePill({
   stage: StageState
   meta: (typeof STAGE_META)[StageName]
 }) {
-  const Icon = meta.icon
+  const { t } = useTranslation()
   const isRunning = stage.phase === "running"
   const isDone = stage.phase === "done"
   return (
@@ -80,25 +82,19 @@ function StagePill({
         !isDone && !isRunning && "text-muted-foreground",
       )}
     >
-      <StatusIcon phase={stage.phase} Icon={Icon} />
-      <span className="text-[11.5px] uppercase tracking-wide">{meta.label}</span>
+      <StatusIcon phase={stage.phase} />
+      <span className="text-[11.5px] uppercase tracking-wide">{t(meta.labelKey)}</span>
       {isDone && typeof stage.elapsedMs === "number" && (
         <span className="font-mono text-[10.5px] tabular-nums opacity-80">
           {formatMs(stage.elapsedMs)}
         </span>
       )}
-      {isRunning && <span className="font-mono text-[10.5px] uppercase opacity-80">live</span>}
+      {isRunning && <span className="font-mono text-[10.5px] uppercase opacity-80">{t("status.live")}</span>}
     </span>
   )
 }
 
-function StatusIcon({
-  phase,
-  Icon,
-}: {
-  phase: StagePhase
-  Icon: React.ComponentType<{ className?: string }>
-}) {
+function StatusIcon({ phase }: { phase: StagePhase }) {
   if (phase === "running") {
     return <Loader2 className="size-3 animate-spin" />
   }

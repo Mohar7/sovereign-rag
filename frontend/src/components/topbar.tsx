@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { Command as CommandIcon, Search } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -11,6 +12,8 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { HealthPill } from "@/components/health-pill"
+import { TopbarUserMenu } from "@/components/user-menu"
+import { cn } from "@/lib/utils"
 import type { NavKey } from "@/components/app-sidebar"
 
 interface Props {
@@ -20,8 +23,33 @@ interface Props {
 
 export function Topbar({ page, onOpenCommand }: Props) {
   const { t } = useTranslation()
+  // The topbar is solid at rest and only gains the blur/translucency once
+  // content scrolls under it. Scrolling happens inside per-page containers
+  // (not the window), so listen in the capture phase to catch any of them.
+  const [scrolled, setScrolled] = useState(false)
+  // Reset the scrolled state when the page changes (React-blessed
+  // adjust-state-during-render pattern — the new page starts at the top).
+  const [prevPage, setPrevPage] = useState(page)
+  if (page !== prevPage) {
+    setPrevPage(page)
+    setScrolled(false)
+  }
+  useEffect(() => {
+    const onScroll = (e: Event) => {
+      const el = e.target as HTMLElement | null
+      setScrolled(!!el && typeof el.scrollTop === "number" && el.scrollTop > 4)
+    }
+    document.addEventListener("scroll", onScroll, true)
+    return () => document.removeEventListener("scroll", onScroll, true)
+  }, [])
+
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b bg-background/75 backdrop-blur-md">
+    <header
+      className={cn(
+        "sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b transition-colors duration-[120ms]",
+        scrolled ? "bg-background/75 backdrop-blur-md" : "bg-background",
+      )}
+    >
       <div className="flex items-center gap-2 px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mx-2 h-4" />
@@ -56,6 +84,7 @@ export function Topbar({ page, onOpenCommand }: Props) {
           <Search className="size-4" />
         </Button>
         <HealthPill />
+        <TopbarUserMenu />
       </div>
     </header>
   )

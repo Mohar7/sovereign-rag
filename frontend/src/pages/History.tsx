@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { Trans, useTranslation } from "react-i18next"
 import {
   AlertCircle,
   ChevronDown,
@@ -18,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useRunsList } from "@/hooks/use-runs"
 import type { CitationModel, RunRow } from "@/lib/api"
+import { formatCount, formatDateTime, formatDecimal } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // ─────────────────────────────────────────────────────────────────
@@ -31,6 +33,7 @@ import { cn } from "@/lib/utils"
 type StatusFilter = "all" | "ok" | "error"
 
 export function HistoryPage() {
+  const { t } = useTranslation()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
@@ -70,19 +73,20 @@ export function HistoryPage() {
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2 text-[14px] font-semibold">
             <HistoryIcon className="size-3.5 text-muted-foreground" strokeWidth={2} />
-            Run history
+            {t("pages.history.title")}
           </div>
           <p className="mt-2 font-mono text-[11px] leading-[1.55] text-muted-foreground">
-            {totalCount.toLocaleString()} runs · {okCount.toLocaleString()} ok ·{" "}
+            {t("pages.history.runsCount", { count: totalCount, value: formatCount(totalCount) })} ·{" "}
+            {t("pages.history.okCount", { count: okCount, value: formatCount(okCount) })} ·{" "}
             <span className={errCount > 0 ? "text-destructive" : ""}>
-              {errCount.toLocaleString()} errors
+              {t("pages.history.errorsCount", { count: errCount, value: formatCount(errCount) })}
             </span>
           </p>
         </div>
         <div className="space-y-3 border-b border-border px-4 py-3">
           <div>
             <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-              search
+              {t("pages.history.searchLabel")}
             </div>
             <div className="relative mt-1">
               <Search
@@ -90,7 +94,7 @@ export function HistoryPage() {
                 strokeWidth={2}
               />
               <Input
-                placeholder="question, answer, model, id…"
+                placeholder={t("pages.history.search")}
                 className="pl-8 h-8 text-[13px]"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -108,7 +112,7 @@ export function HistoryPage() {
           </div>
           <div>
             <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-              status
+              {t("pages.history.statusLabel")}
             </div>
             <div className="mt-1 flex gap-1.5">
               {(["all", "ok", "error"] as const).map((s) => (
@@ -123,7 +127,7 @@ export function HistoryPage() {
                       : "border-border bg-card hover:bg-muted",
                   )}
                 >
-                  {s}
+                  {t(`status.${s}`)}
                 </button>
               ))}
             </div>
@@ -131,9 +135,10 @@ export function HistoryPage() {
         </div>
         <div className="mt-auto border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
           <p className="leading-[1.55]">
-            Every <span className="font-mono">/ask</span> writes one row.
-            Errors are kept too — useful for tracking down model failures or
-            retrieval misses.
+            <Trans
+              i18nKey="pages.history.subtitle"
+              components={{ code: <span className="font-mono" /> }}
+            />
           </p>
         </div>
       </aside>
@@ -141,11 +146,16 @@ export function HistoryPage() {
       {/* main */}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 border-b border-border px-6 py-3">
-          <h1 className="text-[15px] font-semibold tracking-tight">Run history</h1>
+          <h1 className="text-[15px] font-semibold tracking-tight">
+            {t("pages.history.heading")}
+          </h1>
           <span className="font-mono text-[11.5px] text-muted-foreground">
             {runs.isLoading
-              ? "loading…"
-              : `${filtered.length} of ${totalCount}`}
+              ? t("pages.history.loading")
+              : t("pages.history.ofTotal", {
+                  filtered: formatCount(filtered.length),
+                  total: formatCount(totalCount),
+                })}
           </span>
           <Button
             variant="ghost"
@@ -157,7 +167,7 @@ export function HistoryPage() {
               className={cn("size-3.5", runs.isFetching && "animate-spin")}
               strokeWidth={2}
             />
-            Refresh
+            {t("actions.refresh")}
           </Button>
         </div>
 
@@ -189,18 +199,24 @@ export function HistoryPage() {
 }
 
 function EmptyState({ totalCount, hasQuery }: { totalCount: number; hasQuery: boolean }) {
+  const { t } = useTranslation()
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-2 py-16 text-center">
       <span className="inline-flex size-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
         <Filter className="size-5" strokeWidth={1.75} />
       </span>
       <h2 className="text-[16px] font-semibold text-foreground">
-        {hasQuery ? "Nothing matches" : "No runs yet"}
+        {hasQuery
+          ? t("pages.history.emptyFilterTitle")
+          : t("pages.history.emptyTitle")}
       </h2>
       <p className="text-[13px] leading-[1.55] text-muted-foreground">
         {hasQuery
-          ? `${totalCount} run${totalCount === 1 ? "" : "s"} indexed, but none match the current filter.`
-          : "Runs appear here after you ask a question from the Ask page."}
+          ? t("pages.history.emptyFilterBody", {
+              count: totalCount,
+              value: formatCount(totalCount),
+            })
+          : t("pages.history.empty")}
       </p>
     </div>
   )
@@ -219,16 +235,10 @@ function RunRowItem({
   expanded: boolean
   onToggle: () => void
 }) {
+  const { t } = useTranslation()
   const isError = run.status === "error"
   const total = run.timings?.total
-  const created = run.created_at
-    ? new Date(run.created_at).toLocaleString(undefined, {
-        month: "short",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "—"
+  const created = run.created_at ? formatDateTime(run.created_at) : "—"
 
   const openThread = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -244,7 +254,7 @@ function RunRowItem({
         onClick={onToggle}
         className={cn(
           "flex w-full items-start gap-3 px-6 py-3 text-left transition-colors",
-          "hover:bg-muted/30 focus-visible:outline-none focus-visible:bg-muted/40",
+          "hover:bg-muted/30 focus-visible:outline-none focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         )}
       >
         <span className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground">
@@ -273,17 +283,14 @@ function RunRowItem({
             </span>
             <span className="truncate font-medium text-foreground">{run.question}</span>
             <Badge
-              variant={isError ? "outline" : "secondary"}
-              className={cn(
-                "ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wide",
-                isError && "border-destructive/40 text-destructive",
-              )}
+              variant={isError ? "destructive" : "success"}
+              className="ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wide"
             >
-              {run.status}
+              {t(`status.${run.status}`)}
             </Badge>
           </div>
 
-          <div className="ml-7 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
+          <div className="ml-7 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] tabular-nums text-muted-foreground">
             <span>{created}</span>
             {run.model && (
               <>
@@ -295,7 +302,11 @@ function RunRowItem({
             <span>{formatMs(total)}</span>
             <span aria-hidden>·</span>
             <span>
-              {run.used} of {run.retrieved} chunks
+              {t("pages.history.chunksUsed", {
+                count: run.retrieved,
+                used: formatCount(run.used),
+                retrieved: formatCount(run.retrieved),
+              })}
             </span>
             <span aria-hidden>·</span>
             <button
@@ -315,6 +326,7 @@ function RunRowItem({
 }
 
 function RunRowDetail({ run }: { run: RunRow }) {
+  const { t } = useTranslation()
   const stageRows: Array<[string, number | undefined]> = [
     ["retrieve_local", run.timings?.retrieve_local],
     ["rerank", run.timings?.rerank],
@@ -325,7 +337,7 @@ function RunRowDetail({ run }: { run: RunRow }) {
     <div className="border-l-2 border-primary/30 bg-muted/20 px-6 py-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* timings */}
-        <Section label="Pipeline timings">
+        <Section label={t("pages.history.pipelineTimings")}>
           <dl className="grid grid-cols-[140px_1fr] gap-y-1 text-[12px]">
             {stageRows.map(([label, ms]) => (
               <div key={label} className="contents">
@@ -351,30 +363,37 @@ function RunRowDetail({ run }: { run: RunRow }) {
         </Section>
 
         {/* overrides */}
-        <Section label="Overrides used">
+        <Section label={t("pages.history.overridesUsed")}>
           <OverridesBlock overrides={run.overrides} />
         </Section>
       </div>
 
       {/* answer */}
-      <Section label="Answer">
+      <Section label={t("pages.history.answer")}>
         <div className="rounded-lg border border-border bg-card px-3 py-2 text-[12.5px] leading-[1.55] whitespace-pre-wrap">
           {run.answer || (
-            <span className="italic text-muted-foreground">(no answer)</span>
+            <span className="italic text-muted-foreground">
+              {t("pages.history.noAnswer")}
+            </span>
           )}
         </div>
       </Section>
 
       {/* citations */}
       {run.citations.length > 0 && (
-        <Section label={`Citations · ${run.citations.length}`}>
+        <Section
+          label={t("pages.history.citations", {
+            count: run.citations.length,
+            value: formatCount(run.citations.length),
+          })}
+        >
           <CitationsList citations={run.citations} />
         </Section>
       )}
 
       {/* error trace */}
       {run.error && (
-        <Section label="Error">
+        <Section label={t("pages.history.error")}>
           <pre className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-[11.5px] leading-[1.45] text-destructive whitespace-pre-wrap">
             {run.error}
           </pre>
@@ -400,10 +419,11 @@ function OverridesBlock({
 }: {
   overrides: Record<string, unknown> | null
 }) {
+  const { t } = useTranslation()
   if (!overrides || Object.keys(overrides).length === 0) {
     return (
       <p className="text-[12px] italic text-muted-foreground">
-        Server defaults (no overrides).
+        {t("pages.history.serverDefaults")}
       </p>
     )
   }
@@ -420,6 +440,7 @@ function OverridesBlock({
 }
 
 function CitationsList({ citations }: { citations: CitationModel[] }) {
+  const { t } = useTranslation()
   return (
     <ol className="space-y-1.5">
       {citations.map((c, i) => (
@@ -429,12 +450,14 @@ function CitationsList({ citations }: { citations: CitationModel[] }) {
         >
           <div className="flex items-baseline gap-2 text-[12px]">
             <span className="font-mono font-semibold text-primary">[{i + 1}]</span>
-            <span className="truncate font-medium text-foreground">{c.title || "untitled"}</span>
+            <span className="truncate font-medium text-foreground">
+              {c.title || t("common.untitled")}
+            </span>
             {c.page !== null && c.page !== undefined && (
               <span className="font-mono tabular-nums text-muted-foreground">p.{c.page}</span>
             )}
             <span className="ml-auto font-mono tabular-nums text-muted-foreground">
-              {c.score.toFixed(3)}
+              {formatDecimal(c.score, 3)}
             </span>
           </div>
           {c.snippet && (

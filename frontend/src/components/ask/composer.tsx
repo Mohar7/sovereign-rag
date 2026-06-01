@@ -8,6 +8,7 @@ import {
   Settings2,
   Sparkles,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -83,6 +84,7 @@ function ModelPickerPopover({
   selected: string | null
   onSelect: (next: string | null) => void
 }) {
+  const { t } = useTranslation()
   const settings = useSettings()
   const provider = settings.data?.llm_provider ?? "ollama"
   const models = useModels(provider)
@@ -95,16 +97,16 @@ function ModelPickerPopover({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" aria-label="pick model">
+        <button type="button" aria-label={t("pages.ask.pickModel")}>
           <ChipButton icon={<Sparkles strokeWidth={2} />} active={selected !== null}>
-            {displayed || "model"}
+            {displayed || t("pages.ask.modelChip")}
           </ChipButton>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={10} className="w-80 p-1.5">
         <div className="flex items-center justify-between px-2.5 pb-1.5 pt-1">
           <span className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-            model · this question
+            {t("pages.ask.modelThisQuestion")}
           </span>
           <Badge variant="outline" className="font-mono text-[10px]">
             {provider}
@@ -121,16 +123,16 @@ function ModelPickerPopover({
         >
           <Dot selected={selected === null} />
           <span className="flex flex-1 flex-col">
-            <span className="text-[13px] font-medium">Server default</span>
+            <span className="text-[13px] font-medium">{t("pages.ask.serverDefault")}</span>
             <span className="font-mono text-[11px] text-muted-foreground">
-              {serverDefault || "(unset)"}
+              {serverDefault || t("pages.ask.unset")}
             </span>
           </span>
         </button>
         <div className="my-1 border-t border-border/40" />
         {models.isLoading && (
           <div className="flex items-center gap-2 px-2.5 py-2 text-[12px] text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" /> loading models…
+            <Loader2 className="size-3 animate-spin" /> {t("pages.ask.loadingModels")}
           </div>
         )}
         {models.error && (
@@ -197,6 +199,7 @@ function RetrievalKnobsPopover({
   kRerank: number | null
   onChange: (next: { kRetrieve: number | null; kRerank: number | null }) => void
 }) {
+  const { t } = useTranslation()
   const settings = useSettings()
   const serverRetrieve = settings.data?.retrieve_top_k ?? 50
   const serverRerank = settings.data?.rerank_top_k ?? 5
@@ -206,15 +209,18 @@ function RetrievalKnobsPopover({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" aria-label="retrieval knobs">
+        <button type="button" aria-label={t("pages.ask.retrievalKnobs")}>
           <ChipButton icon={<Settings2 strokeWidth={2} />} active={dirty}>
-            retrieve {effRetrieve} · rerank {effRerank}
+            {t("pages.ask.retrieveRerankChip", {
+              retrieve: effRetrieve,
+              rerank: effRerank,
+            })}
           </ChipButton>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={10} className="w-80 p-4">
         <div className="text-[10.5px] font-mono uppercase tracking-wide text-muted-foreground">
-          retrieval · this question
+          {t("pages.ask.retrievalThisQuestion")}
         </div>
         <div className="mt-3 space-y-4">
           <SliderRow
@@ -233,7 +239,10 @@ function RetrievalKnobsPopover({
           />
           <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3 text-[11px]">
             <span className="font-mono text-muted-foreground">
-              server default · {serverRetrieve}/{serverRerank}
+              {t("pages.ask.serverDefaultKnobs", {
+                retrieve: serverRetrieve,
+                rerank: serverRerank,
+              })}
             </span>
             <Button
               variant="ghost"
@@ -242,7 +251,7 @@ function RetrievalKnobsPopover({
               onClick={() => onChange({ kRetrieve: null, kRerank: null })}
               disabled={!dirty}
             >
-              Reset
+              {t("actions.reset")}
             </Button>
           </div>
         </div>
@@ -292,6 +301,7 @@ function GraphTogglePopover({
   graphEnabled: boolean | null
   onChange: (next: boolean | null) => void
 }) {
+  const { t } = useTranslation()
   const settings = useSettings()
   const serverDefault = settings.data?.enable_graph_retrieval ?? true
   const effective = graphEnabled ?? serverDefault
@@ -299,26 +309,30 @@ function GraphTogglePopover({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" aria-label="graph toggle">
+        <button type="button" aria-label={t("pages.ask.graphToggle")}>
           <ChipButton icon={<CircuitBoard strokeWidth={2} />} active={dirty}>
-            graph {effective ? "on" : "off"}
+            {t("pages.ask.graphChip", {
+              state: effective ? t("pages.ask.on") : t("pages.ask.off"),
+            })}
           </ChipButton>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={10} className="w-72 p-4">
         <div className="text-[10.5px] font-mono uppercase tracking-wide text-muted-foreground">
-          knowledge graph · this question
+          {t("pages.ask.knowledgeGraphThisQuestion")}
         </div>
         <div className="mt-3 flex items-center justify-between">
-          <Label className="text-[13px] font-medium">Use graph retriever</Label>
+          <Label className="text-[13px] font-medium">{t("pages.ask.useGraphRetriever")}</Label>
           <Switch checked={effective} onCheckedChange={(v) => onChange(v)} />
         </div>
         <p className="mt-2 text-[12px] leading-[1.55] text-muted-foreground">
-          Neo4j 1-hop traversal joined into RRF fusion. Off when you only want dense + sparse.
+          {t("pages.ask.graphRetrieverHint")}
         </p>
         <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-[11px]">
           <span className="font-mono text-muted-foreground">
-            server default · {serverDefault ? "on" : "off"}
+            {t("pages.ask.serverDefaultState", {
+              state: serverDefault ? t("pages.ask.on") : t("pages.ask.off"),
+            })}
           </span>
           <Button
             variant="ghost"
@@ -327,7 +341,7 @@ function GraphTogglePopover({
             onClick={() => onChange(null)}
             disabled={graphEnabled === null}
           >
-            Reset
+            {t("actions.reset")}
           </Button>
         </div>
       </PopoverContent>
@@ -356,7 +370,7 @@ export interface ComposerProps {
 }
 
 export function Composer({
-  placeholder = "Ask anything across your corpus.",
+  placeholder,
   focused = false,
   streaming = false,
   value,
@@ -366,6 +380,8 @@ export function Composer({
   onConfigChange,
   onAttach,
 }: ComposerProps) {
+  const { t } = useTranslation()
+  const effectivePlaceholder = placeholder ?? t("pages.ask.placeholder")
   const [draft, setDraft] = useState("")
   const controlled = value !== undefined
   const text = controlled ? value : draft
@@ -398,7 +414,7 @@ export function Composer({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-2 rounded-[18px] border bg-card p-3 pl-4 shadow-sm",
+        "relative flex flex-col gap-2 rounded-full border bg-card p-3 pl-4 shadow-sm",
         "transition-colors duration-[120ms]",
         focused
           ? "border-primary/40 ring-2 ring-ring/30 ring-offset-2 ring-offset-background"
@@ -416,7 +432,7 @@ export function Composer({
               submit()
             }
           }}
-          placeholder={placeholder}
+          placeholder={effectivePlaceholder}
           className={cn(
             "min-h-7 flex-1 resize-none bg-transparent text-[15px] leading-[1.55] text-foreground",
             "placeholder:text-muted-foreground outline-none",
@@ -425,7 +441,7 @@ export function Composer({
         <Button
           size="icon"
           disabled={streaming || !text.trim()}
-          aria-label="send"
+          aria-label={t("actions.send")}
           className="size-9 rounded-full"
           onClick={submit}
         >
@@ -435,11 +451,11 @@ export function Composer({
       <div className="flex items-center gap-1.5">
         <button
           type="button"
-          aria-label={onAttach ? "open context manager" : "attach"}
+          aria-label={onAttach ? t("pages.ask.openContextManager") : t("pages.ask.attach")}
           className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors duration-[120ms] hover:bg-muted hover:text-foreground disabled:opacity-40"
           onClick={onAttach}
           disabled={!onAttach}
-          title={onAttach ? "Open context manager (pins + exclusions)" : "Attach"}
+          title={onAttach ? t("pages.ask.openContextManagerTitle") : t("pages.ask.attachTitle")}
         >
           <Paperclip className="size-3.5" strokeWidth={2} />
         </button>
@@ -467,7 +483,7 @@ export function Composer({
                 animation: "sr-pulse 1.4s ease-in-out infinite",
               }}
             />
-            streaming
+            {t("status.streaming")}
           </span>
         )}
       </div>

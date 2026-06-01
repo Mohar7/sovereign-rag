@@ -104,6 +104,34 @@
                BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono",
                Menlo, Consolas, monospace;
+
+  /* ── Type scale — fluid, bumps at 2xl (from colors_and_type.css) ─ */
+  --text-xs:   clamp(11px, 0.7rem  + 0.0vw, 12px);
+  --text-sm:   clamp(13px, 0.81rem + 0.0vw, 14px);
+  --text-base: clamp(15px, 0.875rem + 0.13vw, 17px);
+  --text-md:   clamp(16px, 0.94rem + 0.13vw, 18px);
+  --text-lg:   clamp(18px, 1.06rem + 0.18vw, 20px);
+  --text-xl:   clamp(20px, 1.18rem + 0.25vw, 24px);
+  --text-2xl:  clamp(24px, 1.4rem  + 0.3vw, 30px);
+  --text-3xl:  clamp(30px, 1.7rem  + 0.4vw, 36px);
+  --text-4xl:  clamp(36px, 2.0rem  + 0.6vw, 48px);
+  --text-5xl:  clamp(44px, 2.6rem  + 0.8vw, 60px);
+
+  /* line height — Cyrillic-safe minimum 1.55 on body */
+  --leading-tight:   1.2;
+  --leading-snug:    1.35;
+  --leading-normal:  1.6;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight:  -0.022em;
+  --tracking-snug:   -0.011em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.04em;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
 }
 
 .dark {
@@ -219,6 +247,8 @@
     background: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     min-height: 100vh;
@@ -226,13 +256,119 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   Semantic typography classes (canonical, from colors_and_type.css)
+   ─────────────────────────────────────────────────────────────── */
+@layer components {
+  .t-display {
+    font-family: var(--font-sans);
+    font-size: var(--text-5xl);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-tight);
+    line-height: var(--leading-tight);
+    color: var(--foreground);
+  }
+  .t-h1 {
+    font-family: var(--font-sans);
+    font-size: var(--text-3xl);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-snug);
+    line-height: var(--leading-tight);
+    color: var(--foreground);
+  }
+  .t-h2 {
+    font-family: var(--font-sans);
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-snug);
+    line-height: var(--leading-snug);
+    color: var(--foreground);
+  }
+  .t-h3 {
+    font-family: var(--font-sans);
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-normal);
+    line-height: var(--leading-snug);
+    color: var(--foreground);
+  }
+  .t-body {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    font-weight: var(--weight-regular);
+    line-height: var(--leading-normal);
+    color: var(--foreground);
+  }
+  .t-body-muted {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    font-weight: var(--weight-regular);
+    line-height: var(--leading-normal);
+    color: var(--muted-foreground);
+  }
+  .t-sm {
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-regular);
+    line-height: 1.55;
+    color: var(--foreground);
+  }
+  .t-sm-muted {
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-regular);
+    line-height: 1.55;
+    color: var(--muted-foreground);
+  }
+  .t-label {
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    line-height: 1.4;
+    color: var(--foreground);
+  }
+  .t-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--weight-medium);
+    letter-spacing: var(--tracking-wide);
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .t-code,
+  .t-mono {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-regular);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
    Ask-page motion primitives
    ─────────────────────────────────────────────────────────────── */
 @keyframes sr-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.6; transform: scale(1.15); }
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
 }
 @keyframes sr-blink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
+}
+
+/* Skeleton shimmer — 1.5s linear sweep, restrained (mirrors the design-system reference) */
+@keyframes sr-skel {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.sr-skel {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    color-mix(in oklab, var(--muted) 55%, var(--card)) 50%,
+    var(--muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: sr-skel 1.5s linear infinite;
 }

@@ -45,7 +45,7 @@ export function EvalsPage() {
     <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 border-b border-border px-6 py-3">
-          <h1 className="text-[15px] font-semibold tracking-tight">Evals</h1>
+          <h1 className="text-[15px] font-semibold tracking-tight">Evals.</h1>
           <span className="font-mono text-[11.5px] text-muted-foreground">
             {data.retrieval.per_question.length} questions · k={data.k} · mode={data.mode}
           </span>
@@ -110,7 +110,7 @@ function StatCards({ data }: { data: EvalsResults }) {
     label: string
     value: number
     max: number
-    icon: React.ComponentType<{ className?: string }>
+    icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
     tone: "indigo" | "emerald" | "amber" | "violet"
     hint?: string
   }> = [
@@ -153,7 +153,7 @@ function StatCards({ data }: { data: EvalsResults }) {
         const pct = Math.max(0, Math.min(1, c.value / c.max))
         return (
           <Card key={c.label} className="overflow-hidden">
-            <CardContent className="p-4">
+            <CardContent className="p-5">
               <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
                 <c.icon className="size-3.5" strokeWidth={2} />
                 <span className="font-mono uppercase tracking-wide">{c.label}</span>
@@ -170,10 +170,10 @@ function StatCards({ data }: { data: EvalsResults }) {
                 <div
                   className={cn(
                     "h-full rounded-full",
-                    c.tone === "indigo" && "bg-primary",
-                    c.tone === "emerald" && "bg-emerald-500",
-                    c.tone === "violet" && "bg-violet-500",
-                    c.tone === "amber" && "bg-amber-500",
+                    c.tone === "indigo" && "bg-[var(--chart-5)]",
+                    c.tone === "emerald" && "bg-[var(--chart-4)]",
+                    c.tone === "violet" && "bg-[var(--chart-3)]",
+                    c.tone === "amber" && "bg-[var(--chart-2)]",
                   )}
                   style={{ width: `${pct * 100}%` }}
                 />

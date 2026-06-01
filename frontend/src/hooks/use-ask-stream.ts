@@ -39,7 +39,7 @@ export type StreamEvent =
 
 export interface UseAskStreamOptions {
   onOpen?: (threadId: string) => void
-  onNode?: (name: string, phase: "start" | "done") => void
+  onNode?: (name: string, phase: "start" | "done", elapsedMs?: number) => void
   onToken?: (delta: string) => void
   onCitations?: (items: CitationModel[]) => void
   onDone?: (final: Extract<StreamEvent, { type: "done" }>) => void
@@ -138,7 +138,7 @@ function dispatch(event: StreamEvent, opts: UseAskStreamOptions) {
       opts.onOpen?.(event.thread_id)
       return
     case "node":
-      opts.onNode?.(event.name, event.phase)
+      opts.onNode?.(event.name, event.phase, event.elapsed_ms)
       return
     case "token":
       opts.onToken?.(event.delta)

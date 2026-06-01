@@ -1,4 +1,4 @@
-import { ArrowUpRight, Box, Globe, Share2, Sparkles, type LucideIcon } from "lucide-react"
+import { ArrowUpRight, Box, CornerDownLeft, Globe, Share2, Sparkles, type LucideIcon } from "lucide-react"
 
 import {
   Popover,
@@ -102,7 +102,9 @@ export function CitationChip({
         ) : (
           <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-2 text-xs text-muted-foreground">
             <span className="font-mono">open in source detail</span>
-            <kbd className="font-mono">↵</kbd>
+            <kbd className="inline-flex items-center font-mono">
+              <CornerDownLeft className="size-3" strokeWidth={1.5} />
+            </kbd>
           </div>
         )}
       </PopoverContent>

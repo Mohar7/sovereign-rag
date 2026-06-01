@@ -80,9 +80,9 @@ export default function App() {
           ) : page === "settings" ? (
             <SettingsPage />
           ) : (
-            <PageStub title={t(`pages.${page}.title`)}>
+            <PageStub title={t(`pages.${page}.title`, { defaultValue: page })}>
               <p className="text-sm text-muted-foreground">
-                {t(`pages.${page}.empty`)}
+                {t(`pages.${page}.empty`, { defaultValue: "" })}
               </p>
             </PageStub>
           )}

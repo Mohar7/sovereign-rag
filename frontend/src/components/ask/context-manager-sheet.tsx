@@ -1,5 +1,6 @@
 import { Ban, Loader2, Pin, PinOff, Plus, Trash2 } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -19,6 +20,7 @@ import {
   useThreadContextDelete,
   useThreadContextUpsert,
 } from "@/hooks/use-thread-context"
+import { formatDateTime } from "@/lib/format"
 import type { PinAction, PinEntry } from "@/lib/api"
 
 // ─────────────────────────────────────────────────────────────────
@@ -37,6 +39,7 @@ interface Props {
 }
 
 export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
+  const { t } = useTranslation()
   const ctx = useThreadContext(threadId)
   const upsert = useThreadContextUpsert(threadId)
   const remove = useThreadContextDelete(threadId)
@@ -60,7 +63,11 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
       })
       setDraftChunkId("")
       setDraftNote("")
-      toast.success(draftAction === "pinned" ? "Pinned." : "Excluded.")
+      toast.success(
+        draftAction === "pinned"
+          ? t("pages.ask.context.pinnedToast")
+          : t("pages.ask.context.excludedToast"),
+      )
     } catch (err) {
       toast.error((err as Error).message)
     }
@@ -68,10 +75,10 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
 
   const handleClear = async () => {
     if (!ctx.data || ctx.data.pins.length === 0) return
-    if (!window.confirm("Clear every pin and exclusion in this thread?")) return
+    if (!window.confirm(t("pages.ask.context.clearConfirm"))) return
     try {
       const res = await clear.mutateAsync()
-      toast.success(`Cleared ${res.removed} entr${res.removed === 1 ? "y" : "ies"}.`)
+      toast.success(t("pages.ask.context.clearedToast", { count: res.removed }))
     } catch (err) {
       toast.error((err as Error).message)
     }
@@ -90,15 +97,15 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
             </span>
             <div className="min-w-0 flex-1">
               <SheetTitle className="text-[15px] font-semibold leading-[1.35]">
-                Context manager
+                {t("pages.ask.context.title")}
               </SheetTitle>
               {threadId ? (
                 <SheetDescription className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground">
-                  thread {threadId}
+                  {t("pages.ask.context.threadLabel", { id: threadId })}
                 </SheetDescription>
               ) : (
                 <SheetDescription className="mt-1 text-[12px] text-muted-foreground">
-                  Open a thread first; pins are scoped per conversation.
+                  {t("pages.ask.context.openThreadFirst")}
                 </SheetDescription>
               )}
             </div>
@@ -106,10 +113,10 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
           {threadId && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="font-mono text-[10.5px]">
-                {pins.length} pinned
+                {t("pages.ask.context.pinnedCount", { count: pins.length })}
               </Badge>
               <Badge variant="outline" className="font-mono text-[10.5px]">
-                {exclusions.length} excluded
+                {t("pages.ask.context.excludedCount", { count: exclusions.length })}
               </Badge>
               <Button
                 variant="outline"
@@ -123,7 +130,7 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
                 ) : (
                   <Trash2 className="size-3" strokeWidth={2} />
                 )}
-                Clear all
+                {t("actions.clearAll")}
               </Button>
             </div>
           )}
@@ -133,18 +140,17 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
           <div className="p-5 space-y-5">
             {!threadId && (
               <p className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center text-[13px] text-muted-foreground">
-                Pins live on the thread checkpoint. Open or start a thread to
-                begin pinning chunks.
+                {t("pages.ask.context.emptyHint")}
               </p>
             )}
 
             {threadId && (
               <>
-                <Section title="Add a pin or exclusion">
+                <Section title={t("pages.ask.context.addSection")}>
                   <div className="space-y-2.5">
                     <div className="grid grid-cols-[1fr_auto] gap-2">
                       <Input
-                        placeholder="chunk_id"
+                        placeholder={t("pages.ask.context.chunkIdPlaceholder")}
                         value={draftChunkId}
                         onChange={(e) => setDraftChunkId(e.target.value)}
                         className="font-mono text-[12.5px]"
@@ -152,15 +158,14 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
                       <ActionToggle value={draftAction} onChange={setDraftAction} />
                     </div>
                     <Input
-                      placeholder="note (optional)"
+                      placeholder={t("pages.ask.context.notePlaceholder")}
                       value={draftNote}
                       onChange={(e) => setDraftNote(e.target.value)}
                       className="text-[12.5px]"
                     />
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[11.5px] leading-[1.45] text-muted-foreground">
-                        Find chunk ids in the citations list or the Library
-                        chunks tab — they're stable across runs.
+                        {t("pages.ask.context.findChunkIdsHint")}
                       </p>
                       <Button
                         size="sm"
@@ -173,15 +178,15 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
                         ) : (
                           <Plus className="size-3" strokeWidth={2} />
                         )}
-                        Add
+                        {t("actions.add")}
                       </Button>
                     </div>
                   </div>
                 </Section>
 
                 <Section
-                  title={`Pinned · ${pins.length}`}
-                  hint="Carried into every subsequent /ask turn on this thread."
+                  title={t("pages.ask.context.pinnedSection", { count: pins.length })}
+                  hint={t("pages.ask.context.pinnedSectionHint")}
                 >
                   {ctx.isLoading ? (
                     <Loading />
@@ -192,7 +197,7 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
                       entries={pins}
                       onRemove={(chunkId) =>
                         remove.mutate(chunkId, {
-                          onSuccess: () => toast.success("Removed."),
+                          onSuccess: () => toast.success(t("pages.ask.context.removedToast")),
                           onError: (e) => toast.error(e.message),
                         })
                       }
@@ -201,8 +206,8 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
                 </Section>
 
                 <Section
-                  title={`Excluded · ${exclusions.length}`}
-                  hint="Skipped during reranking even when they score highly."
+                  title={t("pages.ask.context.excludedSection", { count: exclusions.length })}
+                  hint={t("pages.ask.context.excludedSectionHint")}
                 >
                   {ctx.isLoading ? (
                     <Loading />
@@ -213,7 +218,7 @@ export function ContextManagerSheet({ threadId, open, onOpenChange }: Props) {
                       entries={exclusions}
                       onRemove={(chunkId) =>
                         remove.mutate(chunkId, {
-                          onSuccess: () => toast.success("Removed."),
+                          onSuccess: () => toast.success(t("pages.ask.context.removedToast")),
                           onError: (e) => toast.error(e.message),
                         })
                       }
@@ -266,6 +271,7 @@ function ActionToggle({
   value: PinAction
   onChange: (next: PinAction) => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="inline-flex overflow-hidden rounded-md border border-border">
       {(["pinned", "excluded"] as const).map((a) => {
@@ -282,7 +288,7 @@ function ActionToggle({
             }
           >
             <Icon className="size-3" strokeWidth={2} />
-            {a}
+            {t(`status.${a}`)}
           </button>
         )
       })}
@@ -297,6 +303,7 @@ function PinList({
   entries: PinEntry[]
   onRemove: (chunkId: string) => void
 }) {
+  const { t } = useTranslation()
   return (
     <ul className="space-y-1.5">
       {entries.map((p) => (
@@ -325,7 +332,7 @@ function PinList({
               </p>
             )}
             <div className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
-              {p.created_at ? new Date(p.created_at).toLocaleString() : "—"}
+              {p.created_at ? formatDateTime(p.created_at) : "—"}
             </div>
           </div>
           <Button
@@ -333,7 +340,7 @@ function PinList({
             size="icon"
             className="size-7"
             onClick={() => onRemove(p.chunk_id)}
-            aria-label="remove"
+            aria-label={t("pages.ask.context.remove")}
           >
             <PinOff className="size-3.5" strokeWidth={2} />
           </Button>
@@ -344,17 +351,21 @@ function PinList({
 }
 
 function Loading() {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-      <Loader2 className="size-3.5 animate-spin" /> loading…
+      <Loader2 className="size-3.5 animate-spin" /> {t("common.loading")}
     </div>
   )
 }
 
 function Empty({ kind }: { kind: PinAction }) {
+  const { t } = useTranslation()
   return (
     <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
-      No {kind} chunks yet.
+      {kind === "pinned"
+        ? t("pages.ask.context.noPinnedChunks")
+        : t("pages.ask.context.noExcludedChunks")}
     </p>
   )
 }

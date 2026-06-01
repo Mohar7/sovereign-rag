@@ -54,7 +54,7 @@
     "clearAll": "Clear all",
     "reset": "Reset",
     "send": "Send",
-    "send_hint": "↵ to send · ⇧↵ for newline",
+    "send_hint": "Enter to send · Shift+Enter for newline",
     "selected": "{{count}} selected",
     "startFresh": "Start fresh"
   },
@@ -76,7 +76,132 @@
       "resuming": "resuming",
       "restoring": "Restoring conversation history…",
       "noAnswer": "(no answer text)",
-      "emptyAnswerFallback": "The model returned no answer text. Showing the {{count}} retrieved chunk(s) instead."
+      "emptyAnswerFallback": "The model returned no answer text. Showing the {{count}} retrieved chunk(s) instead.",
+      "heroSubtitle": "Hybrid retrieval over graph and vector, reranked by cross-encoder, with inline citations back to the chunks the answer actually used.",
+      "sourcesTitle": "Sources",
+      "retrieving": "retrieving",
+      "retrievingReranking": "Retrieving and reranking",
+      "sourcesCount": "{{used}} of {{total}}",
+      "chunksUsed": "{{used}} of {{total}} chunks",
+      "statDocuments": "documents",
+      "statChunks": "chunks",
+      "statEntities": "entities",
+      "statRelations": "relations",
+      "loadingCorpusStats": "loading corpus stats…",
+      "requestFailed": "Request failed.",
+      "noAnswerNoSources": "The model returned no answer and no sources matched.",
+      "askCallFailed": "The /ask call failed.",
+      "dismiss": "dismiss",
+      "used": "used",
+      "expandSources": "expand sources",
+      "collapseSources": "collapse sources",
+      "filterSources": "filter sources",
+      "collapse": "collapse",
+      "inspectorHint": "inspector opens per-turn details",
+      "noSourcesForTurn": "No sources for this turn.",
+      "pickModel": "pick model",
+      "modelChip": "model",
+      "modelThisQuestion": "model · this question",
+      "serverDefault": "Server default",
+      "unset": "(unset)",
+      "loadingModels": "loading models…",
+      "retrievalKnobs": "retrieval knobs",
+      "retrieveRerankChip": "retrieve {{retrieve}} · rerank {{rerank}}",
+      "retrievalThisQuestion": "retrieval · this question",
+      "serverDefaultKnobs": "server default · {{retrieve}}/{{rerank}}",
+      "graphToggle": "graph toggle",
+      "graphChip": "graph {{state}}",
+      "on": "on",
+      "off": "off",
+      "knowledgeGraphThisQuestion": "knowledge graph · this question",
+      "useGraphRetriever": "Use graph retriever",
+      "graphRetrieverHint": "Neo4j 1-hop traversal joined into RRF fusion. Off when you only want dense + sparse.",
+      "serverDefaultState": "server default · {{state}}",
+      "openContextManager": "open context manager",
+      "attach": "attach",
+      "openContextManagerTitle": "Open context manager (pins + exclusions)",
+      "attachTitle": "Attach",
+      "suggestions": {
+        "summarizeRrf": {
+          "title": "Summarize the latest RRF fusion paper in the corpus.",
+          "sub": "tries: graph + dense + sparse"
+        },
+        "mapEntities": {
+          "title": "Map the entities most cited across documents about hybrid retrieval.",
+          "sub": "neo4j 1-hop traversal"
+        },
+        "compareChunking": {
+          "title": "Compare chunking strategies we evaluated for this corpus.",
+          "sub": "fixed-window / semantic / contextual"
+        },
+        "evalDelta": {
+          "title": "What changed in the eval p@5 after we switched to bge-reranker-v2-m3?",
+          "sub": "evals · last 30 days"
+        }
+      },
+      "pipeline": {
+        "retrieve": "retrieve",
+        "rerank": "rerank",
+        "generate": "generate",
+        "progress": "retrieval pipeline progress"
+      },
+      "context": {
+        "title": "Context manager",
+        "threadLabel": "thread {{id}}",
+        "openThreadFirst": "Open a thread first; pins are scoped per conversation.",
+        "pinnedCount": "{{count}} pinned",
+        "excludedCount": "{{count}} excluded",
+        "emptyHint": "Pins live on the thread checkpoint. Open or start a thread to begin pinning chunks.",
+        "addSection": "Add a pin or exclusion",
+        "chunkIdPlaceholder": "chunk_id",
+        "notePlaceholder": "note (optional)",
+        "findChunkIdsHint": "Find chunk ids in the citations list or the Library chunks tab — they're stable across runs.",
+        "pinnedSection": "Pinned · {{count}}",
+        "pinnedSectionHint": "Carried into every subsequent /ask turn on this thread.",
+        "excludedSection": "Excluded · {{count}}",
+        "excludedSectionHint": "Skipped during reranking even when they score highly.",
+        "pinnedToast": "Pinned.",
+        "excludedToast": "Excluded.",
+        "clearConfirm": "Clear every pin and exclusion in this thread?",
+        "clearedToast_one": "Cleared {{count}} entry.",
+        "clearedToast_other": "Cleared {{count}} entries.",
+        "removedToast": "Removed.",
+        "remove": "remove",
+        "noPinnedChunks": "No pinned chunks yet.",
+        "noExcludedChunks": "No excluded chunks yet."
+      },
+      "inspector": {
+        "title": "Turn inspector",
+        "threadLabel": "thread {{id}}",
+        "turnBadge": "turn #{{id}}",
+        "citationsBadge_one": "{{count}} citation",
+        "citationsBadge_other": "{{count}} citations",
+        "pipeline": "Pipeline",
+        "pipelineTotal": "Pipeline · {{total}} total",
+        "question": "Question",
+        "answer": "Answer",
+        "emptyAnswer": "(empty answer)",
+        "overridesUsed": "Overrides used",
+        "citationsLabel": "Citations ({{count}})",
+        "noCitations": "No citations attached to this turn.",
+        "serverDefaults": "Server defaults (no per-question overrides).",
+        "stages": {
+          "retrieve": {
+            "label": "Retrieve",
+            "description": "Milvus hybrid (dense + BM25) + Neo4j graph local search, fused via RRF."
+          },
+          "rerank": {
+            "label": "Rerank",
+            "description": "Cross-encoder reranks the candidate pool down to k_rerank."
+          },
+          "generate": {
+            "label": "Generate",
+            "description": "LLM synthesises a cited answer from the reranked context."
+          }
+        }
+      },
+      "copiedToast": "Copied.",
+      "copyFailedToast": "Couldn't copy — clipboard permission?"
     },
     "library": {
       "title": "Library",
@@ -85,7 +210,69 @@
       "kind": "kind",
       "status": "status",
       "documents": "{{count}} documents",
-      "ofTotal": "{{filtered}} of {{total}}"
+      "ofTotal": "{{filtered}} of {{total}}",
+      "heading": "Library.",
+      "search": "search",
+      "searchPlaceholder": "title or url",
+      "kindNote": "Kind is derived from <code>source_uri</code> client-side. Status + indexed_at land when the backend grows those columns.",
+      "selectAll": "select all",
+      "selectRow": "select row",
+      "clearSelection": "clear selection",
+      "colTitle": "Title",
+      "colKind": "Kind",
+      "colSource": "Source",
+      "colStatus": "Status",
+      "colChunks": "Chunks",
+      "statusReady": "ready",
+      "documentCount_one": "{{formattedCount}} document",
+      "documentCount_other": "{{formattedCount}} documents",
+      "selectedOfTotal": "{{selected}} selected of {{total}}",
+      "noMatch": "No documents match the current filters.",
+      "reindex": "Re-index",
+      "reindexNothingTitle": "Nothing to re-index",
+      "reindexNothingDesc": "Re-index only supports docs with an http(s) source_uri.",
+      "reindexQueued": "{{queued}} URL docs queued, {{skipped}} skipped",
+      "reindexQueuedDesc": "Skipped docs were ingested from file or pasted text.",
+      "reindexFailedOne": "Re-index failed for {{title}}: {{message}}",
+      "reindexDone_one": "Re-indexed {{count}} document.",
+      "reindexDone_other": "Re-indexed {{count}} documents.",
+      "reindexPartial": "{{ok}} re-indexed, {{fail}} failed.",
+      "deleteDialogTitle_one": "Delete {{count}} document?",
+      "deleteDialogTitle_other": "Delete {{count}} documents?",
+      "deleteDialogDesc_one": "This wipes every chunk + entity belonging to the selected document from Milvus and Neo4j. The action is irreversible.",
+      "deleteDialogDesc_other": "This wipes every chunk + entity belonging to the selected documents from Milvus and Neo4j. The action is irreversible.",
+      "chunksCount_one": "{{formattedCount}} chunk",
+      "chunksCount_other": "{{formattedCount}} chunks",
+      "andMore": "…and {{formattedCount}} more",
+      "deleteN": "Delete {{formattedCount}}",
+      "deleteDone_one": "Deleted {{count}} document ({{chunks}} chunks).",
+      "deleteDone_other": "Deleted {{count}} documents ({{chunks}} chunks).",
+      "deletePartial": "{{deleted}} deleted, {{failed}} failed.",
+      "deleteFailed": "Delete failed: {{message}}",
+      "exportLoading_one": "Exporting {{count}} document…",
+      "exportLoading_other": "Exporting {{count}} documents…",
+      "exportDone_one": "Exported {{count}} document.",
+      "exportDone_other": "Exported {{count}} documents.",
+      "exportFailed": "Export failed: {{message}}",
+      "sourceDetail": "Source detail",
+      "openSource": "open source",
+      "deleteDocument": "Delete document",
+      "exported": "Exported.",
+      "confirmDeleteOne": "Delete \"{{title}}\" and all {{formattedCount}} chunks? This cannot be undone.",
+      "deletedOne": "Deleted \"{{title}}\" ({{formattedCount}} chunks).",
+      "deletedOneGraph": "Deleted \"{{title}}\" ({{formattedCount}} chunks + graph).",
+      "tabChunks": "Chunks",
+      "tabEntities": "Entities",
+      "tabRelations": "Relations",
+      "tabMetadata": "Metadata",
+      "loadingChunks": "loading chunks…",
+      "noChunks": "No chunks indexed for this document.",
+      "pageLabel": "p.{{page}}",
+      "emptyChunk": "(empty chunk)",
+      "loadingEntities": "loading entities…",
+      "noEntities": "No entities extracted for this document.",
+      "loadingRelations": "loading relations…",
+      "noRelations": "No relations extracted."
     },
     "ingest": {
       "title": "Ingest",
@@ -100,7 +287,53 @@
       "recent": "Recent jobs",
       "indexing": "Indexing…",
       "parsing": "Parsing…",
-      "openInLibrary": "Open in Library"
+      "openInLibrary": "Open in Library",
+      "heading": "Ingest.",
+      "url": {
+        "label": "URL to crawl",
+        "hint": "Crawl4AI renders the page (JS-aware) and converts to markdown. Chunked + embedded into Milvus and the knowledge graph.",
+        "submit": "Crawl + index"
+      },
+      "file": {
+        "dropzone": "Drop a PDF / DOCX or click to choose.",
+        "releaseToAttach": "Release to attach",
+        "sizeKb": "{{size}} KB",
+        "submit": "Parse + index"
+      },
+      "web": {
+        "searchPlaceholder": "Search the web…",
+        "searching": "searching SearxNG…",
+        "noResults": "No results for \"{{query}}\".",
+        "selectedOf": "{{selected}} of {{total}} selected",
+        "ingestSelected": "Ingest selected"
+      },
+      "text": {
+        "titleLabel": "Title (optional)",
+        "titlePlaceholder": "Auto-derived from first line if empty",
+        "textLabel": "Text",
+        "textPlaceholder": "Paste markdown or plain text…",
+        "submit": "Index text"
+      },
+      "chunksCount_one": "{{chunks}} chunk",
+      "chunksCount_other": "{{chunks}} chunks",
+      "elapsedSeconds": "{{seconds}}s",
+      "toastIndexed_one": "Indexed `{{title}}` — {{chunks}} chunk.",
+      "toastIndexed_other": "Indexed `{{title}}` — {{chunks}} chunks.",
+      "toastFailed": "Ingest failed: {{error}}",
+      "knobs": {
+        "title": "Indexing parameters",
+        "subtitle": "Applied to every ingest. Change them in Settings.",
+        "embedProvider": "embed provider",
+        "embedModel": "embed model",
+        "embedDim": "embed dim",
+        "contextualRetrieval": "contextual retrieval",
+        "graphRetrieval": "graph retrieval",
+        "reranker": "reranker",
+        "device": "device",
+        "on": "on",
+        "off": "off",
+        "pipelineNote": "Live pipeline view (per-stage timing via SSE) is a follow-up — the current /api/ingest call is synchronous and reports the final <docref>doc_id + chunks</docref> on completion."
+      }
     },
     "threads": {
       "title": "Threads",
@@ -109,7 +342,42 @@
       "deleted": "Thread deleted.",
       "filters": "Filters",
       "model": "model",
-      "anyModel": "Any model"
+      "anyModel": "Any model",
+      "loadingShort": "loading…",
+      "ofTotal": "{{filtered}} of {{total}}",
+      "searchPlaceholder": "Search threads…",
+      "status": "status",
+      "noModelData": "No model data yet — runs are required.",
+      "threadCount_one": "{{formattedCount}} thread",
+      "threadCount_other": "{{formattedCount}} threads",
+      "withErrors_one": "{{formattedCount}} with errors",
+      "withErrors_other": "{{formattedCount}} with errors",
+      "emptyDetail": "Threads appear here after you ask a question from the Ask page.",
+      "noMatchDetail_one": "{{formattedCount}} thread indexed, but none contain that string.",
+      "noMatchDetail_other": "{{formattedCount}} threads indexed, but none contain that string.",
+      "untitledThread": "(untitled thread)",
+      "threadLabel": "Thread",
+      "threadMenu": "thread menu",
+      "selectThread": "select thread",
+      "citationCount_one": "{{count}} citation",
+      "citationCount_other": "{{count}} citations",
+      "messageCount_one": "{{count}} message",
+      "messageCount_other": "{{count}} messages",
+      "buildingExport": "Building export…",
+      "exported": "Exported.",
+      "exportFailed": "Export failed: {{message}}",
+      "bulkDeleted_one": "Deleted {{count}} thread.",
+      "bulkDeleted_other": "Deleted {{count}} threads.",
+      "bulkDeletePartial": "{{ok}} deleted, {{fail}} failed.",
+      "loadingConversation": "loading conversation…",
+      "noMessages": "No messages stored for this thread.",
+      "roleYou": "You",
+      "roleAssistant": "Assistant",
+      "chunksUsed": "{{used}} of {{retrieved}} chunks",
+      "copied": "Copied.",
+      "copyMessage": "copy message",
+      "emptyMessage": "(empty)",
+      "pageLabel": "p.{{page}}"
     },
     "graph": {
       "title": "Knowledge graph",
@@ -121,7 +389,23 @@
       "relations": "relations",
       "recenterOnThis": "Re-center on this node",
       "expanding": "expanding neighborhood…",
-      "pickSeed": "Pick a seed entity on the left to start."
+      "pickSeed": "Pick a seed entity on the left to start.",
+      "explorer": "Graph explorer",
+      "corpusStats": "{{entities}} entities · {{relations}} relations · {{mentions}} mentions",
+      "searchEntities": "search entities",
+      "noEntitiesMatch": "No entities match.",
+      "neighborhoodOf": "Neighborhood of",
+      "canvasStats": "{{nodes}} nodes · {{edges}} edges · depth {{depth}}",
+      "loadNeighborhood": "Load a neighborhood to inspect nodes.",
+      "nothingSelected": "Nothing selected.",
+      "nodeNotInView": "That node isn't in the current view.",
+      "mentionsCount_one": "{{formatted}} mention",
+      "mentionsCount_other": "{{formatted}} mentions",
+      "seed": "seed",
+      "hopsCount_one": "+{{count}} hop",
+      "hopsCount_other": "+{{count}} hops",
+      "noIncidentEdges": "No incident edges in this view.",
+      "relatedFallback": "related"
     },
     "evals": {
       "title": "Evals",
@@ -135,17 +419,35 @@
     },
     "history": {
       "title": "Run history",
-      "empty": "Every query you run gets an audit row here.",
-      "subtitle": "Every /ask writes one row. Errors are kept too — useful for tracking down model failures or retrieval misses.",
-      "ofTotal": "{{ok}} ok · {{err}} errors",
+      "empty": "Runs appear here after you ask a question from the Ask page.",
+      "subtitle": "Every <code>/ask</code> writes one row. Errors are kept too — useful for tracking down model failures or retrieval misses.",
+      "ofTotal": "{{filtered}} of {{total}}",
       "search": "question, answer, model, id…",
       "pipelineTimings": "Pipeline timings",
       "overridesUsed": "Overrides used",
       "answer": "Answer",
-      "citations": "Citations · {{count}}"
+      "citations": "Citations · {{value}}",
+      "heading": "Run history.",
+      "runsCount_one": "{{value}} run",
+      "runsCount_other": "{{value}} runs",
+      "okCount": "{{value}} ok",
+      "errorsCount_one": "{{value}} error",
+      "errorsCount_other": "{{value}} errors",
+      "searchLabel": "search",
+      "statusLabel": "status",
+      "loading": "loading…",
+      "emptyTitle": "No runs yet.",
+      "emptyFilterTitle": "Nothing matches that search.",
+      "emptyFilterBody_one": "{{value}} run indexed, but none match the current filter.",
+      "emptyFilterBody_other": "{{value}} runs indexed, but none match the current filter.",
+      "chunksUsed_one": "{{used}} of {{retrieved}} chunk",
+      "chunksUsed_other": "{{used}} of {{retrieved}} chunks",
+      "serverDefaults": "Server defaults (no overrides).",
+      "noAnswer": "(no answer)",
+      "error": "Error"
     },
     "settings": {
-      "title": "Settings",
+      "title": "Settings.",
       "subtitle": "Live retrieval knobs. Changes apply immediately in-process — values reset on server restart until persistence is wired.",
       "tabs": {
         "retrieval": "Retrieval",
@@ -154,6 +456,150 @@
         "rerank": "Rerank",
         "services": "Services",
         "danger": "Danger"
+      },
+      "loading": "loading settings…",
+      "updateFailed": "Failed to update {{key}}: {{message}}",
+      "retrieval": {
+        "hybrid": {
+          "title": "Hybrid retrieval",
+          "subtitle": "Dense + sparse + graph candidates fused, reranked by a cross-encoder."
+        },
+        "kRetrieve": "k_retrieve (candidates per retriever)",
+        "kRerank": "k_rerank (final chunks to LLM)",
+        "dense": {
+          "label": "Dense retriever",
+          "description": "Cosine ANN over Milvus dense vectors."
+        },
+        "sparse": {
+          "label": "Sparse retriever (BM25)",
+          "description": "Milvus native BM25 over the sparse text field."
+        },
+        "graph": {
+          "label": "Graph retriever (Neo4j local-search)",
+          "description": "1-hop traversal joined into the fusion step."
+        }
+      },
+      "fusion": {
+        "title": "Fusion",
+        "subtitle": "How dense + sparse + graph rankings are combined into one ordered list.",
+        "strategy": "Strategy",
+        "rrf": {
+          "label": "RRF (Reciprocal Rank Fusion)",
+          "hint": "rank-only, the proven default"
+        },
+        "weighted": {
+          "label": "Weighted",
+          "hint": "uses the graph / vector weights below"
+        },
+        "borda": {
+          "label": "Borda",
+          "hint": "positional voting, also rank-only"
+        },
+        "rrfK": "RRF k constant",
+        "graphWeight": "Graph weight",
+        "vectorWeight": "Vector weight"
+      },
+      "llm": {
+        "title": "LLM",
+        "subtitle": "Provider + model per tier. Changes take effect on the next graph run — the factory cache is busted automatically.",
+        "default": {
+          "label": "Default (answer LLM)",
+          "description": "The chat model used to synthesise answers. The full-quality tier."
+        },
+        "light": {
+          "label": "Light (structured output)",
+          "description": "Cheaper / faster tier for JSON-shaped sub-tasks (rerank prompts, contextual retrieval)."
+        },
+        "nano": {
+          "label": "Nano (smallest)",
+          "description": "Smallest local-only tier used by fast classification + safety checks."
+        },
+        "temperature": "Temperature",
+        "reasoningWarning": "Reasoning-class models (<code>gpt-5*</code>, <code>o*</code>) ignore the temperature slider — the API rejects any value other than the default."
+      },
+      "provider": {
+        "label": "Provider",
+        "ollamaSub": "local or Ollama Cloud",
+        "openaiSub": "gpt-5 / 4.1 / o-series"
+      },
+      "model": {
+        "loadingModels": "loading models…",
+        "autoFallback": "(auto · falls back to default tier)",
+        "searchPlaceholder": "Search {{provider}} models…",
+        "retry": "retry",
+        "noModels": "No models found.",
+        "reasoningNote": "Reasoning model — temperature setting is ignored by the API."
+      },
+      "embeddings": {
+        "title": "Embeddings",
+        "subtitle": "Embedding provider + model. Pinned to the schema baked into Milvus — change via .env, then reindex.",
+        "provider": "Provider",
+        "model": "Model",
+        "dimension": "Dimension"
+      },
+      "indexing": {
+        "title": "Indexing",
+        "subtitle": "Knobs applied during ingest. Reindex to apply contextual changes to existing chunks.",
+        "contextual": {
+          "label": "Contextual retrieval",
+          "description": "Prefix each chunk with an LLM-generated summary of the document context."
+        },
+        "graphDepth": "Graph BFS depth",
+        "graphMaxNodes": "Graph max nodes"
+      },
+      "rerank": {
+        "title": "Reranker",
+        "subtitle": "Cross-encoder applied after fusion. Score-floor drops weak chunks before they reach the LLM.",
+        "model": "Model",
+        "device": "Device",
+        "deviceAuto": "auto (picks the best available)",
+        "deviceMps": "mps (Apple Silicon)",
+        "deviceCuda": "cuda (NVIDIA GPU)",
+        "deviceCpu": "cpu (universal fallback)",
+        "scoreFloor": "Score floor",
+        "adaptive": {
+          "label": "Adaptive truncation",
+          "description": "Stop collecting once cumulative score-mass crosses 0.85 — keeps LLM context lean on easy queries."
+        }
+      },
+      "services": {
+        "title": "Service health",
+        "subtitle": "Live per-service liveness + p50 latency. Re-probed every 30 seconds.",
+        "probing": "probing services…",
+        "latencyMs": "{{ms}}ms"
+      },
+      "danger": {
+        "title": "Destructive operations",
+        "subtitle": "Everything in this tab is irreversible. The confirmation input must match the scope name exactly before the button enables.",
+        "confirmLabel": "Type <code>{{scope}}</code> to confirm",
+        "wipeButton": "Wipe {{scope}}",
+        "wipedToast": "Wiped {{scope}}.",
+        "wipeFailedToast": "Wipe failed: {{message}}",
+        "corpus": {
+          "title": "Wipe corpus",
+          "summary": "Drops the Milvus chunks collection and DETACH DELETE every node in Neo4j. Threads and pins survive.",
+          "details": [
+            "Milvus: drop sovereign_chunks collection",
+            "Neo4j: MATCH (n) DETACH DELETE n",
+            "Schema constraints + indexes retained (cheap)"
+          ]
+        },
+        "threads": {
+          "title": "Wipe threads",
+          "summary": "TRUNCATEs every LangGraph checkpoint table + drops the on-disk pins file. Corpus is untouched.",
+          "details": [
+            "Postgres: TRUNCATE checkpoints + checkpoint_writes + checkpoint_blobs",
+            "Filesystem: delete .runtime/thread_context.json"
+          ]
+        },
+        "all": {
+          "title": "Wipe everything",
+          "summary": "Both of the above, in one call. Equivalent to a fresh install.",
+          "details": [
+            "Corpus + threads in one transaction-like sequence",
+            "Use after major schema changes or when reproducing a clean baseline"
+          ]
+        }
       }
     }
   },

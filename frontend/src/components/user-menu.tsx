@@ -22,10 +22,54 @@ import {
 } from "@/components/ui/sidebar"
 import { useTheme } from "@/lib/theme"
 
-export function UserMenu() {
-  const { isMobile } = useSidebar()
+/** The dropdown body (theme + language switchers) shared by both triggers. */
+function UserMenuItems() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
+  return (
+    <>
+      <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+        {t("topbar.user")}
+      </DropdownMenuLabel>
+      <DropdownMenuSeparator />
+
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          {theme === "dark" ? <Moon /> : theme === "light" ? <Sun /> : <Monitor />}
+          <span>{t("userMenu.theme")}</span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as "light" | "dark" | "system")}>
+            <DropdownMenuRadioItem value="light"><Sun /> {t("userMenu.themeLight")}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark"><Moon /> {t("userMenu.themeDark")}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="system"><Monitor /> {t("userMenu.themeSystem")}</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <Languages />
+          <span>{t("userMenu.language")}</span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <DropdownMenuRadioGroup
+            value={i18n.resolvedLanguage ?? "en"}
+            onValueChange={(v) => { void i18n.changeLanguage(v) }}
+          >
+            <DropdownMenuRadioItem value="en">{t("userMenu.languageEn")}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="ru">{t("userMenu.languageRu")}</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    </>
+  )
+}
+
+/** Sidebar-footer user menu (full-width row trigger). */
+export function UserMenu() {
+  const { isMobile } = useSidebar()
+  const { t } = useTranslation()
 
   return (
     <SidebarMenu>
@@ -52,43 +96,33 @@ export function UserMenu() {
             align="end"
             sideOffset={4}
           >
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-              {t("topbar.user")}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                {theme === "dark" ? <Moon /> : theme === "light" ? <Sun /> : <Monitor />}
-                <span>{t("userMenu.theme")}</span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as "light" | "dark" | "system")}>
-                  <DropdownMenuRadioItem value="light"><Sun /> {t("userMenu.themeLight")}</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="dark"><Moon /> {t("userMenu.themeDark")}</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="system"><Monitor /> {t("userMenu.themeSystem")}</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Languages />
-                <span>{t("userMenu.language")}</span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup
-                  value={i18n.resolvedLanguage ?? "en"}
-                  onValueChange={(v) => { void i18n.changeLanguage(v) }}
-                >
-                  <DropdownMenuRadioItem value="en">{t("userMenu.languageEn")}</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="ru">{t("userMenu.languageRu")}</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+            <UserMenuItems />
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
+  )
+}
+
+/** Compact avatar user menu for the topbar right edge. */
+export function TopbarUserMenu() {
+  const { t } = useTranslation()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={t("topbar.user")}
+          className="inline-flex shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          <Avatar className="size-7">
+            <AvatarFallback className="bg-primary/10 text-[11px] font-medium text-primary">U</AvatarFallback>
+          </Avatar>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56 rounded-lg" side="bottom" align="end" sideOffset={8}>
+        <UserMenuItems />
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

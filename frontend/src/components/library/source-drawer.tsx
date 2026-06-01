@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Download, ExternalLink, FileText, Layers, Loader2, Network, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
+import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useDeleteDocument } from "@/hooks/use-library"
 import { useDocumentChunks, useEntities } from "@/hooks/use-source-detail"
 import type { DocumentSummary } from "@/lib/api"
+import { formatCount } from "@/lib/format"
 import { cn, downloadJSON } from "@/lib/utils"
 
 interface Props {
@@ -33,6 +35,7 @@ interface Props {
 }
 
 export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId }: Props) {
+  const { t } = useTranslation()
   const chunks = useDocumentChunks(doc?.doc_id ?? null)
   const entities = useEntities(doc?.doc_id ?? null)
   const deleteDoc = useDeleteDocument()
@@ -72,24 +75,38 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
       },
       `${doc.doc_id.replace(/[^a-z0-9-]/gi, "_")}.json`,
     )
-    toast.success("Exported.")
+    toast.success(t("pages.library.exported"))
   }
 
   const handleDelete = async () => {
     if (!doc) return
     const confirmed = window.confirm(
-      `Delete "${doc.title || doc.doc_id}" and all ${doc.chunks} chunks? This cannot be undone.`,
+      t("pages.library.confirmDeleteOne", {
+        title: doc.title || doc.doc_id,
+        count: doc.chunks,
+        formattedCount: formatCount(doc.chunks),
+      }),
     )
     if (!confirmed) return
     try {
       const res = await deleteDoc.mutateAsync(doc.doc_id)
       toast.success(
-        `Deleted "${doc.title}" (${res.chunks_deleted} chunks${res.graph_deleted ? " + graph" : ""}).`,
+        res.graph_deleted
+          ? t("pages.library.deletedOneGraph", {
+              title: doc.title,
+              count: res.chunks_deleted,
+              formattedCount: formatCount(res.chunks_deleted),
+            })
+          : t("pages.library.deletedOne", {
+              title: doc.title,
+              count: res.chunks_deleted,
+              formattedCount: formatCount(res.chunks_deleted),
+            }),
       )
       onOpenChange(false)
       onDeleted?.()
     } catch (err) {
-      toast.error(`Delete failed: ${(err as Error).message}`)
+      toast.error(t("pages.library.deleteFailed", { message: (err as Error).message }))
     }
   }
 
@@ -106,7 +123,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
             </span>
             <div className="min-w-0 flex-1">
               <SheetTitle className="line-clamp-2 text-[15px] font-semibold leading-[1.35]">
-                {doc?.title ?? "Source detail"}
+                {doc?.title ?? t("pages.library.sourceDetail")}
               </SheetTitle>
               {doc && (
                 <SheetDescription className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground">
@@ -119,7 +136,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
               size="icon"
               className="size-7"
               onClick={() => onOpenChange(false)}
-              aria-label="close"
+              aria-label={t("actions.close")}
             >
               <X className="size-3.5" strokeWidth={2} />
             </Button>
@@ -131,7 +148,10 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
                   {/* Prefer the live chunks count from the loaded data so this
                       stays correct when the drawer is opened with a partial
                       DocumentSummary built from a citation (chunks=0). */}
-                  {chunks.data ? chunks.data.length : doc.chunks} chunks
+                  {t("pages.library.chunksCount", {
+                    count: chunks.data ? chunks.data.length : doc.chunks,
+                    formattedCount: formatCount(chunks.data ? chunks.data.length : doc.chunks),
+                  })}
                 </Badge>
                 <Badge variant="outline" className="font-mono text-[10.5px]">
                   {doc.doc_id.slice(0, 8)}
@@ -143,7 +163,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
                     rel="noreferrer"
                     className="ml-auto inline-flex items-center gap-1 text-primary hover:underline"
                   >
-                    open source
+                    {t("pages.library.openSource")}
                     <ExternalLink className="size-3" strokeWidth={2} />
                   </a>
                 )}
@@ -157,7 +177,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
                   disabled={chunks.isLoading}
                 >
                   <Download className="size-3" strokeWidth={2} />
-                  Export JSON
+                  {t("actions.exportJson")}
                 </Button>
                 <Button
                   variant="outline"
@@ -171,7 +191,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
                   ) : (
                     <Trash2 className="size-3" strokeWidth={2} />
                   )}
-                  Delete document
+                  {t("pages.library.deleteDocument")}
                 </Button>
               </div>
             </>
@@ -182,21 +202,21 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
           <TabsList className="rounded-none border-b border-border bg-transparent justify-start px-4 py-0 h-10">
             <TabsTrigger value="chunks" className="data-[state=active]:bg-transparent gap-1.5">
               <Layers className="size-3.5" strokeWidth={2} />
-              Chunks
+              {t("pages.library.tabChunks")}
               {chunks.data && (
                 <span className="font-mono text-[10px] text-muted-foreground">
-                  {chunks.data.length}
+                  {formatCount(chunks.data.length)}
                 </span>
               )}
             </TabsTrigger>
             <TabsTrigger value="entities" className="data-[state=active]:bg-transparent">
-              Entities
+              {t("pages.library.tabEntities")}
             </TabsTrigger>
             <TabsTrigger value="relations" className="data-[state=active]:bg-transparent">
-              Relations
+              {t("pages.library.tabRelations")}
             </TabsTrigger>
             <TabsTrigger value="metadata" className="data-[state=active]:bg-transparent">
-              Metadata
+              {t("pages.library.tabMetadata")}
             </TabsTrigger>
           </TabsList>
 
@@ -205,7 +225,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
               <div className="p-5 space-y-2.5">
                 {chunks.isLoading && (
                   <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" /> loading chunks…
+                    <Loader2 className="size-3.5 animate-spin" /> {t("pages.library.loadingChunks")}
                   </div>
                 )}
                 {chunks.error && (
@@ -215,7 +235,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
                 )}
                 {!chunks.isLoading && (chunks.data?.length ?? 0) === 0 && !chunks.error && (
                   <div className="text-[13px] text-muted-foreground">
-                    No chunks indexed for this document.
+                    {t("pages.library.noChunks")}
                   </div>
                 )}
                 {(chunks.data ?? []).map((c) => {
@@ -237,7 +257,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
                       </span>
                       {c.page !== null && c.page !== undefined && (
                         <Badge variant="outline" className="font-mono text-[10px]">
-                          p.{c.page}
+                          {t("pages.library.pageLabel", { page: c.page })}
                         </Badge>
                       )}
                       <span className="ml-auto truncate font-mono text-[10.5px]">
@@ -245,7 +265,7 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
                       </span>
                     </div>
                     <p className="mt-2 whitespace-pre-wrap break-words text-[12.5px] leading-[1.55] text-foreground">
-                      {c.raw_text || "(empty chunk)"}
+                      {c.raw_text || t("pages.library.emptyChunk")}
                     </p>
                   </article>
                   )
@@ -259,12 +279,12 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
               <div className="p-5">
                 {entities.isLoading && (
                   <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" /> loading entities…
+                    <Loader2 className="size-3.5 animate-spin" /> {t("pages.library.loadingEntities")}
                   </div>
                 )}
                 {!entities.isLoading && (entities.data?.entities ?? []).length === 0 && (
                   <div className="text-[13px] text-muted-foreground">
-                    No entities extracted for this document.
+                    {t("pages.library.noEntities")}
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
@@ -289,12 +309,12 @@ export function SourceDrawer({ doc, open, onOpenChange, onDeleted, focusChunkId 
               <div className="p-5">
                 {entities.isLoading && (
                   <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" /> loading relations…
+                    <Loader2 className="size-3.5 animate-spin" /> {t("pages.library.loadingRelations")}
                   </div>
                 )}
                 {!entities.isLoading && (entities.data?.relations ?? []).length === 0 && (
                   <div className="text-[13px] text-muted-foreground">
-                    No relations extracted.
+                    {t("pages.library.noRelations")}
                   </div>
                 )}
                 <ul className="space-y-2">

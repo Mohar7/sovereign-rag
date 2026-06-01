@@ -16,6 +16,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { BrandMark } from "@/components/brand-mark"
 import { Badge } from "@/components/ui/badge"
@@ -33,31 +34,15 @@ import { AssistantTurn, UserTurn } from "./turns"
 
 interface Suggestion {
   icon: LucideIcon
-  title: string
-  sub: string
+  /** i18n key suffix under pages.ask.suggestions.<key> with .title / .sub. */
+  key: string
 }
 
 const SUGGESTIONS: Suggestion[] = [
-  {
-    icon: BookOpen,
-    title: "Summarize the latest RRF fusion paper in the corpus.",
-    sub: "tries: graph + dense + sparse",
-  },
-  {
-    icon: Network,
-    title: "Map the entities most cited across documents about hybrid retrieval.",
-    sub: "neo4j 1-hop traversal",
-  },
-  {
-    icon: Search,
-    title: "Compare chunking strategies we evaluated for this corpus.",
-    sub: "fixed-window / semantic / contextual",
-  },
-  {
-    icon: GitBranch,
-    title: "What changed in the eval p@5 after we switched to bge-reranker-v2-m3?",
-    sub: "evals · last 30 days",
-  },
+  { icon: BookOpen, key: "summarizeRrf" },
+  { icon: Network, key: "mapEntities" },
+  { icon: Search, key: "compareChunking" },
+  { icon: GitBranch, key: "evalDelta" },
 ]
 
 const CORPUS_STATS: Array<[string, string]> = [
@@ -74,6 +59,7 @@ export interface AskEmptyProps {
 
 /** Header + suggestion cards only — caller supplies composer + stats footer. */
 export function AskEmptyHeader({ onPickSuggestion }: AskEmptyProps = {}) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-7">
       <div className="text-center">
@@ -81,22 +67,23 @@ export function AskEmptyHeader({ onPickSuggestion }: AskEmptyProps = {}) {
           <BrandMark size={28} />
         </div>
         <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground">
-          Ask anything across your corpus.
+          {t("pages.ask.title")}
         </h1>
         <p className="mx-auto mt-2 max-w-xl text-[15px] leading-[1.6] text-muted-foreground">
-          Hybrid retrieval over graph and vector, reranked by cross-encoder,
-          with inline citations back to the chunks the answer actually used.
+          {t("pages.ask.heroSubtitle")}
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {SUGGESTIONS.map((s, i) => {
           const Icon = s.icon
+          const title = t(`pages.ask.suggestions.${s.key}.title`)
+          const sub = t(`pages.ask.suggestions.${s.key}.sub`)
           return (
             <button
               key={i}
               type="button"
-              onClick={() => onPickSuggestion?.(s.title)}
+              onClick={() => onPickSuggestion?.(title)}
               className="group flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -104,10 +91,10 @@ export function AskEmptyHeader({ onPickSuggestion }: AskEmptyProps = {}) {
               </span>
               <span className="min-w-0">
                 <span className="block text-[13.5px] font-medium leading-[1.4] text-foreground">
-                  {s.title}
+                  {title}
                 </span>
                 <span className="mt-1 block font-mono text-[11.5px] text-muted-foreground">
-                  {s.sub}
+                  {sub}
                 </span>
               </span>
             </button>

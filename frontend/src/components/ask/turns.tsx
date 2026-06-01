@@ -1,4 +1,5 @@
 import { Copy, Eye, RefreshCw } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { BrandMark } from "@/components/brand-mark"
@@ -45,12 +46,13 @@ export function AssistantTurn({
   onRegenerate,
   onOpenInspector,
 }: AssistantTurnProps) {
+  const { t } = useTranslation()
   const handleCopy = () => {
     if (!copyText) return
     void navigator.clipboard
       .writeText(copyText)
-      .then(() => toast.success("Copied."))
-      .catch(() => toast.error("Couldn't copy — clipboard permission?"))
+      .then(() => toast.success(t("pages.ask.copiedToast")))
+      .catch(() => toast.error(t("pages.ask.copyFailedToast")))
   }
 
   return (

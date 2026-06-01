@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   Loader2,
   MessageSquare,
@@ -28,10 +29,12 @@ import { ThreadDetailSheet } from "@/components/threads/thread-detail-sheet"
 import { useDeleteThread, useThreadsList } from "@/hooks/use-threads"
 import { api, type ThreadSummary } from "@/lib/api"
 import { cn, downloadJSON } from "@/lib/utils"
+import { formatCount, formatRelativeTime } from "@/lib/format"
 
 type StatusFilter = "all" | "ok" | "error"
 
 export function ThreadsPage() {
+  const { t } = useTranslation()
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [modelFilter, setModelFilter] = useState<string | null>(null)
@@ -47,7 +50,7 @@ export function ThreadsPage() {
   }
 
   const handleExport = async (thread: ThreadSummary) => {
-    const tid = toast.loading("Building export…")
+    const tid = toast.loading(t("pages.threads.buildingExport"))
     try {
       const messages = await api.threadMessages(thread.thread_id)
       downloadJSON(
@@ -58,9 +61,12 @@ export function ThreadsPage() {
         },
         `thread-${thread.thread_id.slice(0, 8)}.json`,
       )
-      toast.success("Exported.", { id: tid })
+      toast.success(t("pages.threads.exported"), { id: tid })
     } catch (err) {
-      toast.error(`Export failed: ${(err as Error).message}`, { id: tid })
+      toast.error(
+        t("pages.threads.exportFailed", { message: (err as Error).message }),
+        { id: tid },
+      )
     }
   }
 
@@ -114,9 +120,9 @@ export function ThreadsPage() {
       }
     }
     if (fail === 0) {
-      toast.success(`Deleted ${ok} thread${ok === 1 ? "" : "s"}.`)
+      toast.success(t("pages.threads.bulkDeleted", { count: ok }))
     } else {
-      toast.error(`${ok} deleted, ${fail} failed.`)
+      toast.error(t("pages.threads.bulkDeletePartial", { ok, fail }))
     }
     setSelected({})
   }
@@ -136,11 +142,16 @@ export function ThreadsPage() {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 border-b border-border px-6 py-3">
-          <h1 className="text-[15px] font-semibold tracking-tight">Threads</h1>
+          <h1 className="text-[15px] font-semibold tracking-tight">
+            {t("pages.threads.title")}
+          </h1>
           <span className="font-mono text-[11.5px] text-muted-foreground">
             {threads.isLoading
-              ? "loading…"
-              : `${filtered.length} of ${total}`}
+              ? t("pages.threads.loadingShort")
+              : t("pages.threads.ofTotal", {
+                  filtered: formatCount(filtered.length),
+                  total: formatCount(total),
+                })}
           </span>
           <div className="relative ml-3 w-64">
             <Search
@@ -148,7 +159,7 @@ export function ThreadsPage() {
               strokeWidth={2}
             />
             <Input
-              placeholder="Search threads…"
+              placeholder={t("pages.threads.searchPlaceholder")}
               className="pl-8 h-8 text-[13px]"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -158,7 +169,7 @@ export function ThreadsPage() {
                 type="button"
                 onClick={() => setQuery("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                aria-label="clear"
+                aria-label={t("actions.clear")}
               >
                 <X className="size-3" strokeWidth={2} />
               </button>
@@ -167,7 +178,7 @@ export function ThreadsPage() {
           {selectedIds.length > 0 && (
             <div className="flex items-center gap-1.5">
               <Badge className="font-mono text-[10.5px]">
-                {selectedIds.length} selected
+                {t("actions.selected", { count: selectedIds.length })}
               </Badge>
               <Button
                 variant="outline"
@@ -181,7 +192,7 @@ export function ThreadsPage() {
                 ) : (
                   <Trash2 className="size-3" strokeWidth={2} />
                 )}
-                Delete
+                {t("actions.delete")}
               </Button>
               <Button
                 variant="ghost"
@@ -207,7 +218,7 @@ export function ThreadsPage() {
               )}
               strokeWidth={2}
             />
-            Refresh
+            {t("actions.refresh")}
           </Button>
         </div>
 
@@ -219,18 +230,18 @@ export function ThreadsPage() {
               <EmptyState total={total} hasQuery={query.length > 0} />
             ) : (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {filtered.map((t) => (
+                {filtered.map((thread) => (
                   <ThreadCard
-                    key={t.thread_id}
-                    thread={t}
-                    selected={!!selected[t.thread_id]}
-                    onToggle={() => toggle(t.thread_id)}
-                    onOpen={() => setOpenThread(t)}
-                    onExport={() => void handleExport(t)}
+                    key={thread.thread_id}
+                    thread={thread}
+                    selected={!!selected[thread.thread_id]}
+                    onToggle={() => toggle(thread.thread_id)}
+                    onOpen={() => setOpenThread(thread)}
+                    onExport={() => void handleExport(thread)}
                     onDelete={async () => {
                       try {
-                        await deleteThread.mutateAsync(t.thread_id)
-                        toast.success("Thread deleted.")
+                        await deleteThread.mutateAsync(thread.thread_id)
+                        toast.success(t("pages.threads.deleted"))
                       } catch (err) {
                         toast.error((err as Error).message)
                       }
@@ -273,20 +284,21 @@ function ThreadCard({
   onExport: () => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <article
       className={cn(
-        "group relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors",
+        "group relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors duration-[120ms]",
         selected
           ? "border-primary/60 ring-2 ring-primary/20"
-          : "border-border hover:bg-muted/30",
+          : "border-border hover:bg-muted",
       )}
     >
       <div className="flex items-start gap-2.5">
         <Checkbox
           checked={selected}
           onCheckedChange={onToggle}
-          aria-label="select thread"
+          aria-label={t("pages.threads.selectThread")}
           className="mt-0.5"
           onClick={(e) => e.stopPropagation()}
         />
@@ -300,7 +312,7 @@ function ThreadCard({
           </span>
           <div className="min-w-0 flex-1">
             <h3 className="line-clamp-2 text-[14px] font-medium leading-[1.4] text-foreground">
-              {thread.question || "(untitled thread)"}
+              {thread.question || t("pages.threads.untitledThread")}
             </h3>
             <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted-foreground">
               {thread.thread_id.slice(0, 16)}…
@@ -313,18 +325,18 @@ function ThreadCard({
               variant="ghost"
               size="icon"
               className="size-7 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
-              aria-label="thread menu"
+              aria-label={t("pages.threads.threadMenu")}
             >
               <MoreHorizontal className="size-3.5" strokeWidth={2} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuLabel>Thread</DropdownMenuLabel>
-            <DropdownMenuItem onClick={onOpen}>Open</DropdownMenuItem>
-            <DropdownMenuItem onClick={onExport}>Export JSON</DropdownMenuItem>
+            <DropdownMenuLabel>{t("pages.threads.threadLabel")}</DropdownMenuLabel>
+            <DropdownMenuItem onClick={onOpen}>{t("actions.open")}</DropdownMenuItem>
+            <DropdownMenuItem onClick={onExport}>{t("actions.exportJson")}</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive" onClick={onDelete}>
-              <Trash2 className="size-3.5" strokeWidth={2} /> Delete
+              <Trash2 className="size-3.5" strokeWidth={2} /> {t("actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -344,12 +356,12 @@ function ThreadCard({
         <div className="mt-auto flex items-center gap-2 pt-1">
           {thread.citations > 0 && (
             <Badge variant="secondary" className="font-mono text-[10.5px]">
-              {thread.citations} citation{thread.citations === 1 ? "" : "s"}
+              {t("pages.threads.citationCount", { count: thread.citations })}
             </Badge>
           )}
           {thread.updated_at && (
             <span className="ml-auto font-mono text-[10.5px] text-muted-foreground">
-              {thread.updated_at.slice(0, 19)}
+              {formatRelativeTime(thread.updated_at)}
             </span>
           )}
         </div>
@@ -386,18 +398,22 @@ function EmptyState({
   total: number
   hasQuery: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-2 py-16 text-center">
       <div className="inline-flex size-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
         <MessageSquare className="size-5" strokeWidth={1.75} />
       </div>
       <h2 className="text-[16px] font-semibold text-foreground">
-        {hasQuery ? "No threads match your search." : "No threads yet."}
+        {hasQuery ? t("pages.threads.noMatch") : t("pages.threads.empty")}
       </h2>
       <p className="text-[13px] leading-[1.55] text-muted-foreground">
         {hasQuery
-          ? `${total} thread${total === 1 ? "" : "s"} indexed, but none contain that string.`
-          : "Threads appear here after you ask a question from the Ask page."}
+          ? t("pages.threads.noMatchDetail", {
+              count: total,
+              formattedCount: formatCount(total),
+            })
+          : t("pages.threads.emptyDetail")}
       </p>
     </div>
   )
@@ -424,21 +440,22 @@ function ThreadsFilterRail({
   totalCount: number
   errorCount: number
 }) {
+  const { t } = useTranslation()
   return (
     <aside className="hidden w-[240px] shrink-0 flex-col border-r border-border bg-background lg:flex">
       <div className="border-b border-border px-4 py-3">
-        <div className="text-[14px] font-semibold">Filters</div>
+        <div className="text-[14px] font-semibold">{t("pages.threads.filters")}</div>
         <p className="mt-2 font-mono text-[11px] leading-[1.55] text-muted-foreground">
-          {totalCount.toLocaleString()} threads ·{" "}
+          {t("pages.threads.threadCount", { count: totalCount, formattedCount: formatCount(totalCount) })} ·{" "}
           <span className={errorCount > 0 ? "text-destructive" : ""}>
-            {errorCount.toLocaleString()} with errors
+            {t("pages.threads.withErrors", { count: errorCount, formattedCount: formatCount(errorCount) })}
           </span>
         </p>
       </div>
       <div className="space-y-4 border-b border-border px-4 py-3">
         <div>
           <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-            status
+            {t("pages.threads.status")}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {(["all", "ok", "error"] as const).map((s) => (
@@ -454,7 +471,7 @@ function ThreadsFilterRail({
                   s === "error" && statusFilter === s && "border-destructive text-destructive bg-destructive/10",
                 )}
               >
-                {s}
+                {t(`status.${s}`)}
               </button>
             ))}
           </div>
@@ -463,11 +480,11 @@ function ThreadsFilterRail({
       <ScrollArea className="flex-1 min-h-0">
         <div className="space-y-2 px-4 py-3">
           <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-            model
+            {t("pages.threads.model")}
           </div>
           {modelFacets.length === 0 ? (
             <p className="text-[12px] italic text-muted-foreground">
-              No model data yet — runs are required.
+              {t("pages.threads.noModelData")}
             </p>
           ) : (
             <ul className="space-y-0.5">
@@ -480,9 +497,9 @@ function ThreadsFilterRail({
                     modelFilter === null ? "bg-primary/10 text-primary" : "hover:bg-muted",
                   )}
                 >
-                  <span>Any model</span>
+                  <span>{t("pages.threads.anyModel")}</span>
                   <span className="font-mono tabular-nums text-muted-foreground">
-                    {modelFacets.reduce((s, m) => s + m.count, 0)}
+                    {formatCount(modelFacets.reduce((s, m) => s + m.count, 0))}
                   </span>
                 </button>
               </li>
@@ -500,7 +517,7 @@ function ThreadsFilterRail({
                   >
                     <span className="truncate font-mono text-[12px]">{m.model}</span>
                     <span className="font-mono tabular-nums text-muted-foreground">
-                      {m.count}
+                      {formatCount(m.count)}
                     </span>
                   </button>
                 </li>

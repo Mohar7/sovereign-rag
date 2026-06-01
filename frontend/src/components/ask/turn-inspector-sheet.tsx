@@ -1,4 +1,5 @@
 import { Bot, Check, Clock, ExternalLink, FileText, Hash, Sparkles, User } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -10,6 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import type { StageName, StageState } from "@/components/ask/pipeline-strip"
+import { formatCount, formatDecimal } from "@/lib/format"
 import type { AskOverrides, CitationModel } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -36,6 +38,7 @@ interface Props {
 }
 
 export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
+  const { t } = useTranslation()
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -49,11 +52,11 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
             </span>
             <div className="min-w-0 flex-1">
               <SheetTitle className="line-clamp-2 text-[15px] font-semibold leading-[1.35]">
-                Turn inspector
+                {t("pages.ask.inspector.title")}
               </SheetTitle>
               {turn?.threadId && (
                 <SheetDescription className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground">
-                  thread {turn.threadId}
+                  {t("pages.ask.inspector.threadLabel", { id: turn.threadId })}
                 </SheetDescription>
               )}
             </div>
@@ -61,14 +64,16 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
           {turn && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="font-mono text-[10.5px]">
-                turn #{turn.id}
+                {t("pages.ask.inspector.turnBadge", { id: turn.id })}
               </Badge>
               <Badge variant="outline" className="font-mono text-[10.5px]">
-                {turn.used} of {turn.retrieved} chunks
+                {t("pages.ask.chunksUsed", {
+                  used: formatCount(turn.used),
+                  total: formatCount(turn.retrieved),
+                })}
               </Badge>
               <Badge variant="outline" className="font-mono text-[10.5px]">
-                {turn.citations.length} citation
-                {turn.citations.length === 1 ? "" : "s"}
+                {t("pages.ask.inspector.citationsBadge", { count: turn.citations.length })}
               </Badge>
             </div>
           )}
@@ -83,8 +88,10 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
                     icon={<Clock className="size-3.5" strokeWidth={2} />}
                     label={
                       turn.totalMs !== undefined
-                        ? `Pipeline · ${formatMs(turn.totalMs)} total`
-                        : "Pipeline"
+                        ? t("pages.ask.inspector.pipelineTotal", {
+                            total: formatMs(turn.totalMs),
+                          })
+                        : t("pages.ask.inspector.pipeline")
                     }
                   >
                     <PipelineTimeline
@@ -96,7 +103,7 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
 
                 <Section
                   icon={<User className="size-3.5" strokeWidth={2} />}
-                  label="Question"
+                  label={t("pages.ask.inspector.question")}
                 >
                   <p className="rounded-lg bg-muted/40 px-3 py-2 text-[13.5px] leading-[1.55]">
                     {turn.question}
@@ -105,11 +112,11 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
 
                 <Section
                   icon={<Bot className="size-3.5" strokeWidth={2} />}
-                  label="Answer"
+                  label={t("pages.ask.inspector.answer")}
                 >
                   <div className="rounded-lg border border-border bg-card px-3 py-2 text-[13.5px] leading-[1.55] whitespace-pre-wrap">
                     {turn.answer || (
-                      <span className="italic text-muted-foreground">(empty answer)</span>
+                      <span className="italic text-muted-foreground">{t("pages.ask.inspector.emptyAnswer")}</span>
                     )}
                   </div>
                 </Section>
@@ -117,7 +124,7 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
                 {turn.overrides && (
                   <Section
                     icon={<Hash className="size-3.5" strokeWidth={2} />}
-                    label="Overrides used"
+                    label={t("pages.ask.inspector.overridesUsed")}
                   >
                     <OverridesList overrides={turn.overrides} />
                   </Section>
@@ -125,11 +132,13 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
 
                 <Section
                   icon={<FileText className="size-3.5" strokeWidth={2} />}
-                  label={`Citations (${turn.citations.length})`}
+                  label={t("pages.ask.inspector.citationsLabel", {
+                    count: turn.citations.length,
+                  })}
                 >
                   {turn.citations.length === 0 ? (
                     <p className="text-[12.5px] italic text-muted-foreground">
-                      No citations attached to this turn.
+                      {t("pages.ask.inspector.noCitations")}
                     </p>
                   ) : (
                     <ol className="space-y-2">
@@ -143,13 +152,13 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
                               [{i + 1}]
                             </span>
                             <span className="truncate font-medium text-foreground">
-                              {c.title || "untitled"}
+                              {c.title || t("common.untitled")}
                             </span>
                             {c.page !== null && c.page !== undefined && (
                               <span className="font-mono tabular-nums">p.{c.page}</span>
                             )}
                             <span className="ml-auto font-mono tabular-nums">
-                              {c.score.toFixed(3)}
+                              {formatDecimal(c.score, 3)}
                             </span>
                           </div>
                           <p className="mt-1.5 text-[12.5px] leading-[1.55] text-muted-foreground line-clamp-5">
@@ -209,18 +218,18 @@ function Section({
 // fall back to the max single-stage value so the layout still works.
 // ─────────────────────────────────────────────────────────────────
 
-const STAGE_ROW_META: Record<StageName, { label: string; description: string }> = {
+const STAGE_ROW_META: Record<StageName, { labelKey: string; descriptionKey: string }> = {
   retrieve_local: {
-    label: "Retrieve",
-    description: "Milvus hybrid (dense + BM25) + Neo4j graph local search, fused via RRF.",
+    labelKey: "pages.ask.inspector.stages.retrieve.label",
+    descriptionKey: "pages.ask.inspector.stages.retrieve.description",
   },
   rerank: {
-    label: "Rerank",
-    description: "Cross-encoder reranks the candidate pool down to k_rerank.",
+    labelKey: "pages.ask.inspector.stages.rerank.label",
+    descriptionKey: "pages.ask.inspector.stages.rerank.description",
   },
   generate: {
-    label: "Generate",
-    description: "LLM synthesises a cited answer from the reranked context.",
+    labelKey: "pages.ask.inspector.stages.generate.label",
+    descriptionKey: "pages.ask.inspector.stages.generate.description",
   },
 }
 
@@ -231,6 +240,7 @@ function PipelineTimeline({
   stages: Record<StageName, StageState>
   totalMs?: number
 }) {
+  const { t } = useTranslation()
   const order: StageName[] = ["retrieve_local", "rerank", "generate"]
   const known = order
     .map((n) => stages[n]?.elapsedMs ?? 0)
@@ -265,13 +275,13 @@ function PipelineTimeline({
               >
                 {isDone ? <Check className="size-3" /> : <Clock className="size-3" />}
               </span>
-              <span className="font-medium text-foreground">{meta.label}</span>
+              <span className="font-medium text-foreground">{t(meta.labelKey)}</span>
               <span className="ml-auto font-mono text-[11.5px] tabular-nums">
                 {typeof elapsed === "number" ? formatMs(elapsed) : "—"}
               </span>
             </div>
             <p className="ml-7 mt-0.5 text-[11.5px] leading-[1.4] text-muted-foreground">
-              {meta.description}
+              {t(meta.descriptionKey)}
             </p>
             <div
               aria-hidden
@@ -279,7 +289,7 @@ function PipelineTimeline({
             >
               <div
                 className={cn(
-                  "h-full rounded-full transition-[width] duration-200",
+                  "h-full rounded-full transition-[width] duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]",
                   isRunning ? "bg-primary/60" : "bg-primary",
                 )}
                 style={{ width: `${widthPct}%` }}
@@ -298,6 +308,7 @@ function formatMs(n: number): string {
 }
 
 function OverridesList({ overrides }: { overrides: AskOverrides }) {
+  const { t } = useTranslation()
   const rows: Array<[string, string]> = []
   if (overrides.model) rows.push(["model", overrides.model])
   if (overrides.retrieve_top_k != null)
@@ -305,11 +316,14 @@ function OverridesList({ overrides }: { overrides: AskOverrides }) {
   if (overrides.rerank_top_k != null)
     rows.push(["rerank_top_k", String(overrides.rerank_top_k)])
   if (overrides.enable_graph_retrieval != null)
-    rows.push(["enable_graph_retrieval", overrides.enable_graph_retrieval ? "on" : "off"])
+    rows.push([
+      "enable_graph_retrieval",
+      overrides.enable_graph_retrieval ? t("pages.ask.on") : t("pages.ask.off"),
+    ])
   if (rows.length === 0) {
     return (
       <p className="text-[12.5px] italic text-muted-foreground">
-        Server defaults (no per-question overrides).
+        {t("pages.ask.inspector.serverDefaults")}
       </p>
     )
   }

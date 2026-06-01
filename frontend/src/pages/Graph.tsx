@@ -10,6 +10,7 @@ import {
   type SimulationNodeDatum,
 } from "d3-force"
 import { Loader2, Network, RefreshCw, Search, Share2, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,7 @@ import {
   useGraphStats,
 } from "@/hooks/use-graph"
 import type { EntityRow, GraphEdge, GraphNode } from "@/lib/api"
+import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // ─────────────────────────────────────────────────────────────────
@@ -50,11 +52,18 @@ function radiusForMentions(m: number): number {
   return 8 + Math.min(20, Math.sqrt(Math.max(0, m)) * 2.5)
 }
 
-/** Colour the seed differently from N-hop neighbours. */
-function nodeColor(distance: number): string {
-  if (distance === 0) return "var(--primary)"
-  if (distance === 1) return "color-mix(in oklab, var(--primary) 60%, var(--foreground))"
-  return "var(--muted-foreground)"
+/** Colour a node by its extracted entity kind (the design-system encoding). */
+const KIND_COLOR: Record<string, string> = {
+  person: "var(--chart-4)",
+  organization: "var(--primary)",
+  location: "var(--warning)",
+  concept: "var(--chart-2)",
+  technology: "var(--success)",
+  event: "var(--destructive)",
+}
+function kindColor(type?: string | null): string {
+  if (!type) return "var(--muted-foreground)"
+  return KIND_COLOR[type.toLowerCase()] ?? "var(--muted-foreground)"
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -62,6 +71,7 @@ function nodeColor(distance: number): string {
 // ─────────────────────────────────────────────────────────────────
 
 export function GraphPage() {
+  const { t } = useTranslation()
   const [seed, setSeed] = useState<string | null>(null)
   const [depth, setDepth] = useState(2)
   const [search, setSearch] = useState("")
@@ -85,19 +95,21 @@ export function GraphPage() {
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2 text-[14px] font-semibold">
             <Network className="size-3.5 text-muted-foreground" strokeWidth={2} />
-            Graph explorer
+            {t("pages.graph.explorer")}
           </div>
           {stats.data && (
             <p className="mt-2 font-mono text-[11px] leading-[1.55] text-muted-foreground">
-              {stats.data.entities.toLocaleString()} entities ·{" "}
-              {stats.data.relations.toLocaleString()} relations ·{" "}
-              {stats.data.mentions.toLocaleString()} mentions
+              {t("pages.graph.corpusStats", {
+                entities: formatCount(stats.data.entities),
+                relations: formatCount(stats.data.relations),
+                mentions: formatCount(stats.data.mentions),
+              })}
             </p>
           )}
         </div>
         <div className="border-b border-border px-4 py-3 space-y-2">
           <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-            seed entity
+            {t("pages.graph.seedEntity")}
           </div>
           <div className="relative">
             <Search
@@ -105,7 +117,7 @@ export function GraphPage() {
               strokeWidth={2}
             />
             <Input
-              placeholder="search entities"
+              placeholder={t("pages.graph.searchEntities")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8 h-8 text-[13px]"
@@ -122,7 +134,7 @@ export function GraphPage() {
           </div>
           <div className="flex items-center gap-2 pt-1">
             <span className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-              depth
+              {t("pages.graph.depth")}
             </span>
             {[1, 2, 3].map((d) => (
               <button
@@ -143,11 +155,13 @@ export function GraphPage() {
         </div>
         <ScrollArea className="flex-1 min-h-0">
           {entities.isLoading && (
-            <div className="p-4 text-[12.5px] text-muted-foreground">loading…</div>
+            <div className="p-4 text-[12.5px] text-muted-foreground">
+              {t("common.loading")}
+            </div>
           )}
           {!entities.isLoading && (entities.data?.length ?? 0) === 0 && (
             <div className="p-4 text-[12.5px] text-muted-foreground">
-              No entities match.
+              {t("pages.graph.noEntitiesMatch")}
             </div>
           )}
           <ul className="p-2">
@@ -172,15 +186,20 @@ export function GraphPage() {
           <h1 className="text-[15px] font-semibold tracking-tight">
             {seed ? (
               <>
-                Neighborhood of <span className="text-primary">{seed}</span>
+                {t("pages.graph.neighborhoodOf")}{" "}
+                <span className="text-primary">{seed}</span>
               </>
             ) : (
-              "Knowledge graph"
+              t("pages.graph.title")
             )}
           </h1>
           {nbh.data && (
             <span className="font-mono text-[11.5px] text-muted-foreground">
-              {nbh.data.nodes.length} nodes · {nbh.data.edges.length} edges · depth {nbh.data.depth}
+              {t("pages.graph.canvasStats", {
+                nodes: formatCount(nbh.data.nodes.length),
+                edges: formatCount(nbh.data.edges.length),
+                depth: nbh.data.depth,
+              })}
             </span>
           )}
           <Button
@@ -194,19 +213,29 @@ export function GraphPage() {
               className={cn("size-3.5", nbh.isFetching && "animate-spin")}
               strokeWidth={2}
             />
-            Refresh
+            {t("actions.refresh")}
           </Button>
         </div>
-        <div className="relative flex-1 overflow-hidden bg-muted/20">
+        <div className="relative flex-1 overflow-hidden">
+          {/* dot-grid — the only grid texture in the system (24px pitch, --border @40%) */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle, color-mix(in oklab, var(--border) 40%, transparent) 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
+            }}
+          />
           {nbh.isLoading && (
             <div className="absolute inset-0 flex items-center justify-center text-[13px] text-muted-foreground">
               <Loader2 className="mr-2 size-3.5 animate-spin" />
-              expanding neighborhood…
+              {t("pages.graph.expanding")}
             </div>
           )}
           {!nbh.isLoading && !nbh.data && !seed && (
             <div className="absolute inset-0 flex items-center justify-center text-[13px] text-muted-foreground">
-              Pick a seed entity on the left to start.
+              {t("pages.graph.pickSeed")}
             </div>
           )}
           {nbh.data && (
@@ -225,9 +254,11 @@ export function GraphPage() {
       {/* right panel: selected node details */}
       <aside className="hidden w-[300px] shrink-0 flex-col border-l border-border bg-background xl:flex">
         <div className="border-b border-border px-4 py-3">
-          <div className="text-[14px] font-semibold">Selection</div>
+          <div className="text-[14px] font-semibold">
+            {t("pages.graph.selection")}
+          </div>
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-            Click any node to inspect; click again to clear.
+            {t("pages.graph.selectionHint")}
           </p>
         </div>
         <ScrollArea className="flex-1 min-h-0">
@@ -258,6 +289,7 @@ function EntityListItem({
   selected: boolean
   onClick: () => void
 }) {
+  useTranslation()
   return (
     <li>
       <button
@@ -283,7 +315,7 @@ function EntityListItem({
           </span>
         )}
         <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground">
-          {entity.mentions}
+          {formatCount(entity.mentions)}
         </span>
       </button>
     </li>
@@ -330,13 +362,13 @@ function GraphCanvas({ nodes, edges, hovered, selected, onHover, onSelect }: Can
     }))
     const byId = new Map(simNodes.map((n) => [n.id, n]))
     const simLinks: SimLink[] = edges
-      .map((e) => ({
-        source: byId.get(e.source),
-        target: byId.get(e.target),
-        type: e.type,
-        description: e.description,
-      }))
-      .filter((l): l is SimLink => l.source != null && l.target != null)
+      .map((e): SimLink | null => {
+        const source = byId.get(e.source)
+        const target = byId.get(e.target)
+        if (!source || !target) return null
+        return { source, target, type: e.type, description: e.description }
+      })
+      .filter((l): l is SimLink => l !== null)
 
     simNodesRef.current = simNodes
     simLinksRef.current = simLinks
@@ -440,7 +472,7 @@ function GraphCanvas({ nodes, edges, hovered, selected, onHover, onSelect }: Can
               )}
               <circle
                 r={r}
-                fill={nodeColor(n.distance)}
+                fill={kindColor(n.type)}
                 stroke="var(--background)"
                 strokeWidth={2}
               />
@@ -475,17 +507,18 @@ function SelectionPanel({
   selected: string | null
   onPickSeed: (name: string) => void
 }) {
+  const { t } = useTranslation()
   if (!neighborhood) {
     return (
       <div className="p-4 text-[12.5px] text-muted-foreground">
-        Load a neighborhood to inspect nodes.
+        {t("pages.graph.loadNeighborhood")}
       </div>
     )
   }
   if (!selected) {
     return (
       <div className="p-4 text-[12.5px] text-muted-foreground">
-        Nothing selected.
+        {t("pages.graph.nothingSelected")}
       </div>
     )
   }
@@ -493,7 +526,7 @@ function SelectionPanel({
   if (!node) {
     return (
       <div className="p-4 text-[12.5px] text-muted-foreground">
-        That node isn't in the current view.
+        {t("pages.graph.nodeNotInView")}
       </div>
     )
   }
@@ -513,10 +546,15 @@ function SelectionPanel({
             </Badge>
           )}
           <Badge variant="secondary" className="font-mono text-[10.5px]">
-            {node.mentions} mentions
+            {t("pages.graph.mentionsCount", {
+              count: node.mentions,
+              formatted: formatCount(node.mentions),
+            })}
           </Badge>
           <Badge variant="outline" className="font-mono text-[10.5px]">
-            {node.distance === 0 ? "seed" : `+${node.distance} hops`}
+            {node.distance === 0
+              ? t("pages.graph.seed")
+              : t("pages.graph.hopsCount", { count: node.distance })}
           </Badge>
         </div>
         {node.description && (
@@ -532,17 +570,17 @@ function SelectionPanel({
           disabled={node.distance === 0}
         >
           <Share2 className="size-3.5" strokeWidth={2} />
-          Re-center on this node
+          {t("pages.graph.recenterOnThis")}
         </Button>
       </div>
 
       <div>
         <div className="mb-1.5 font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-          relations · {incident.length}
+          {t("pages.graph.relations")} · {formatCount(incident.length)}
         </div>
         {incident.length === 0 ? (
           <p className="text-[12px] italic text-muted-foreground">
-            No incident edges in this view.
+            {t("pages.graph.noIncidentEdges")}
           </p>
         ) : (
           <ul className="space-y-1.5">
@@ -557,7 +595,7 @@ function SelectionPanel({
                     <span className="font-medium text-foreground truncate">{other}</span>
                   </div>
                   <div className="mt-0.5 font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-                    {e.type || "related"}
+                    {e.type || t("pages.graph.relatedFallback")}
                   </div>
                   {e.description && (
                     <p className="mt-1 text-[11.5px] leading-[1.4] text-muted-foreground">

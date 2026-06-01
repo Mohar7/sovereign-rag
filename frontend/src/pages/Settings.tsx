@@ -13,6 +13,7 @@ import {
   Server,
   Sparkles,
 } from "lucide-react"
+import { Trans, useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -43,9 +44,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useHealth } from "@/hooks/use-ask"
 import { useModels, useSettings, useUpdateSettings } from "@/hooks/use-settings"
 import type { ModelChoice, ServiceStatus, SettingsResponse } from "@/lib/api"
+import { formatCount, formatDecimal } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 export function SettingsPage() {
+  const { t } = useTranslation()
   const settings = useSettings()
   const update = useUpdateSettings()
 
@@ -65,7 +68,12 @@ export function SettingsPage() {
     setDraft(next)
     update.mutate({ [key]: value } as Partial<SettingsResponse>, {
       onError: (err) => {
-        toast.error(`Failed to update ${String(key)}: ${err.message}`)
+        toast.error(
+          t("pages.settings.updateFailed", {
+            key: String(key),
+            message: err.message,
+          }),
+        )
         // Roll back the draft to the server's last known value.
         if (settings.data) setDraft(settings.data)
       },
@@ -75,7 +83,8 @@ export function SettingsPage() {
   if (settings.isLoading || !draft) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> <span className="ml-2">loading settings…</span>
+        <Loader2 className="size-4 animate-spin" />{" "}
+        <span className="ml-2">{t("pages.settings.loading")}</span>
       </div>
     )
   }
@@ -85,22 +94,29 @@ export function SettingsPage() {
       <ScrollArea className="h-full">
         <div className="mx-auto w-full max-w-4xl p-6">
           <header className="mb-6">
-            <h1 className="text-[20px] font-semibold tracking-tight">Settings</h1>
+            <h1 className="text-[20px] font-semibold tracking-tight">
+              {t("pages.settings.title")}
+            </h1>
             <p className="mt-1 text-[13px] leading-[1.55] text-muted-foreground">
-              Live retrieval knobs. Changes apply immediately in-process — values
-              reset on server restart until persistence is wired.
+              {t("pages.settings.subtitle")}
             </p>
           </header>
 
           <Tabs defaultValue="retrieval">
             <TabsList className="mb-5 w-full max-w-full overflow-x-auto">
-              <TabsTrigger value="retrieval">Retrieval</TabsTrigger>
-              <TabsTrigger value="model">Model</TabsTrigger>
-              <TabsTrigger value="indexing">Indexing</TabsTrigger>
-              <TabsTrigger value="rerank">Rerank</TabsTrigger>
-              <TabsTrigger value="services">Services</TabsTrigger>
+              <TabsTrigger value="retrieval">
+                {t("pages.settings.tabs.retrieval")}
+              </TabsTrigger>
+              <TabsTrigger value="model">{t("pages.settings.tabs.model")}</TabsTrigger>
+              <TabsTrigger value="indexing">
+                {t("pages.settings.tabs.indexing")}
+              </TabsTrigger>
+              <TabsTrigger value="rerank">{t("pages.settings.tabs.rerank")}</TabsTrigger>
+              <TabsTrigger value="services">
+                {t("pages.settings.tabs.services")}
+              </TabsTrigger>
               <TabsTrigger value="danger" className="text-destructive">
-                Danger
+                {t("pages.settings.tabs.danger")}
               </TabsTrigger>
             </TabsList>
 
@@ -142,52 +158,55 @@ interface TabProps {
 }
 
 function RetrievalTab({ draft, patch }: TabProps) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-5">
       <SectionCard
-        title="Hybrid retrieval"
-        subtitle="Dense + sparse + graph candidates fused, reranked by a cross-encoder."
+        title={t("pages.settings.retrieval.hybrid.title")}
+        subtitle={t("pages.settings.retrieval.hybrid.subtitle")}
       >
         <SliderRow
-          label="k_retrieve (candidates per retriever)"
+          label={t("pages.settings.retrieval.kRetrieve")}
           min={1}
           max={200}
           value={draft.retrieve_top_k}
           onChange={(v) => patch("retrieve_top_k", v)}
         />
         <SliderRow
-          label="k_rerank (final chunks to LLM)"
+          label={t("pages.settings.retrieval.kRerank")}
           min={1}
           max={50}
           value={draft.rerank_top_k}
           onChange={(v) => patch("rerank_top_k", v)}
         />
         <SwitchRow
-          label="Dense retriever"
-          description="Cosine ANN over Milvus dense vectors."
+          label={t("pages.settings.retrieval.dense.label")}
+          description={t("pages.settings.retrieval.dense.description")}
           value={draft.dense_enabled}
           onChange={(v) => patch("dense_enabled", v)}
         />
         <SwitchRow
-          label="Sparse retriever (BM25)"
-          description="Milvus native BM25 over the sparse text field."
+          label={t("pages.settings.retrieval.sparse.label")}
+          description={t("pages.settings.retrieval.sparse.description")}
           value={draft.sparse_enabled}
           onChange={(v) => patch("sparse_enabled", v)}
         />
         <SwitchRow
-          label="Graph retriever (Neo4j local-search)"
-          description="1-hop traversal joined into the fusion step."
+          label={t("pages.settings.retrieval.graph.label")}
+          description={t("pages.settings.retrieval.graph.description")}
           value={draft.enable_graph_retrieval}
           onChange={(v) => patch("enable_graph_retrieval", v)}
         />
       </SectionCard>
 
       <SectionCard
-        title="Fusion"
-        subtitle="How dense + sparse + graph rankings are combined into one ordered list."
+        title={t("pages.settings.fusion.title")}
+        subtitle={t("pages.settings.fusion.subtitle")}
       >
         <div className="space-y-2">
-          <Label className="text-[13px] font-medium">Strategy</Label>
+          <Label className="text-[13px] font-medium">
+            {t("pages.settings.fusion.strategy")}
+          </Label>
           <Select
             value={draft.fusion_strategy}
             onValueChange={(v) => patch("fusion_strategy", v)}
@@ -198,25 +217,31 @@ function RetrievalTab({ draft, patch }: TabProps) {
             <SelectContent>
               <SelectItem value="rrf">
                 <div className="flex flex-col items-start">
-                  <span className="font-medium">RRF (Reciprocal Rank Fusion)</span>
+                  <span className="font-medium">
+                    {t("pages.settings.fusion.rrf.label")}
+                  </span>
                   <span className="text-[11px] text-muted-foreground">
-                    rank-only, the proven default
+                    {t("pages.settings.fusion.rrf.hint")}
                   </span>
                 </div>
               </SelectItem>
               <SelectItem value="weighted">
                 <div className="flex flex-col items-start">
-                  <span className="font-medium">Weighted</span>
+                  <span className="font-medium">
+                    {t("pages.settings.fusion.weighted.label")}
+                  </span>
                   <span className="text-[11px] text-muted-foreground">
-                    uses the graph / vector weights below
+                    {t("pages.settings.fusion.weighted.hint")}
                   </span>
                 </div>
               </SelectItem>
               <SelectItem value="borda">
                 <div className="flex flex-col items-start">
-                  <span className="font-medium">Borda</span>
+                  <span className="font-medium">
+                    {t("pages.settings.fusion.borda.label")}
+                  </span>
                   <span className="text-[11px] text-muted-foreground">
-                    positional voting, also rank-only
+                    {t("pages.settings.fusion.borda.hint")}
                   </span>
                 </div>
               </SelectItem>
@@ -224,27 +249,27 @@ function RetrievalTab({ draft, patch }: TabProps) {
           </Select>
         </div>
         <SliderRow
-          label="RRF k constant"
+          label={t("pages.settings.fusion.rrfK")}
           min={1}
           max={200}
           value={draft.rrf_k}
           onChange={(v) => patch("rrf_k", v)}
         />
         <SliderRow
-          label="Graph weight"
+          label={t("pages.settings.fusion.graphWeight")}
           min={0}
           max={100}
           value={Math.round(draft.fusion_graph_weight * 100)}
           onChange={(v) => patch("fusion_graph_weight", v / 100)}
-          format={(v) => (v / 100).toFixed(2)}
+          format={(v) => formatDecimal(v / 100)}
         />
         <SliderRow
-          label="Vector weight"
+          label={t("pages.settings.fusion.vectorWeight")}
           min={0}
           max={100}
           value={Math.round(draft.fusion_vector_weight * 100)}
           onChange={(v) => patch("fusion_vector_weight", v / 100)}
-          format={(v) => (v / 100).toFixed(2)}
+          format={(v) => formatDecimal(v / 100)}
         />
       </SectionCard>
     </div>
@@ -252,6 +277,7 @@ function RetrievalTab({ draft, patch }: TabProps) {
 }
 
 function ModelTab({ draft, patch }: TabProps) {
+  const { t } = useTranslation()
   // For the OpenAI provider we use the `openai_chat_model*` fields; for Ollama
   // the shared `llm_model*` fields. The factory falls back to the latter when
   // the former are blank, so the UI just picks the right field per provider.
@@ -297,8 +323,8 @@ function ModelTab({ draft, patch }: TabProps) {
   return (
     <div className="space-y-5">
       <SectionCard
-        title="LLM"
-        subtitle="Provider + model per tier. Changes take effect on the next graph run — the factory cache is busted automatically."
+        title={t("pages.settings.llm.title")}
+        subtitle={t("pages.settings.llm.subtitle")}
       >
         <ProviderRow
           value={provider}
@@ -308,8 +334,8 @@ function ModelTab({ draft, patch }: TabProps) {
         />
 
         <ModelDropdownRow
-          label="Default (answer LLM)"
-          description="The chat model used to synthesise answers. The full-quality tier."
+          label={t("pages.settings.llm.default.label")}
+          description={t("pages.settings.llm.default.description")}
           value={currentValue("default")}
           onChange={(v) => setTier("default", v)}
           models={models.data ?? []}
@@ -319,8 +345,8 @@ function ModelTab({ draft, patch }: TabProps) {
           onReload={() => void models.refetch()}
         />
         <ModelDropdownRow
-          label="Light (structured output)"
-          description="Cheaper / faster tier for JSON-shaped sub-tasks (rerank prompts, contextual retrieval)."
+          label={t("pages.settings.llm.light.label")}
+          description={t("pages.settings.llm.light.description")}
           value={currentValue("light")}
           onChange={(v) => setTier("light", v)}
           models={models.data ?? []}
@@ -330,8 +356,8 @@ function ModelTab({ draft, patch }: TabProps) {
           onReload={() => void models.refetch()}
         />
         <ModelDropdownRow
-          label="Nano (smallest)"
-          description="Smallest local-only tier used by fast classification + safety checks."
+          label={t("pages.settings.llm.nano.label")}
+          description={t("pages.settings.llm.nano.description")}
           value={currentValue("nano")}
           onChange={(v) => setTier("nano", v)}
           models={models.data ?? []}
@@ -342,32 +368,44 @@ function ModelTab({ draft, patch }: TabProps) {
         />
 
         <SliderRow
-          label="Temperature"
+          label={t("pages.settings.llm.temperature")}
           min={0}
           max={200}
           value={Math.round(draft.llm_temperature * 100)}
           onChange={(v) => patch("llm_temperature", v / 100)}
-          format={(v) => (v / 100).toFixed(2)}
+          format={(v) => formatDecimal(v / 100)}
         />
         {provider === "openai" && (
-          <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 px-3 py-2.5 text-[12px] leading-[1.55] text-foreground">
+          <div className="flex items-start gap-2 rounded border border-warning/40 bg-warning/5 px-3 py-2.5 text-[12px] leading-[1.55] text-foreground">
             <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-warning" />
             <span>
-              Reasoning-class models (<code className="font-mono">gpt-5*</code>,{" "}
-              <code className="font-mono">o*</code>) ignore the temperature
-              slider — the API rejects any value other than the default.
+              <Trans
+                i18nKey="pages.settings.llm.reasoningWarning"
+                components={{ code: <code className="font-mono" /> }}
+              />
             </span>
           </div>
         )}
       </SectionCard>
 
       <SectionCard
-        title="Embeddings"
-        subtitle="Embedding provider + model. Pinned to the schema baked into Milvus — change via .env, then reindex."
+        title={t("pages.settings.embeddings.title")}
+        subtitle={t("pages.settings.embeddings.subtitle")}
       >
-        <ReadOnlyRow label="Provider" value={draft.embed_provider} />
-        <ReadOnlyRow label="Model" value={draft.embed_model} mono />
-        <ReadOnlyRow label="Dimension" value={String(draft.embed_dim)} mono />
+        <ReadOnlyRow
+          label={t("pages.settings.embeddings.provider")}
+          value={draft.embed_provider}
+        />
+        <ReadOnlyRow
+          label={t("pages.settings.embeddings.model")}
+          value={draft.embed_model}
+          mono
+        />
+        <ReadOnlyRow
+          label={t("pages.settings.embeddings.dimension")}
+          value={String(draft.embed_dim)}
+          mono
+        />
       </SectionCard>
     </div>
   )
@@ -380,13 +418,16 @@ function ProviderRow({
   value: "ollama" | "openai"
   onChange: (next: "ollama" | "openai") => void
 }) {
+  const { t } = useTranslation()
   const options: Array<{ id: "ollama" | "openai"; label: string; sub: string }> = [
-    { id: "ollama", label: "Ollama", sub: "local or Ollama Cloud" },
-    { id: "openai", label: "OpenAI", sub: "gpt-5 / 4.1 / o-series" },
+    { id: "ollama", label: "Ollama", sub: t("pages.settings.provider.ollamaSub") },
+    { id: "openai", label: "OpenAI", sub: t("pages.settings.provider.openaiSub") },
   ]
   return (
     <div className="space-y-2">
-      <Label className="text-[13px] font-medium">Provider</Label>
+      <Label className="text-[13px] font-medium">
+        {t("pages.settings.provider.label")}
+      </Label>
       <div className="grid grid-cols-2 gap-2">
         {options.map((o) => (
           <button
@@ -437,6 +478,7 @@ function ModelDropdownRow({
   provider: "ollama" | "openai"
   onReload: () => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const current = models.find((m) => m.id === value)
   return (
@@ -463,13 +505,13 @@ function ModelDropdownRow({
             {loading ? (
               <span className="inline-flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" />
-                loading models…
+                {t("pages.settings.model.loadingModels")}
               </span>
             ) : (
               <span className="truncate">
                 {value || (
                   <span className="italic text-muted-foreground">
-                    (auto · falls back to default tier)
+                    {t("pages.settings.model.autoFallback")}
                   </span>
                 )}
               </span>
@@ -479,7 +521,9 @@ function ModelDropdownRow({
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <Command>
-            <CommandInput placeholder={`Search ${provider} models…`} />
+            <CommandInput
+              placeholder={t("pages.settings.model.searchPlaceholder", { provider })}
+            />
             <CommandList>
               {error ? (
                 <div className="px-3 py-3 text-[12px] text-destructive">
@@ -489,12 +533,12 @@ function ModelDropdownRow({
                     onClick={onReload}
                     className="ml-1 underline hover:text-foreground"
                   >
-                    retry
+                    {t("pages.settings.model.retry")}
                   </button>
                 </div>
               ) : (
                 <>
-                  <CommandEmpty>No models found.</CommandEmpty>
+                  <CommandEmpty>{t("pages.settings.model.noModels")}</CommandEmpty>
                   <CommandGroup>
                     {models.map((m) => (
                       <CommandItem
@@ -532,7 +576,7 @@ function ModelDropdownRow({
       </Popover>
       {current && current.note === "reasoning" && (
         <p className="text-[11px] text-muted-foreground">
-          Reasoning model — temperature setting is ignored by the API.
+          {t("pages.settings.model.reasoningNote")}
         </p>
       )}
     </div>
@@ -540,26 +584,27 @@ function ModelDropdownRow({
 }
 
 function IndexingTab({ draft, patch }: TabProps) {
+  const { t } = useTranslation()
   return (
     <SectionCard
-      title="Indexing"
-      subtitle="Knobs applied during ingest. Reindex to apply contextual changes to existing chunks."
+      title={t("pages.settings.indexing.title")}
+      subtitle={t("pages.settings.indexing.subtitle")}
     >
       <SwitchRow
-        label="Contextual retrieval"
-        description="Prefix each chunk with an LLM-generated summary of the document context."
+        label={t("pages.settings.indexing.contextual.label")}
+        description={t("pages.settings.indexing.contextual.description")}
         value={draft.enable_contextual_retrieval}
         onChange={(v) => patch("enable_contextual_retrieval", v)}
       />
       <SliderRow
-        label="Graph BFS depth"
+        label={t("pages.settings.indexing.graphDepth")}
         min={1}
         max={5}
         value={draft.graph_depth}
         onChange={(v) => patch("graph_depth", v)}
       />
       <SliderRow
-        label="Graph max nodes"
+        label={t("pages.settings.indexing.graphMaxNodes")}
         min={10}
         max={500}
         value={draft.graph_max_nodes}
@@ -570,14 +615,21 @@ function IndexingTab({ draft, patch }: TabProps) {
 }
 
 function RerankTab({ draft, patch }: TabProps) {
+  const { t } = useTranslation()
   return (
     <SectionCard
-      title="Reranker"
-      subtitle="Cross-encoder applied after fusion. Score-floor drops weak chunks before they reach the LLM."
+      title={t("pages.settings.rerank.title")}
+      subtitle={t("pages.settings.rerank.subtitle")}
     >
-      <ReadOnlyRow label="Model" value={draft.reranker_model} mono />
+      <ReadOnlyRow
+        label={t("pages.settings.rerank.model")}
+        value={draft.reranker_model}
+        mono
+      />
       <div className="space-y-2">
-        <Label className="text-[13px] font-medium">Device</Label>
+        <Label className="text-[13px] font-medium">
+          {t("pages.settings.rerank.device")}
+        </Label>
         <Select
           value={draft.reranker_device}
           onValueChange={(v) =>
@@ -588,24 +640,24 @@ function RerankTab({ draft, patch }: TabProps) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="auto">auto (picks the best available)</SelectItem>
-            <SelectItem value="mps">mps (Apple Silicon)</SelectItem>
-            <SelectItem value="cuda">cuda (NVIDIA GPU)</SelectItem>
-            <SelectItem value="cpu">cpu (universal fallback)</SelectItem>
+            <SelectItem value="auto">{t("pages.settings.rerank.deviceAuto")}</SelectItem>
+            <SelectItem value="mps">{t("pages.settings.rerank.deviceMps")}</SelectItem>
+            <SelectItem value="cuda">{t("pages.settings.rerank.deviceCuda")}</SelectItem>
+            <SelectItem value="cpu">{t("pages.settings.rerank.deviceCpu")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
       <SliderRow
-        label="Score floor"
+        label={t("pages.settings.rerank.scoreFloor")}
         min={0}
         max={100}
         value={Math.round(draft.rerank_score_floor * 100)}
         onChange={(v) => patch("rerank_score_floor", v / 100)}
-        format={(v) => (v / 100).toFixed(2)}
+        format={(v) => formatDecimal(v / 100)}
       />
       <SwitchRow
-        label="Adaptive truncation"
-        description="Stop collecting once cumulative score-mass crosses 0.85 — keeps LLM context lean on easy queries."
+        label={t("pages.settings.rerank.adaptive.label")}
+        description={t("pages.settings.rerank.adaptive.description")}
         value={draft.adaptive_rerank}
         onChange={(v) => patch("adaptive_rerank", v)}
       />
@@ -614,15 +666,16 @@ function RerankTab({ draft, patch }: TabProps) {
 }
 
 function ServicesTab() {
+  const { t } = useTranslation()
   const health = useHealth()
   return (
     <SectionCard
-      title="Service health"
-      subtitle="Live per-service liveness + p50 latency. Re-probed every 30 seconds."
+      title={t("pages.settings.services.title")}
+      subtitle={t("pages.settings.services.subtitle")}
     >
       {health.isLoading && (
         <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-          <Loader2 className="size-3 animate-spin" /> probing services…
+          <Loader2 className="size-3 animate-spin" /> {t("pages.settings.services.probing")}
         </div>
       )}
       {health.data?.services && health.data.services.length > 0 && (
@@ -651,7 +704,7 @@ function SectionCard({
 }) {
   return (
     <Card>
-      <CardContent className="space-y-5 p-6">
+      <CardContent className="space-y-5 p-6 2xl:p-8">
         <div>
           <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
           {subtitle && (
@@ -751,6 +804,7 @@ function ReadOnlyRow({
 }
 
 function ServiceCard({ service }: { service: ServiceStatus }) {
+  const { t } = useTranslation()
   const tone =
     service.state === "ok"
       ? "border-success/40 bg-success/5"
@@ -786,7 +840,9 @@ function ServiceCard({ service }: { service: ServiceStatus }) {
           </Badge>
           {typeof service.latency_ms === "number" && (
             <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
-              {service.latency_ms.toFixed(0)}ms
+              {t("pages.settings.services.latencyMs", {
+                ms: formatCount(Math.round(service.latency_ms)),
+              })}
             </span>
           )}
         </div>
@@ -832,6 +888,7 @@ function iconFor(name: string) {
 // ─────────────────────────────────────────────────────────────────
 
 function DangerTab() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   return (
     <div className="space-y-4">
@@ -842,11 +899,10 @@ function DangerTab() {
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-[14px] font-semibold text-foreground">
-              Destructive operations
+              {t("pages.settings.danger.title")}
             </h2>
             <p className="mt-0.5 text-[12.5px] leading-[1.55] text-muted-foreground">
-              Everything in this tab is irreversible. The confirmation input
-              must match the scope name exactly before the button enables.
+              {t("pages.settings.danger.subtitle")}
             </p>
           </div>
         </div>
@@ -854,25 +910,31 @@ function DangerTab() {
 
       <WipeCard
         scope="corpus"
-        title="Wipe corpus"
-        summary="Drops the Milvus chunks collection and DETACH DELETE every node in Neo4j. Threads and pins survive."
-        details={["Milvus: drop sovereign_chunks collection", "Neo4j: MATCH (n) DETACH DELETE n", "Schema constraints + indexes retained (cheap)"]}
+        title={t("pages.settings.danger.corpus.title")}
+        summary={t("pages.settings.danger.corpus.summary")}
+        details={t("pages.settings.danger.corpus.details", {
+          returnObjects: true,
+        }) as string[]}
         invalidateKeys={[["library", "search"], ["corpus", "stats"], ["graph", "stats"], ["graph", "entities"]]}
         qc={qc}
       />
       <WipeCard
         scope="threads"
-        title="Wipe threads"
-        summary="TRUNCATEs every LangGraph checkpoint table + drops the on-disk pins file. Corpus is untouched."
-        details={["Postgres: TRUNCATE checkpoints + checkpoint_writes + checkpoint_blobs", "Filesystem: delete .runtime/thread_context.json"]}
+        title={t("pages.settings.danger.threads.title")}
+        summary={t("pages.settings.danger.threads.summary")}
+        details={t("pages.settings.danger.threads.details", {
+          returnObjects: true,
+        }) as string[]}
         invalidateKeys={[["threads", "list"], ["runs", "list"]]}
         qc={qc}
       />
       <WipeCard
         scope="all"
-        title="Wipe everything"
-        summary="Both of the above, in one call. Equivalent to a fresh install."
-        details={["Corpus + threads in one transaction-like sequence", "Use after major schema changes or when reproducing a clean baseline"]}
+        title={t("pages.settings.danger.all.title")}
+        summary={t("pages.settings.danger.all.summary")}
+        details={t("pages.settings.danger.all.details", {
+          returnObjects: true,
+        }) as string[]}
         invalidateKeys={[["library", "search"], ["corpus", "stats"], ["graph", "stats"], ["graph", "entities"], ["threads", "list"], ["runs", "list"]]}
         qc={qc}
       />
@@ -895,6 +957,7 @@ function WipeCard({
   invalidateKeys: Array<readonly string[]>
   qc: ReturnType<typeof useQueryClient>
 }) {
+  const { t } = useTranslation()
   const [confirmText, setConfirmText] = useState("")
   const [running, setRunning] = useState(false)
   const armed = confirmText === scope
@@ -911,13 +974,17 @@ function WipeCard({
         const body = await r.text().catch(() => r.statusText)
         throw new Error(body || r.statusText)
       }
-      toast.success(`Wiped ${scope}.`)
+      toast.success(t("pages.settings.danger.wipedToast", { scope }))
       setConfirmText("")
       for (const key of invalidateKeys) {
         void qc.invalidateQueries({ queryKey: [...key] })
       }
     } catch (err) {
-      toast.error(`Wipe failed: ${(err as Error).message}`)
+      toast.error(
+        t("pages.settings.danger.wipeFailedToast", {
+          message: (err as Error).message,
+        }),
+      )
     } finally {
       setRunning(false)
     }
@@ -925,7 +992,7 @@ function WipeCard({
 
   return (
     <Card className="border-destructive/30">
-      <CardContent className="space-y-3 p-5">
+      <CardContent className="space-y-3 p-6">
         <div className="space-y-1">
           <h3 className="text-[14px] font-semibold text-foreground">{title}</h3>
           <p className="text-[12.5px] leading-[1.55] text-muted-foreground">
@@ -940,8 +1007,14 @@ function WipeCard({
           ))}
         </ul>
         <div className="space-y-2 pt-1">
-          <Label className="text-[12px] font-medium">
-            Type <code className="rounded bg-muted px-1 font-mono">{scope}</code> to confirm
+          <Label className="text-[13px] font-medium">
+            <Trans
+              i18nKey="pages.settings.danger.confirmLabel"
+              values={{ scope }}
+              components={{
+                code: <code className="rounded bg-muted px-1 font-mono" />,
+              }}
+            />
           </Label>
           <div className="flex items-center gap-2">
             <Input
@@ -962,7 +1035,7 @@ function WipeCard({
               ) : (
                 <AlertTriangle className="size-3.5" strokeWidth={2} />
               )}
-              Wipe {scope}
+              {t("pages.settings.danger.wipeButton", { scope })}
             </Button>
           </div>
         </div>

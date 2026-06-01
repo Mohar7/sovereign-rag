@@ -54,7 +54,7 @@
     "clearAll": "Очистить всё",
     "reset": "Сбросить",
     "send": "Отправить",
-    "send_hint": "↵ для отправки · ⇧↵ — новая строка",
+    "send_hint": "Enter — отправить · Shift+Enter — новая строка",
     "selected": "Выбрано: {{count}}",
     "startFresh": "Начать сначала"
   },
@@ -76,7 +76,134 @@
       "resuming": "продолжается",
       "restoring": "Восстанавливаем историю диалога…",
       "noAnswer": "(нет текста ответа)",
-      "emptyAnswerFallback": "Модель не вернула текст ответа. Показываем {{count}} найденных фрагментов вместо этого."
+      "emptyAnswerFallback": "Модель не вернула текст ответа. Показываем {{count}} найденных фрагментов вместо этого.",
+      "heroSubtitle": "Гибридный поиск по графу и векторам, пересортировка кросс-энкодером, со встроенными ссылками на те фрагменты, которые ответ действительно использовал.",
+      "sourcesTitle": "Источники",
+      "retrieving": "идёт поиск",
+      "retrievingReranking": "Поиск и реранкинг",
+      "sourcesCount": "{{used}} из {{total}}",
+      "chunksUsed": "{{used}} из {{total}} фрагментов",
+      "statDocuments": "документов",
+      "statChunks": "фрагментов",
+      "statEntities": "сущностей",
+      "statRelations": "связей",
+      "loadingCorpusStats": "загрузка статистики корпуса…",
+      "requestFailed": "Запрос не удался.",
+      "noAnswerNoSources": "Модель не вернула ответ, и ни один источник не подошёл.",
+      "askCallFailed": "Вызов /ask не удался.",
+      "dismiss": "закрыть",
+      "used": "использован",
+      "expandSources": "развернуть источники",
+      "collapseSources": "свернуть источники",
+      "filterSources": "фильтровать источники",
+      "collapse": "свернуть",
+      "inspectorHint": "инспектор открывает детали по ходу",
+      "noSourcesForTurn": "Для этого хода нет источников.",
+      "pickModel": "выбрать модель",
+      "modelChip": "модель",
+      "modelThisQuestion": "модель · этот вопрос",
+      "serverDefault": "По умолчанию на сервере",
+      "unset": "(не задано)",
+      "loadingModels": "загрузка моделей…",
+      "retrievalKnobs": "параметры поиска",
+      "retrieveRerankChip": "поиск {{retrieve}} · реранкинг {{rerank}}",
+      "retrievalThisQuestion": "поиск · этот вопрос",
+      "serverDefaultKnobs": "по умолчанию на сервере · {{retrieve}}/{{rerank}}",
+      "graphToggle": "переключатель графа",
+      "graphChip": "граф {{state}}",
+      "on": "вкл",
+      "off": "выкл",
+      "knowledgeGraphThisQuestion": "граф знаний · этот вопрос",
+      "useGraphRetriever": "Использовать графовый ретривер",
+      "graphRetrieverHint": "Обход Neo4j на 1 шаг, подключённый к объединению RRF. Выключите, если нужны только плотный + разреженный.",
+      "serverDefaultState": "по умолчанию на сервере · {{state}}",
+      "openContextManager": "открыть менеджер контекста",
+      "attach": "прикрепить",
+      "openContextManagerTitle": "Открыть менеджер контекста (закрепления + исключения)",
+      "attachTitle": "Прикрепить",
+      "suggestions": {
+        "summarizeRrf": {
+          "title": "Кратко изложите последнюю статью про объединение RRF в корпусе.",
+          "sub": "пробует: граф + плотный + разреженный"
+        },
+        "mapEntities": {
+          "title": "Постройте карту сущностей, наиболее цитируемых в документах о гибридном поиске.",
+          "sub": "обход neo4j на 1 шаг"
+        },
+        "compareChunking": {
+          "title": "Сравните стратегии разбиения на фрагменты, которые мы оценивали для этого корпуса.",
+          "sub": "фиксированное окно / семантическое / контекстное"
+        },
+        "evalDelta": {
+          "title": "Что изменилось в оценке p@5 после перехода на bge-reranker-v2-m3?",
+          "sub": "оценки · за последние 30 дней"
+        }
+      },
+      "pipeline": {
+        "retrieve": "поиск",
+        "rerank": "реранкинг",
+        "generate": "генерация",
+        "progress": "прогресс пайплайна поиска"
+      },
+      "context": {
+        "title": "Менеджер контекста",
+        "threadLabel": "диалог {{id}}",
+        "openThreadFirst": "Сначала откройте диалог; закрепления привязаны к каждой беседе.",
+        "pinnedCount": "{{count}} закреплено",
+        "excludedCount": "{{count}} исключено",
+        "emptyHint": "Закрепления хранятся в чекпойнте диалога. Откройте или начните диалог, чтобы закреплять фрагменты.",
+        "addSection": "Добавить закрепление или исключение",
+        "chunkIdPlaceholder": "chunk_id",
+        "notePlaceholder": "заметка (необязательно)",
+        "findChunkIdsHint": "Идентификаторы фрагментов есть в списке цитат или на вкладке фрагментов в библиотеке — они стабильны между прогонами.",
+        "pinnedSection": "Закреплено · {{count}}",
+        "pinnedSectionHint": "Переносится в каждый последующий ход /ask в этом диалоге.",
+        "excludedSection": "Исключено · {{count}}",
+        "excludedSectionHint": "Пропускается при реранкинге, даже если получает высокую оценку.",
+        "pinnedToast": "Закреплено.",
+        "excludedToast": "Исключено.",
+        "clearConfirm": "Очистить все закрепления и исключения в этом диалоге?",
+        "clearedToast_one": "Очищена {{count}} запись.",
+        "clearedToast_few": "Очищено {{count}} записи.",
+        "clearedToast_many": "Очищено {{count}} записей.",
+        "removedToast": "Удалено.",
+        "remove": "удалить",
+        "noPinnedChunks": "Закреплённых фрагментов пока нет.",
+        "noExcludedChunks": "Исключённых фрагментов пока нет."
+      },
+      "inspector": {
+        "title": "Инспектор хода",
+        "threadLabel": "диалог {{id}}",
+        "turnBadge": "ход №{{id}}",
+        "citationsBadge_one": "{{count}} цитата",
+        "citationsBadge_few": "{{count}} цитаты",
+        "citationsBadge_many": "{{count}} цитат",
+        "pipeline": "Пайплайн",
+        "pipelineTotal": "Пайплайн · {{total}} всего",
+        "question": "Вопрос",
+        "answer": "Ответ",
+        "emptyAnswer": "(пустой ответ)",
+        "overridesUsed": "Использованные оверрайды",
+        "citationsLabel": "Цитаты ({{count}})",
+        "noCitations": "К этому ходу не прикреплено цитат.",
+        "serverDefaults": "Значения по умолчанию (без оверрайдов на вопрос).",
+        "stages": {
+          "retrieve": {
+            "label": "Поиск",
+            "description": "Гибрид Milvus (плотный + BM25) + локальный поиск по графу Neo4j, объединённые через RRF."
+          },
+          "rerank": {
+            "label": "Реранкинг",
+            "description": "Кросс-энкодер пересортировывает пул кандидатов до k_rerank."
+          },
+          "generate": {
+            "label": "Генерация",
+            "description": "LLM синтезирует ответ с цитатами из пересортированного контекста."
+          }
+        }
+      },
+      "copiedToast": "Скопировано.",
+      "copyFailedToast": "Не удалось скопировать — нет доступа к буферу обмена?"
     },
     "library": {
       "title": "Библиотека",
@@ -85,7 +212,77 @@
       "kind": "тип",
       "status": "статус",
       "documents": "{{count}} документов",
-      "ofTotal": "{{filtered}} из {{total}}"
+      "ofTotal": "{{filtered}} из {{total}}",
+      "heading": "Библиотека.",
+      "search": "поиск",
+      "searchPlaceholder": "название или url",
+      "kindNote": "Тип выводится из <code>source_uri</code> на стороне клиента. Статус и indexed_at появятся, когда бэкенд заведёт эти колонки.",
+      "selectAll": "выбрать все",
+      "selectRow": "выбрать строку",
+      "clearSelection": "снять выбор",
+      "colTitle": "Название",
+      "colKind": "Тип",
+      "colSource": "Источник",
+      "colStatus": "Статус",
+      "colChunks": "Фрагменты",
+      "statusReady": "готово",
+      "documentCount_one": "{{formattedCount}} документ",
+      "documentCount_few": "{{formattedCount}} документа",
+      "documentCount_many": "{{formattedCount}} документов",
+      "selectedOfTotal": "Выбрано {{selected}} из {{total}}",
+      "noMatch": "Нет документов по текущим фильтрам.",
+      "reindex": "Переиндексировать",
+      "reindexNothingTitle": "Нечего переиндексировать",
+      "reindexNothingDesc": "Переиндексация поддерживает только документы с http(s) source_uri.",
+      "reindexQueued": "{{queued}} URL-документов в очереди, {{skipped}} пропущено",
+      "reindexQueuedDesc": "Пропущенные документы были загружены из файла или вставленного текста.",
+      "reindexFailedOne": "Не удалось переиндексировать {{title}}: {{message}}",
+      "reindexDone_one": "Переиндексирован {{count}} документ.",
+      "reindexDone_few": "Переиндексировано {{count}} документа.",
+      "reindexDone_many": "Переиндексировано {{count}} документов.",
+      "reindexPartial": "{{ok}} переиндексировано, {{fail}} не удалось.",
+      "deleteDialogTitle_one": "Удалить {{count}} документ?",
+      "deleteDialogTitle_few": "Удалить {{count}} документа?",
+      "deleteDialogTitle_many": "Удалить {{count}} документов?",
+      "deleteDialogDesc_one": "Это удалит все фрагменты и сущности выбранного документа из Milvus и Neo4j. Действие необратимо.",
+      "deleteDialogDesc_few": "Это удалит все фрагменты и сущности выбранных документов из Milvus и Neo4j. Действие необратимо.",
+      "deleteDialogDesc_many": "Это удалит все фрагменты и сущности выбранных документов из Milvus и Neo4j. Действие необратимо.",
+      "chunksCount_one": "{{formattedCount}} фрагмент",
+      "chunksCount_few": "{{formattedCount}} фрагмента",
+      "chunksCount_many": "{{formattedCount}} фрагментов",
+      "andMore": "…и ещё {{formattedCount}}",
+      "deleteN": "Удалить {{formattedCount}}",
+      "deleteDone_one": "Удалён {{count}} документ ({{chunks}} фрагментов).",
+      "deleteDone_few": "Удалено {{count}} документа ({{chunks}} фрагментов).",
+      "deleteDone_many": "Удалено {{count}} документов ({{chunks}} фрагментов).",
+      "deletePartial": "{{deleted}} удалено, {{failed}} не удалось.",
+      "deleteFailed": "Не удалось удалить: {{message}}",
+      "exportLoading_one": "Экспортируется {{count}} документ…",
+      "exportLoading_few": "Экспортируется {{count}} документа…",
+      "exportLoading_many": "Экспортируется {{count}} документов…",
+      "exportDone_one": "Экспортирован {{count}} документ.",
+      "exportDone_few": "Экспортировано {{count}} документа.",
+      "exportDone_many": "Экспортировано {{count}} документов.",
+      "exportFailed": "Не удалось экспортировать: {{message}}",
+      "sourceDetail": "Детали источника",
+      "openSource": "открыть источник",
+      "deleteDocument": "Удалить документ",
+      "exported": "Экспортировано.",
+      "confirmDeleteOne": "Удалить «{{title}}» и все {{formattedCount}} фрагментов? Это нельзя отменить.",
+      "deletedOne": "Удалён «{{title}}» ({{formattedCount}} фрагментов).",
+      "deletedOneGraph": "Удалён «{{title}}» ({{formattedCount}} фрагментов + граф).",
+      "tabChunks": "Фрагменты",
+      "tabEntities": "Сущности",
+      "tabRelations": "Связи",
+      "tabMetadata": "Метаданные",
+      "loadingChunks": "загрузка фрагментов…",
+      "noChunks": "Для этого документа нет проиндексированных фрагментов.",
+      "pageLabel": "с.{{page}}",
+      "emptyChunk": "(пустой фрагмент)",
+      "loadingEntities": "загрузка сущностей…",
+      "noEntities": "Для этого документа не извлечены сущности.",
+      "loadingRelations": "загрузка связей…",
+      "noRelations": "Связи не извлечены."
     },
     "ingest": {
       "title": "Загрузка",
@@ -100,7 +297,57 @@
       "recent": "Недавние задачи",
       "indexing": "Индексируется…",
       "parsing": "Парсится…",
-      "openInLibrary": "Открыть в библиотеке"
+      "openInLibrary": "Открыть в библиотеке",
+      "heading": "Загрузка.",
+      "url": {
+        "label": "URL для обхода",
+        "hint": "Crawl4AI отрисовывает страницу (с поддержкой JS) и конвертирует в markdown. Разбивается на фрагменты и встраивается в Milvus и граф знаний.",
+        "submit": "Обойти и проиндексировать"
+      },
+      "file": {
+        "dropzone": "Перетащите PDF / DOCX или нажмите, чтобы выбрать.",
+        "releaseToAttach": "Отпустите, чтобы прикрепить",
+        "sizeKb": "{{size}} КБ",
+        "submit": "Разобрать и проиндексировать"
+      },
+      "web": {
+        "searchPlaceholder": "Искать в вебе…",
+        "searching": "идёт поиск в SearxNG…",
+        "noResults": "Нет результатов по запросу «{{query}}».",
+        "selectedOf": "Выбрано {{selected}} из {{total}}",
+        "ingestSelected": "Загрузить выбранное"
+      },
+      "text": {
+        "titleLabel": "Заголовок (необязательно)",
+        "titlePlaceholder": "Берётся из первой строки, если оставить пустым",
+        "textLabel": "Текст",
+        "textPlaceholder": "Вставьте markdown или обычный текст…",
+        "submit": "Проиндексировать текст"
+      },
+      "chunksCount_one": "{{chunks}} фрагмент",
+      "chunksCount_few": "{{chunks}} фрагмента",
+      "chunksCount_many": "{{chunks}} фрагментов",
+      "chunksCount_other": "{{chunks}} фрагмента",
+      "elapsedSeconds": "{{seconds}} с",
+      "toastIndexed_one": "Проиндексирован «{{title}}» — {{chunks}} фрагмент.",
+      "toastIndexed_few": "Проиндексирован «{{title}}» — {{chunks}} фрагмента.",
+      "toastIndexed_many": "Проиндексирован «{{title}}» — {{chunks}} фрагментов.",
+      "toastIndexed_other": "Проиндексирован «{{title}}» — {{chunks}} фрагмента.",
+      "toastFailed": "Не удалось загрузить: {{error}}",
+      "knobs": {
+        "title": "Параметры индексирования",
+        "subtitle": "Применяются к каждой загрузке. Измените их в настройках.",
+        "embedProvider": "провайдер эмбеддингов",
+        "embedModel": "модель эмбеддингов",
+        "embedDim": "размерность эмбеддингов",
+        "contextualRetrieval": "контекстный поиск",
+        "graphRetrieval": "поиск по графу",
+        "reranker": "реранкер",
+        "device": "устройство",
+        "on": "вкл",
+        "off": "выкл",
+        "pipelineNote": "Живой просмотр пайплайна (тайминг по этапам через SSE) появится позже — текущий вызов /api/ingest синхронный и по завершении возвращает итоговые <docref>doc_id + фрагменты</docref>."
+      }
     },
     "threads": {
       "title": "Диалоги",
@@ -109,7 +356,54 @@
       "deleted": "Диалог удалён.",
       "filters": "Фильтры",
       "model": "модель",
-      "anyModel": "Любая модель"
+      "anyModel": "Любая модель",
+      "loadingShort": "загрузка…",
+      "ofTotal": "{{filtered}} из {{total}}",
+      "searchPlaceholder": "Поиск по диалогам…",
+      "status": "статус",
+      "noModelData": "Данных о моделях пока нет — нужны прогоны.",
+      "threadCount_one": "{{formattedCount}} диалог",
+      "threadCount_few": "{{formattedCount}} диалога",
+      "threadCount_many": "{{formattedCount}} диалогов",
+      "threadCount_other": "{{formattedCount}} диалога",
+      "withErrors_one": "{{formattedCount}} с ошибкой",
+      "withErrors_few": "{{formattedCount}} с ошибками",
+      "withErrors_many": "{{formattedCount}} с ошибками",
+      "withErrors_other": "{{formattedCount}} с ошибками",
+      "emptyDetail": "Диалоги появятся здесь после того, как вы зададите вопрос на странице вопросов.",
+      "noMatchDetail_one": "Проиндексирован {{formattedCount}} диалог, но ни в одном нет этой строки.",
+      "noMatchDetail_few": "Проиндексировано {{formattedCount}} диалога, но ни в одном нет этой строки.",
+      "noMatchDetail_many": "Проиндексировано {{formattedCount}} диалогов, но ни в одном нет этой строки.",
+      "noMatchDetail_other": "Проиндексировано {{formattedCount}} диалога, но ни в одном нет этой строки.",
+      "untitledThread": "(диалог без названия)",
+      "threadLabel": "Диалог",
+      "threadMenu": "меню диалога",
+      "selectThread": "выбрать диалог",
+      "citationCount_one": "{{count}} цитата",
+      "citationCount_few": "{{count}} цитаты",
+      "citationCount_many": "{{count}} цитат",
+      "citationCount_other": "{{count}} цитаты",
+      "messageCount_one": "{{count}} сообщение",
+      "messageCount_few": "{{count}} сообщения",
+      "messageCount_many": "{{count}} сообщений",
+      "messageCount_other": "{{count}} сообщения",
+      "buildingExport": "Готовим экспорт…",
+      "exported": "Экспортировано.",
+      "exportFailed": "Не удалось экспортировать: {{message}}",
+      "bulkDeleted_one": "Удалён {{count}} диалог.",
+      "bulkDeleted_few": "Удалено {{count}} диалога.",
+      "bulkDeleted_many": "Удалено {{count}} диалогов.",
+      "bulkDeleted_other": "Удалено {{count}} диалога.",
+      "bulkDeletePartial": "Удалено: {{ok}}, не удалось: {{fail}}.",
+      "loadingConversation": "загружаем диалог…",
+      "noMessages": "Для этого диалога не сохранено сообщений.",
+      "roleYou": "Вы",
+      "roleAssistant": "Ассистент",
+      "chunksUsed": "{{used}} из {{retrieved}} фрагментов",
+      "copied": "Скопировано.",
+      "copyMessage": "копировать сообщение",
+      "emptyMessage": "(пусто)",
+      "pageLabel": "с.{{page}}"
     },
     "graph": {
       "title": "Граф знаний",
@@ -121,7 +415,27 @@
       "relations": "связи",
       "recenterOnThis": "Сделать этот узел центром",
       "expanding": "расширяем окрестность…",
-      "pickSeed": "Выберите начальную сущность слева, чтобы начать."
+      "pickSeed": "Выберите начальную сущность слева, чтобы начать.",
+      "explorer": "Обозреватель графа",
+      "corpusStats": "{{entities}} сущностей · {{relations}} связей · {{mentions}} упоминаний",
+      "searchEntities": "поиск сущностей",
+      "noEntitiesMatch": "Нет подходящих сущностей.",
+      "neighborhoodOf": "Окрестность сущности",
+      "canvasStats": "{{nodes}} узлов · {{edges}} рёбер · глубина {{depth}}",
+      "loadNeighborhood": "Загрузите окрестность, чтобы исследовать узлы.",
+      "nothingSelected": "Ничего не выбрано.",
+      "nodeNotInView": "Этого узла нет в текущем представлении.",
+      "mentionsCount_one": "{{formatted}} упоминание",
+      "mentionsCount_few": "{{formatted}} упоминания",
+      "mentionsCount_many": "{{formatted}} упоминаний",
+      "mentionsCount_other": "{{formatted}} упоминания",
+      "seed": "начальная",
+      "hopsCount_one": "+{{count}} переход",
+      "hopsCount_few": "+{{count}} перехода",
+      "hopsCount_many": "+{{count}} переходов",
+      "hopsCount_other": "+{{count}} перехода",
+      "noIncidentEdges": "В этом представлении нет смежных рёбер.",
+      "relatedFallback": "связано"
     },
     "evals": {
       "title": "Оценка",
@@ -135,18 +449,44 @@
     },
     "history": {
       "title": "История запусков",
-      "empty": "Каждый запрос попадает в этот журнал.",
-      "subtitle": "Каждый /ask пишет одну строку. Ошибки сохраняются тоже — полезно для отладки моделей и пропусков поиска.",
-      "ofTotal": "{{ok}} ок · {{err}} ошибок",
+      "empty": "Запуски появятся здесь после того, как вы зададите вопрос на странице вопроса.",
+      "subtitle": "Каждый <code>/ask</code> пишет одну строку. Ошибки сохраняются тоже — полезно для отладки сбоев модели и пропусков поиска.",
+      "ofTotal": "{{filtered}} из {{total}}",
       "search": "вопрос, ответ, модель, id…",
       "pipelineTimings": "Тайминги пайплайна",
       "overridesUsed": "Использованные оверрайды",
       "answer": "Ответ",
-      "citations": "Цитаты · {{count}}"
+      "citations": "Цитаты · {{value}}",
+      "heading": "История запусков.",
+      "runsCount_one": "{{value}} запуск",
+      "runsCount_few": "{{value}} запуска",
+      "runsCount_many": "{{value}} запусков",
+      "runsCount_other": "{{value}} запуска",
+      "okCount": "{{value}} ок",
+      "errorsCount_one": "{{value}} ошибка",
+      "errorsCount_few": "{{value}} ошибки",
+      "errorsCount_many": "{{value}} ошибок",
+      "errorsCount_other": "{{value}} ошибки",
+      "searchLabel": "поиск",
+      "statusLabel": "статус",
+      "loading": "загрузка…",
+      "emptyTitle": "Запусков пока нет.",
+      "emptyFilterTitle": "Ничего не найдено по этому запросу.",
+      "emptyFilterBody_one": "Проиндексирован {{value}} запуск, но ни один не подходит под текущий фильтр.",
+      "emptyFilterBody_few": "Проиндексировано {{value}} запуска, но ни один не подходит под текущий фильтр.",
+      "emptyFilterBody_many": "Проиндексировано {{value}} запусков, но ни один не подходит под текущий фильтр.",
+      "emptyFilterBody_other": "Проиндексировано {{value}} запуска, но ни один не подходит под текущий фильтр.",
+      "chunksUsed_one": "{{used}} из {{retrieved}} фрагмента",
+      "chunksUsed_few": "{{used}} из {{retrieved}} фрагментов",
+      "chunksUsed_many": "{{used}} из {{retrieved}} фрагментов",
+      "chunksUsed_other": "{{used}} из {{retrieved}} фрагментов",
+      "serverDefaults": "Значения по умолчанию (без оверрайдов).",
+      "noAnswer": "(нет ответа)",
+      "error": "Ошибка"
     },
     "settings": {
-      "title": "Настройки",
-      "subtitle": "Живые параметры поиска. Изменения применяются сразу — значения сбрасываются при рестарте сервера до тех пор, пока не сделана персистентность.",
+      "title": "Настройки.",
+      "subtitle": "Живые параметры поиска. Изменения применяются сразу в процессе — значения сбрасываются при рестарте сервера, пока не настроена персистентность.",
       "tabs": {
         "retrieval": "Поиск",
         "model": "Модель",
@@ -154,6 +494,150 @@
         "rerank": "Реранк",
         "services": "Сервисы",
         "danger": "Опасно"
+      },
+      "loading": "загрузка настроек…",
+      "updateFailed": "Не удалось обновить {{key}}: {{message}}",
+      "retrieval": {
+        "hybrid": {
+          "title": "Гибридный поиск",
+          "subtitle": "Плотные + разреженные + графовые кандидаты объединяются и пересортировываются кросс-энкодером."
+        },
+        "kRetrieve": "k_retrieve (кандидатов на ретривер)",
+        "kRerank": "k_rerank (итоговых фрагментов в LLM)",
+        "dense": {
+          "label": "Плотный ретривер",
+          "description": "Косинусный ANN по плотным векторам Milvus."
+        },
+        "sparse": {
+          "label": "Разреженный ретривер (BM25)",
+          "description": "Нативный BM25 Milvus по разреженному текстовому полю."
+        },
+        "graph": {
+          "label": "Графовый ретривер (Neo4j local-search)",
+          "description": "Обход на 1 шаг, подключённый к этапу объединения."
+        }
+      },
+      "fusion": {
+        "title": "Объединение",
+        "subtitle": "Как ранжирования плотного + разреженного + графового источников сводятся в один упорядоченный список.",
+        "strategy": "Стратегия",
+        "rrf": {
+          "label": "RRF (Reciprocal Rank Fusion)",
+          "hint": "только по рангам, проверенный вариант по умолчанию"
+        },
+        "weighted": {
+          "label": "Взвешенное",
+          "hint": "использует веса графа / векторов ниже"
+        },
+        "borda": {
+          "label": "Borda",
+          "hint": "позиционное голосование, тоже только по рангам"
+        },
+        "rrfK": "Константа k для RRF",
+        "graphWeight": "Вес графа",
+        "vectorWeight": "Вес вектора"
+      },
+      "llm": {
+        "title": "LLM",
+        "subtitle": "Провайдер + модель по уровням. Изменения вступают в силу на следующем прогоне графа — кэш фабрики сбрасывается автоматически.",
+        "default": {
+          "label": "По умолчанию (LLM ответа)",
+          "description": "Чат-модель для синтеза ответов. Уровень полного качества."
+        },
+        "light": {
+          "label": "Лёгкий (структурированный вывод)",
+          "description": "Дешевле / быстрее для подзадач в формате JSON (промпты реранка, контекстный поиск)."
+        },
+        "nano": {
+          "label": "Nano (минимальный)",
+          "description": "Минимальный локальный уровень для быстрой классификации и проверок безопасности."
+        },
+        "temperature": "Температура",
+        "reasoningWarning": "Reasoning-модели (<code>gpt-5*</code>, <code>o*</code>) игнорируют ползунок температуры — API отклоняет любое значение, кроме значения по умолчанию."
+      },
+      "provider": {
+        "label": "Провайдер",
+        "ollamaSub": "локально или Ollama Cloud",
+        "openaiSub": "gpt-5 / 4.1 / o-series"
+      },
+      "model": {
+        "loadingModels": "загрузка моделей…",
+        "autoFallback": "(авто · откат к уровню по умолчанию)",
+        "searchPlaceholder": "Поиск моделей {{provider}}…",
+        "retry": "повторить",
+        "noModels": "Модели не найдены.",
+        "reasoningNote": "Reasoning-модель — настройка температуры игнорируется API."
+      },
+      "embeddings": {
+        "title": "Эмбеддинги",
+        "subtitle": "Провайдер + модель эмбеддингов. Привязаны к схеме, зашитой в Milvus — меняйте через .env, затем переиндексируйте.",
+        "provider": "Провайдер",
+        "model": "Модель",
+        "dimension": "Размерность"
+      },
+      "indexing": {
+        "title": "Индексация",
+        "subtitle": "Параметры, применяемые при загрузке. Переиндексируйте, чтобы применить контекстные изменения к существующим фрагментам.",
+        "contextual": {
+          "label": "Контекстный поиск",
+          "description": "Добавлять к каждому фрагменту сгенерированное LLM резюме контекста документа."
+        },
+        "graphDepth": "Глубина BFS в графе",
+        "graphMaxNodes": "Максимум узлов графа"
+      },
+      "rerank": {
+        "title": "Реранкер",
+        "subtitle": "Кросс-энкодер, применяемый после объединения. Порог оценки отсекает слабые фрагменты до их попадания в LLM.",
+        "model": "Модель",
+        "device": "Устройство",
+        "deviceAuto": "auto (выбирает лучшее доступное)",
+        "deviceMps": "mps (Apple Silicon)",
+        "deviceCuda": "cuda (GPU NVIDIA)",
+        "deviceCpu": "cpu (универсальный запасной вариант)",
+        "scoreFloor": "Порог оценки",
+        "adaptive": {
+          "label": "Адаптивное усечение",
+          "description": "Прекращать сбор, как только накопленная масса оценок превысит 0,85 — держит контекст LLM компактным на простых запросах."
+        }
+      },
+      "services": {
+        "title": "Состояние сервисов",
+        "subtitle": "Живая доступность по каждому сервису + задержка p50. Перепроверяется каждые 30 секунд.",
+        "probing": "проверка сервисов…",
+        "latencyMs": "{{ms}} мс"
+      },
+      "danger": {
+        "title": "Деструктивные операции",
+        "subtitle": "Всё на этой вкладке необратимо. Поле подтверждения должно точно совпадать с именем области, прежде чем кнопка станет активной.",
+        "confirmLabel": "Введите <code>{{scope}}</code> для подтверждения",
+        "wipeButton": "Стереть {{scope}}",
+        "wipedToast": "Стёрто: {{scope}}.",
+        "wipeFailedToast": "Не удалось стереть: {{message}}",
+        "corpus": {
+          "title": "Стереть корпус",
+          "summary": "Удаляет коллекцию фрагментов Milvus и выполняет DETACH DELETE для каждого узла в Neo4j. Диалоги и закрепления сохраняются.",
+          "details": [
+            "Milvus: удаление коллекции sovereign_chunks",
+            "Neo4j: MATCH (n) DETACH DELETE n",
+            "Ограничения схемы + индексы сохраняются (дёшево)"
+          ]
+        },
+        "threads": {
+          "title": "Стереть диалоги",
+          "summary": "Выполняет TRUNCATE для всех таблиц чекпойнтов LangGraph + удаляет файл закреплений на диске. Корпус не затрагивается.",
+          "details": [
+            "Postgres: TRUNCATE checkpoints + checkpoint_writes + checkpoint_blobs",
+            "Файловая система: удаление .runtime/thread_context.json"
+          ]
+        },
+        "all": {
+          "title": "Стереть всё",
+          "summary": "Обе операции выше за один вызов. Эквивалентно чистой установке.",
+          "details": [
+            "Корпус + диалоги в одной транзакционно-подобной последовательности",
+            "Используйте после крупных изменений схемы или при воспроизведении чистого базового состояния"
+          ]
+        }
       }
     }
   },

@@ -40,7 +40,7 @@ export type MobileNavKey =
   | "settings"
 
 interface Tab {
-  key: MobileNavKey
+  key: MobileNavKey | "more"
   label: string
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
   path: string
@@ -95,7 +95,7 @@ export function MobileTabBar({ active }: { active: MobileNavKey }) {
           />
         ))}
         <TabButton
-          tab={{ key: "more", label: "more", icon: MoreHorizontal, path: "" } as Tab}
+          tab={{ key: "more", label: "more", icon: MoreHorizontal, path: "" }}
           active={overflowActive}
           onClick={() => setMoreOpen(true)}
         />

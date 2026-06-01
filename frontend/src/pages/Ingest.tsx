@@ -12,6 +12,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react"
+import { Trans, useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useFileIngest, useIngest, useWebSearch } from "@/hooks/use-ingest"
 import { useSettings } from "@/hooks/use-settings"
 import type { IngestResponse } from "@/lib/api"
+import { formatCount, formatDecimal } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // One row in the bottom "recent jobs" list.
@@ -41,6 +43,7 @@ interface IngestJob {
 }
 
 export function IngestPage() {
+  const { t } = useTranslation()
   const [jobs, setJobs] = useState<IngestJob[]>([])
   const jobIdRef = useRef(0)
   const settings = useSettings()
@@ -65,7 +68,11 @@ export function IngestPage() {
         ),
       )
       toast.success(
-        `Indexed “${result.title}” — ${result.chunks_indexed} chunks.`,
+        t("pages.ingest.toastIndexed", {
+          title: result.title,
+          count: result.chunks_indexed,
+          chunks: formatCount(result.chunks_indexed),
+        }),
       )
     }
     const fail = (err: string) => {
@@ -76,7 +83,7 @@ export function IngestPage() {
             : j,
         ),
       )
-      toast.error(`Ingest failed: ${err}`)
+      toast.error(t("pages.ingest.toastFailed", { error: err }))
     }
     return Object.assign(finish, { fail })
   }
@@ -85,10 +92,11 @@ export function IngestPage() {
     <div className="flex h-[calc(100svh-4rem-3.5rem)] md:h-[calc(100svh-4rem)] min-h-0 w-full">
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-border px-6 py-4">
-          <h1 className="text-[15px] font-semibold tracking-tight">Ingest</h1>
+          <h1 className="text-[15px] font-semibold tracking-tight">
+            {t("pages.ingest.heading")}
+          </h1>
           <p className="mt-1 text-[13px] leading-[1.55] text-muted-foreground">
-            Bring a URL, a file, or web-search hits into the corpus. Indexing
-            runs Milvus hybrid + Neo4j entity extraction on each document.
+            {t("pages.ingest.subtitle")}
           </p>
         </header>
 
@@ -97,16 +105,19 @@ export function IngestPage() {
             <Tabs defaultValue="url">
               <TabsList className="mb-5 w-full max-w-full overflow-x-auto">
                 <TabsTrigger value="url" className="gap-1.5">
-                  <LinkIcon className="size-3.5" strokeWidth={2} /> URL
+                  <LinkIcon className="size-3.5" strokeWidth={2} />{" "}
+                  {t("pages.ingest.tabs.url")}
                 </TabsTrigger>
                 <TabsTrigger value="file" className="gap-1.5">
-                  <FileText className="size-3.5" strokeWidth={2} /> File
+                  <FileText className="size-3.5" strokeWidth={2} />{" "}
+                  {t("pages.ingest.tabs.file")}
                 </TabsTrigger>
                 <TabsTrigger value="web" className="gap-1.5">
-                  <Search className="size-3.5" strokeWidth={2} /> Web search
+                  <Search className="size-3.5" strokeWidth={2} />{" "}
+                  {t("pages.ingest.tabs.web")}
                 </TabsTrigger>
                 <TabsTrigger value="text" className="gap-1.5">
-                  Paste text
+                  {t("pages.ingest.tabs.text")}
                 </TabsTrigger>
               </TabsList>
 
@@ -139,6 +150,7 @@ interface FormProps {
 }
 
 function UrlIngestForm({ pushJob }: FormProps) {
+  const { t } = useTranslation()
   const [url, setUrl] = useState("")
   const ingest = useIngest()
 
@@ -163,7 +175,7 @@ function UrlIngestForm({ pushJob }: FormProps) {
       <CardContent className="p-5 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="ingest-url" className="text-[12.5px] font-medium">
-            URL to crawl
+            {t("pages.ingest.url.label")}
           </Label>
           <Input
             id="ingest-url"
@@ -174,8 +186,7 @@ function UrlIngestForm({ pushJob }: FormProps) {
             disabled={ingest.isPending}
           />
           <p className="text-[12px] text-muted-foreground">
-            Crawl4AI renders the page (JS-aware) and converts to markdown.
-            Chunked + embedded into Milvus and the knowledge graph.
+            {t("pages.ingest.url.hint")}
           </p>
         </div>
         <div className="flex items-center justify-end gap-2">
@@ -185,7 +196,9 @@ function UrlIngestForm({ pushJob }: FormProps) {
             ) : (
               <ArrowRight className="size-3.5" strokeWidth={2} />
             )}
-            {ingest.isPending ? "Indexing…" : "Crawl + index"}
+            {ingest.isPending
+              ? t("pages.ingest.indexing")
+              : t("pages.ingest.url.submit")}
           </Button>
         </div>
       </CardContent>
@@ -194,6 +207,7 @@ function UrlIngestForm({ pushJob }: FormProps) {
 }
 
 function FileIngestForm({ pushJob }: FormProps) {
+  const { t } = useTranslation()
   const [file, setFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const ingest = useFileIngest()
@@ -229,10 +243,10 @@ function FileIngestForm({ pushJob }: FormProps) {
             if (dropped) setFile(dropped)
           }}
           className={cn(
-            "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-8 transition-colors",
+            "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed p-8 transition-colors",
             dragOver
               ? "border-primary bg-primary/5"
-              : "border-border bg-muted/30 hover:bg-muted/50",
+              : "border-primary/40 bg-primary/[0.03] hover:bg-primary/[0.05]",
           )}
         >
           <Upload className="size-6 text-muted-foreground" strokeWidth={1.75} />
@@ -240,12 +254,14 @@ function FileIngestForm({ pushJob }: FormProps) {
             {file
               ? file.name
               : dragOver
-                ? "Release to attach"
-                : "Drop a PDF / DOCX or click to choose."}
+                ? t("pages.ingest.file.releaseToAttach")
+                : t("pages.ingest.file.dropzone")}
           </span>
           {file && (
             <span className="font-mono text-[11px] text-muted-foreground">
-              {(file.size / 1024).toFixed(1)} KB
+              {t("pages.ingest.file.sizeKb", {
+                size: formatDecimal(file.size / 1024, 1),
+              })}
             </span>
           )}
           <input
@@ -260,7 +276,7 @@ function FileIngestForm({ pushJob }: FormProps) {
         <div className="flex items-center justify-end gap-2">
           {file && !ingest.isPending && (
             <Button variant="ghost" onClick={() => setFile(null)}>
-              Clear
+              {t("actions.clear")}
             </Button>
           )}
           <Button onClick={submit} disabled={!file || ingest.isPending}>
@@ -269,7 +285,9 @@ function FileIngestForm({ pushJob }: FormProps) {
             ) : (
               <ArrowRight className="size-3.5" strokeWidth={2} />
             )}
-            {ingest.isPending ? "Parsing…" : "Parse + index"}
+            {ingest.isPending
+              ? t("pages.ingest.parsing")
+              : t("pages.ingest.file.submit")}
           </Button>
         </div>
       </CardContent>
@@ -278,6 +296,7 @@ function FileIngestForm({ pushJob }: FormProps) {
 }
 
 function WebIngestForm({ pushJob }: FormProps) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState("")
   const [submitted, setSubmitted] = useState("")
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -316,7 +335,7 @@ function WebIngestForm({ pushJob }: FormProps) {
               strokeWidth={2}
             />
             <Input
-              placeholder="Search the web…"
+              placeholder={t("pages.ingest.web.searchPlaceholder")}
               className="pl-8"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -324,19 +343,20 @@ function WebIngestForm({ pushJob }: FormProps) {
             />
           </div>
           <Button onClick={() => setSubmitted(query.trim())} disabled={!query.trim()}>
-            Search
+            {t("actions.search")}
           </Button>
         </div>
 
         {search.isLoading && (
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> searching SearxNG…
+            <Loader2 className="size-3.5 animate-spin" />{" "}
+            {t("pages.ingest.web.searching")}
           </div>
         )}
 
         {search.data && search.data.length === 0 && (
           <p className="text-[13px] text-muted-foreground">
-            No results for {`"${submitted}"`}.
+            {t("pages.ingest.web.noResults", { query: submitted })}
           </p>
         )}
 
@@ -370,7 +390,10 @@ function WebIngestForm({ pushJob }: FormProps) {
             </ul>
             <div className="flex items-center justify-between">
               <span className="text-[12px] text-muted-foreground">
-                {selectedCount} of {search.data.length} selected
+                {t("pages.ingest.web.selectedOf", {
+                  selected: formatCount(selectedCount),
+                  total: formatCount(search.data.length),
+                })}
               </span>
               <Button
                 onClick={ingestSelected}
@@ -381,7 +404,7 @@ function WebIngestForm({ pushJob }: FormProps) {
                 ) : (
                   <CheckCircle2 className="size-3.5" />
                 )}
-                Ingest selected
+                {t("pages.ingest.web.ingestSelected")}
               </Button>
             </div>
           </>
@@ -392,6 +415,7 @@ function WebIngestForm({ pushJob }: FormProps) {
 }
 
 function TextIngestForm({ pushJob }: FormProps) {
+  const { t } = useTranslation()
   const [text, setText] = useState("")
   const [title, setTitle] = useState("")
   const ingest = useIngest()
@@ -418,23 +442,23 @@ function TextIngestForm({ pushJob }: FormProps) {
       <CardContent className="p-5 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="ingest-title" className="text-[12.5px] font-medium">
-            Title (optional)
+            {t("pages.ingest.text.titleLabel")}
           </Label>
           <Input
             id="ingest-title"
-            placeholder="Auto-derived from first line if empty"
+            placeholder={t("pages.ingest.text.titlePlaceholder")}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="ingest-text" className="text-[12.5px] font-medium">
-            Text
+            {t("pages.ingest.text.textLabel")}
           </Label>
           <Textarea
             id="ingest-text"
             rows={8}
-            placeholder="Paste markdown or plain text…"
+            placeholder={t("pages.ingest.text.textPlaceholder")}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
@@ -446,7 +470,9 @@ function TextIngestForm({ pushJob }: FormProps) {
             ) : (
               <Check className="size-3.5" />
             )}
-            {ingest.isPending ? "Indexing…" : "Index text"}
+            {ingest.isPending
+              ? t("pages.ingest.indexing")
+              : t("pages.ingest.text.submit")}
           </Button>
         </div>
       </CardContent>
@@ -459,6 +485,7 @@ function TextIngestForm({ pushJob }: FormProps) {
 // ─────────────────────────────────────────────────────────────────
 
 function JobsList({ jobs }: { jobs: IngestJob[] }) {
+  const { t } = useTranslation()
   if (jobs.length === 0) return null
 
   const openInLibrary = (docId: string) => {
@@ -470,7 +497,7 @@ function JobsList({ jobs }: { jobs: IngestJob[] }) {
   return (
     <section className="mt-8">
       <h2 className="mb-3 text-[12.5px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Recent jobs
+        {t("pages.ingest.recent")}
       </h2>
       <ul className="space-y-2">
         {jobs.map((j) => (
@@ -481,7 +508,7 @@ function JobsList({ jobs }: { jobs: IngestJob[] }) {
             <span
               className={cn(
                 "mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md",
-                j.status === "ok" && "bg-emerald-500/15 text-emerald-500",
+                j.status === "ok" && "bg-success/15 text-success",
                 j.status === "running" && "bg-primary/15 text-primary",
                 j.status === "error" && "bg-destructive/15 text-destructive",
               )}
@@ -504,7 +531,10 @@ function JobsList({ jobs }: { jobs: IngestJob[] }) {
                 </span>
                 {j.result && (
                   <Badge variant="outline" className="ml-auto font-mono text-[10.5px]">
-                    {j.result.chunks_indexed} chunks
+                    {t("pages.ingest.chunksCount", {
+                      count: j.result.chunks_indexed,
+                      chunks: formatCount(j.result.chunks_indexed),
+                    })}
                   </Badge>
                 )}
               </div>
@@ -529,7 +559,12 @@ function JobsList({ jobs }: { jobs: IngestJob[] }) {
               <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
                 {j.endedAt && (
                   <span className="font-mono">
-                    {((j.endedAt - j.startedAt) / 1000).toFixed(1)}s
+                    {t("pages.ingest.elapsedSeconds", {
+                      seconds: formatDecimal(
+                        (j.endedAt - j.startedAt) / 1000,
+                        1,
+                      ),
+                    })}
                   </span>
                 )}
                 {j.result && (
@@ -543,7 +578,7 @@ function JobsList({ jobs }: { jobs: IngestJob[] }) {
                     onClick={() => openInLibrary(j.result!.doc_id)}
                     className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-primary hover:bg-muted"
                   >
-                    Open in Library
+                    {t("pages.ingest.openInLibrary")}
                     <ArrowRight className="size-3" strokeWidth={2} />
                   </button>
                 )}
@@ -567,32 +602,38 @@ function KnobsRail({
   settings: ReturnType<typeof useSettings>["data"]
   loading: boolean
 }) {
+  const { t } = useTranslation()
   const rows = useMemo<Array<[string, string | number | boolean]>>(() => {
     if (!settings) return []
     return [
-      ["embed provider", settings.embed_provider],
-      ["embed model", settings.embed_model],
-      ["embed dim", settings.embed_dim],
-      ["contextual retrieval", settings.enable_contextual_retrieval],
-      ["graph retrieval", settings.enable_graph_retrieval],
-      ["reranker", settings.reranker_model],
-      ["device", settings.reranker_device],
+      [t("pages.ingest.knobs.embedProvider"), settings.embed_provider],
+      [t("pages.ingest.knobs.embedModel"), settings.embed_model],
+      [t("pages.ingest.knobs.embedDim"), settings.embed_dim],
+      [
+        t("pages.ingest.knobs.contextualRetrieval"),
+        settings.enable_contextual_retrieval,
+      ],
+      [t("pages.ingest.knobs.graphRetrieval"), settings.enable_graph_retrieval],
+      [t("pages.ingest.knobs.reranker"), settings.reranker_model],
+      [t("pages.ingest.knobs.device"), settings.reranker_device],
     ]
-  }, [settings])
+  }, [settings, t])
 
   return (
     <aside className="hidden w-[300px] shrink-0 flex-col border-l border-border bg-background lg:flex">
       <div className="border-b border-border px-4 py-3">
-        <div className="text-[14px] font-semibold">Indexing parameters</div>
+        <div className="text-[14px] font-semibold">
+          {t("pages.ingest.knobs.title")}
+        </div>
         <p className="mt-0.5 text-[12px] text-muted-foreground">
-          Applied to every ingest. Change them in Settings.
+          {t("pages.ingest.knobs.subtitle")}
         </p>
       </div>
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-1.5">
           {loading && (
             <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-              <Loader2 className="size-3 animate-spin" /> loading…
+              <Loader2 className="size-3 animate-spin" /> {t("common.loading")}
             </div>
           )}
           {rows.map(([label, value]) => (
@@ -602,18 +643,26 @@ function KnobsRail({
             >
               <span className="text-muted-foreground">{label}</span>
               <span className="font-mono tabular-nums text-foreground">
-                {typeof value === "boolean" ? (value ? "on" : "off") : String(value)}
+                {typeof value === "boolean"
+                  ? value
+                    ? t("pages.ingest.knobs.on")
+                    : t("pages.ingest.knobs.off")
+                  : String(value)}
               </span>
             </div>
           ))}
         </div>
         <div className="mx-4 mt-3 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2.5 text-[11.5px] leading-[1.55] text-muted-foreground">
-          Live pipeline view (per-stage timing via SSE) is a follow-up — the
-          current /api/ingest call is synchronous and reports the final{" "}
-          <span className="inline-flex items-center gap-1">
-            <Globe className="size-3" /> doc_id + chunks
-          </span>{" "}
-          on completion.
+          <Trans
+            i18nKey="pages.ingest.knobs.pipelineNote"
+            components={{
+              docref: (
+                <span className="inline-flex items-center gap-1">
+                  <Globe className="size-3" />
+                </span>
+              ),
+            }}
+          />
         </div>
       </ScrollArea>
     </aside>
