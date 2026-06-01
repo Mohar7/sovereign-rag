@@ -448,7 +448,7 @@
     },
     "settings": {
       "title": "Settings.",
-      "subtitle": "Live retrieval knobs. Changes apply immediately in-process — values reset on server restart until persistence is wired.",
+      "subtitle": "Live retrieval knobs. Changes apply immediately and persist across server restarts.",
       "tabs": {
         "retrieval": "Retrieval",
         "model": "Model",
