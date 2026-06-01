@@ -16,20 +16,16 @@
 
 ## Web UI
 
-The Ask screen — research-instrument theme, IBM Plex Mono + Serif, split-tinted citation chips
-(graph blue / vector lavender) with warm orange for human-in-the-loop moments. Built in
-`frontend/` with React + TypeScript, talks to the LangGraph deployment via
-[`@langchain/langgraph-sdk`](https://www.npmjs.com/package/@langchain/langgraph-sdk).
+A modern web client for the whole retrieval workflow — ask questions with streamed, cited answers; inspect the hybrid pipeline per turn (graph + dense + sparse → RRF → cross-encoder rerank); browse the corpus; and explore the entity graph. Built in `frontend/` with **React 19 + TypeScript**, **shadcn/ui** (new-york) on **Tailwind v4**, **TanStack** Router/Query/Table/Form, **lucide** icons, and **sonner** toasts. Fully localized in **English and Russian** (i18next), with **light and dark** themes. It talks to the FastAPI backend over a typed `fetch` client, with SSE for token streaming.
+
+![Ask](docs/screenshots/ui-ask.png)
 
 |     |     |
 |---|---|
-| ![Hero](docs/screenshots/01-hero.png)        | ![Mid-stream](docs/screenshots/03-mid-stream.png) |
-| ![HITL approval](docs/screenshots/04-hitl.png) | ![Error / degraded](docs/screenshots/05-error.png) |
+| ![Library](docs/screenshots/ui-library.png) | ![Evals dashboard](docs/screenshots/ui-evals.png) |
+| ![Dark mode](docs/screenshots/ui-ask-dark.png) | ![Live service health](docs/screenshots/ui-settings.png) |
 
-The fifth state, an empty new thread, is in `docs/screenshots/02-empty.png`. See
-[`frontend/README.md`](frontend/README.md) for how to run it locally
-(`langgraph dev` + `npm run dev`) and deploy in production
-(`docker compose --profile ui up`).
+The interface is a from-scratch design system in the register of **Linear · Vercel · Cal.com** — a single indigo accent over a zinc neutral ramp, restrained motion, and inline citation chips that open the exact source chunk the answer used. See [`frontend/README.md`](frontend/README.md) to run it locally (`npm run dev` proxies `/api` to the backend) or deploy it (`docker compose --profile ui up`).
 
 ## Why this exists
 
@@ -213,13 +209,13 @@ src/sovereign_rag/
   api.py              # FastAPI (graph.ainvoke + /ask/resume)
 langgraph.json        # langgraph dev / Studio entry point
 eval/                 # golden set + RAGAS + IR metrics
-tests/                # 106 unit tests (services mocked); integration marked + skipped
+tests/                # 122 unit tests (services mocked); integration marked + skipped
 ```
 
 ## Testing
 
 ```bash
-uv run pytest -m "not integration"   # 106 unit tests, no services, ~5s
+uv run pytest -m "not integration"   # 122 unit tests, no services, ~5s
 uv run ruff check src/ tests/ eval/
 uv run mypy src/
 ```
