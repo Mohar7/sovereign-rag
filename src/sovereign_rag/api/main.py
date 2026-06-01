@@ -21,6 +21,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg import AsyncConnection
+from psycopg.rows import DictRow, dict_row
+from psycopg_pool import AsyncConnectionPool
 
 from sovereign_rag.api.admin.router import router as admin_router
 from sovereign_rag.api.ask.router import router as ask_router
@@ -53,7 +56,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     pipeline = RAGPipeline()
     set_pipeline(pipeline)
 
-    async with AsyncPostgresSaver.from_conn_string(s.langgraph_pg_uri) as checkpointer:
+    # Back AsyncPostgresSaver with a connection POOL rather than a single
+    # long-lived connection (the default `from_conn_string` path). A single
+    # connection dies when Postgres drops the idle session — psycopg reports
+    # "server closed the connection unexpectedly" and then "the connection is
+    # closed" on every subsequent /ask, permanently, until the process
+    # restarts. The pool validates each connection on checkout
+    # (`check_connection`) and reconnects transparently, and is also safe under
+    # concurrent requests. `prepare_threshold=0` keeps prepared statements off
+    # so they don't leak across pooled connections / a pgbouncer.
+    # AsyncPostgresSaver requires dict-row, autocommit connections; the pool's
+    # `kwargs` configure every connection it hands out accordingly.
+    async with AsyncConnectionPool[AsyncConnection[DictRow]](
+        conninfo=s.langgraph_pg_uri,
+        max_size=20,
+        open=False,
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        check=AsyncConnectionPool.check_connection,
+    ) as pool:
+        checkpointer = AsyncPostgresSaver(pool)
         await checkpointer.setup()  # idempotent
         await ensure_runs_table(s.langgraph_pg_uri)  # creates runs table + indexes
         app.state.graph = build_graph(checkpointer=checkpointer)
