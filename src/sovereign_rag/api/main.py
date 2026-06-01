@@ -36,6 +36,7 @@ from sovereign_rag.api.ingest.router import router as ingest_router
 from sovereign_rag.api.library.router import router as library_router
 from sovereign_rag.api.runs import ensure_runs_table
 from sovereign_rag.api.runs.router import router as runs_router
+from sovereign_rag.api.settings import ensure_settings_table, load_and_apply_overrides
 from sovereign_rag.api.settings.router import router as settings_router
 from sovereign_rag.api.sources.router import router as sources_router
 from sovereign_rag.api.threads.router import router as threads_router
@@ -79,6 +80,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         checkpointer = AsyncPostgresSaver(pool)
         await checkpointer.setup()  # idempotent
         await ensure_runs_table()  # creates runs table + indexes
+        await ensure_settings_table()  # creates settings_overrides table
+        # Layer persisted settings on top of the env defaults so UI changes
+        # survive restarts / auto-deploys (env defaults < persisted overrides).
+        await load_and_apply_overrides()
         app.state.graph = build_graph(checkpointer=checkpointer)
         app.state.checkpointer = checkpointer  # exposed so /api/threads can list/read
         logger.info("sovereign-rag pipeline + LangGraph ready")

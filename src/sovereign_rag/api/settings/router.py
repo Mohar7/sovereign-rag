@@ -2,12 +2,11 @@
 
 The Settings singleton is ``lru_cache``d; the PATCH route mutates the cached
 instance in-place so the next pipeline call sees new values without a
-process restart. The LLM factory's per-(provider, tier) ``lru_cache`` is
-also busted when any LLM field changes so the next graph run picks up the
-new model immediately.
-
-Persistence across restarts is a follow-up — for now restart resets the
-process to whatever ``Settings()`` reads off the environment.
+process restart, **and** upserts the change into Postgres so it survives a
+restart / re-deploy (see ``service.py`` — env defaults < persisted overrides;
+applied at startup by the FastAPI lifespan). The LLM factory's
+per-(provider, tier) ``lru_cache`` is busted when any LLM field changes so the
+next graph run picks up the new model immediately.
 """
 
 from __future__ import annotations
@@ -17,105 +16,23 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
 
+from sovereign_rag.api.settings.schemas import (
+    LLM_FIELDS,
+    ModelChoice,
+    SettingsPatch,
+    SettingsResponse,
+)
+from sovereign_rag.api.settings.service import (
+    apply_to_settings,
+    bust_llm_cache,
+    persist_overrides,
+)
 from sovereign_rag.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["settings"])
-
-
-# ---------- schemas ----------
-
-
-class SettingsResponse(BaseModel):
-    # LLM
-    llm_provider: str
-    llm_model: str
-    llm_model_light: str
-    llm_model_nano: str
-    openai_chat_model: str
-    openai_chat_model_light: str
-    openai_chat_model_nano: str
-    llm_temperature: float
-    # Embeddings
-    embed_provider: str
-    embed_model: str
-    embed_dim: int
-    # Retrieval
-    retrieve_top_k: int
-    rerank_top_k: int
-    rrf_k: int
-    enable_graph_retrieval: bool
-    enable_contextual_retrieval: bool
-    dense_enabled: bool
-    sparse_enabled: bool
-    fusion_strategy: str
-    fusion_graph_weight: float
-    fusion_vector_weight: float
-    graph_depth: int
-    graph_max_nodes: int
-    # Rerank
-    rerank_score_floor: float
-    adaptive_rerank: bool
-    reranker_model: str
-    reranker_device: str
-
-
-class SettingsPatch(BaseModel):
-    # LLM
-    llm_provider: str | None = Field(default=None, pattern="^(ollama|openai)$")
-    llm_model: str | None = Field(default=None, min_length=1, max_length=200)
-    llm_model_light: str | None = Field(default=None, min_length=1, max_length=200)
-    llm_model_nano: str | None = Field(default=None, min_length=1, max_length=200)
-    openai_chat_model: str | None = Field(default=None, max_length=200)
-    openai_chat_model_light: str | None = Field(default=None, max_length=200)
-    openai_chat_model_nano: str | None = Field(default=None, max_length=200)
-    llm_temperature: float | None = Field(default=None, ge=0.0, le=2.0)
-    # Retrieval
-    retrieve_top_k: int | None = Field(default=None, ge=1, le=500)
-    rerank_top_k: int | None = Field(default=None, ge=1, le=50)
-    rrf_k: int | None = Field(default=None, ge=1, le=500)
-    enable_graph_retrieval: bool | None = None
-    enable_contextual_retrieval: bool | None = None
-    dense_enabled: bool | None = None
-    sparse_enabled: bool | None = None
-    fusion_strategy: str | None = Field(default=None, pattern="^(rrf|weighted|borda)$")
-    fusion_graph_weight: float | None = Field(default=None, ge=0.0, le=1.0)
-    fusion_vector_weight: float | None = Field(default=None, ge=0.0, le=1.0)
-    graph_depth: int | None = Field(default=None, ge=1, le=5)
-    graph_max_nodes: int | None = Field(default=None, ge=10, le=500)
-    # Rerank
-    rerank_score_floor: float | None = Field(default=None, ge=0.0, le=1.0)
-    adaptive_rerank: bool | None = None
-    reranker_device: str | None = Field(default=None, pattern="^(auto|mps|cuda|cpu)$")
-
-
-class ModelChoice(BaseModel):
-    """One model option in the LLM dropdowns."""
-
-    id: str
-    label: str
-    family: str | None = None
-    size: str | None = None
-    note: str | None = None
-
-
-# Fields that, when patched, require the LLM factory cache to be busted so
-# the next graph run rebuilds the chat model with the new provider/model.
-_LLM_FIELDS: frozenset[str] = frozenset(
-    {
-        "llm_provider",
-        "llm_model",
-        "llm_model_light",
-        "llm_model_nano",
-        "openai_chat_model",
-        "openai_chat_model_light",
-        "openai_chat_model_nano",
-        "llm_temperature",
-    },
-)
 
 
 # OpenAI catalog — hand-maintained because OpenAI doesn't expose a
@@ -146,20 +63,6 @@ _OPENAI_CATALOG: list[ModelChoice] = [
     ModelChoice(id="o4-mini", label="o4-mini", family="reasoning", size="mini", note="reasoning"),
     ModelChoice(id="o3-mini", label="o3-mini", family="reasoning", size="mini", note="reasoning"),
 ]
-
-
-def _bust_llm_cache() -> None:
-    """Clear the ``shared.llm_factory._cached`` lru so the next call rebuilds.
-
-    Imported lazily so test collection doesn't pull langchain modules eagerly.
-    """
-    try:
-        from sovereign_rag.shared import llm_factory
-
-        llm_factory._cached.cache_clear()
-        logger.info("llm_factory cache cleared")
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("could not clear llm_factory cache: %s", exc)
 
 
 def _snapshot() -> SettingsResponse:
@@ -208,15 +111,21 @@ async def settings_get() -> SettingsResponse:
 
 @router.patch("/settings", response_model=SettingsResponse)
 async def settings_patch(patch: SettingsPatch) -> SettingsResponse:
-    s = get_settings()
     changed = patch.model_dump(exclude_none=True)
-    for field, value in changed.items():
-        if hasattr(s, field):
-            setattr(s, field, value)
+    # Persist first so a change that can't be saved fails loudly instead of
+    # silently taking effect for this process only and vanishing on restart.
+    if changed:
+        try:
+            await persist_overrides(changed)
+        except Exception as exc:
+            logger.error("failed to persist settings change: %s", exc)
+            raise HTTPException(503, f"settings change not persisted: {exc}") from exc
+    # Apply to the live cached Settings so the next pipeline call sees it now.
+    applied = apply_to_settings(get_settings(), changed)
     # If anything LLM-related changed, blow away the per-(provider, tier) cache
     # so the next ``get_chat_model()`` call builds with the new wire config.
-    if any(f in _LLM_FIELDS for f in changed):
-        _bust_llm_cache()
+    if any(f in LLM_FIELDS for f in applied):
+        bust_llm_cache()
     return _snapshot()
 
 
