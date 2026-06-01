@@ -16,7 +16,6 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from sovereign_rag.api.runs.service import list_runs
-from sovereign_rag.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +43,7 @@ class RunRow(BaseModel):
 @router.get("/runs", response_model=list[RunRow])
 async def runs_list(limit: int = Query(50, ge=1, le=500)) -> list[RunRow]:
     """Return the most recent ``limit`` runs, newest first."""
-    s = get_settings()
-    rows = await list_runs(s.langgraph_pg_uri, limit=limit)
+    rows = await list_runs(limit=limit)
     out: list[RunRow] = []
     for r in rows:
         out.append(

@@ -42,6 +42,7 @@ from sovereign_rag.api.threads.router import router as threads_router
 from sovereign_rag.config import get_settings
 from sovereign_rag.graphs.rag_qa import build_graph
 from sovereign_rag.retrieval.pipeline import RAGPipeline
+from sovereign_rag.shared.pg_pool import set_pg_pool
 from sovereign_rag.shared.pipeline_deps import set_pipeline
 
 logger = logging.getLogger(__name__)
@@ -74,9 +75,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
         check=AsyncConnectionPool.check_connection,
     ) as pool:
+        set_pg_pool(pool)  # share the pool with the runs/threads services
         checkpointer = AsyncPostgresSaver(pool)
         await checkpointer.setup()  # idempotent
-        await ensure_runs_table(s.langgraph_pg_uri)  # creates runs table + indexes
+        await ensure_runs_table()  # creates runs table + indexes
         app.state.graph = build_graph(checkpointer=checkpointer)
         app.state.checkpointer = checkpointer  # exposed so /api/threads can list/read
         logger.info("sovereign-rag pipeline + LangGraph ready")
@@ -85,6 +87,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         finally:
             await pipeline.aclose()
             set_pipeline(None)
+            set_pg_pool(None)
 
 
 app = FastAPI(

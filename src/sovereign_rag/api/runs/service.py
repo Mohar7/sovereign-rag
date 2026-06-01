@@ -1,11 +1,11 @@
 """Run-history persistence — write + read against Postgres.
 
-We re-use the same database the LangGraph checkpointer already opens
-(``langgraph_pg_uri``). Adds a single ``runs`` table that records every
-``/ask`` invocation: question, answer, citations, per-stage timings,
-overrides used, and timing/status metadata. The table is created
-lazily on app startup via :func:`ensure_runs_table` so a brand-new
-deploy has no migration step.
+We re-use the same database (and now the same connection pool) the LangGraph
+checkpointer already opens (``langgraph_pg_uri``). Adds a single ``runs`` table
+that records every ``/ask`` invocation: question, answer, citations, per-stage
+timings, overrides used, and timing/status metadata. The table is created
+lazily on app startup via :func:`ensure_runs_table` so a brand-new deploy has
+no migration step.
 
 The frontend's Run history screen reads from :func:`list_runs`.
 """
@@ -17,6 +17,9 @@ import logging
 from typing import Any
 
 import psycopg
+from psycopg.rows import tuple_row
+
+from sovereign_rag.shared.pg_pool import get_pg_pool
 
 logger = logging.getLogger(__name__)
 
@@ -45,17 +48,17 @@ _INDEXES_SQL = [
 ]
 
 
-async def ensure_runs_table(pg_uri: str) -> None:
-    """Idempotent: create the runs table + indexes if they don't exist."""
+async def ensure_runs_table() -> None:
+    """Idempotent: create the runs table + indexes if they don't exist.
+
+    Runs against the shared pool, whose connections are autocommit — so each
+    ``CREATE ... IF NOT EXISTS`` commits on its own; no explicit commit needed.
+    """
     try:
-        async with (
-            await psycopg.AsyncConnection.connect(pg_uri) as conn,
-            conn.cursor() as cur,
-        ):
+        async with get_pg_pool().connection() as conn, conn.cursor() as cur:
             await cur.execute(_CREATE_SQL)
             for stmt in _INDEXES_SQL:
                 await cur.execute(stmt)
-            await conn.commit()
         logger.info("runs table ready")
     except Exception as exc:
         # Non-fatal: the app still serves /ask without persistence.
@@ -63,7 +66,6 @@ async def ensure_runs_table(pg_uri: str) -> None:
 
 
 async def record_run(
-    pg_uri: str,
     *,
     thread_id: str,
     question: str,
@@ -89,10 +91,7 @@ async def record_run(
         VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s)
     """
     try:
-        async with (
-            await psycopg.AsyncConnection.connect(pg_uri) as conn,
-            conn.cursor() as cur,
-        ):
+        async with get_pg_pool().connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 sql,
                 (
@@ -109,12 +108,11 @@ async def record_run(
                     error,
                 ),
             )
-            await conn.commit()
     except Exception as exc:
         logger.warning("record_run failed: %s", exc)
 
 
-async def list_runs(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
+async def list_runs(*, limit: int = 50) -> list[dict[str, Any]]:
     """Return the most-recent runs (newest first)."""
     sql = """
         SELECT id, thread_id, question, answer, retrieved, used,
@@ -125,8 +123,8 @@ async def list_runs(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
     """
     try:
         async with (
-            await psycopg.AsyncConnection.connect(pg_uri) as conn,
-            conn.cursor() as cur,
+            get_pg_pool().connection() as conn,
+            conn.cursor(row_factory=tuple_row) as cur,
         ):
             await cur.execute(sql, (limit,))
             rows = await cur.fetchall()

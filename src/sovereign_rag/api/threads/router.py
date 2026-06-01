@@ -27,7 +27,6 @@ from sovereign_rag.api.threads.service import (
     read_thread,
     read_thread_messages,
 )
-from sovereign_rag.config import get_settings
 from sovereign_rag.thread_context import (
     PinEntry,
     ThreadContextDoc,
@@ -106,8 +105,7 @@ async def threads_list(
     limit: int = Query(50, ge=1, le=500),
 ) -> list[ThreadSummary]:
     """Return up to ``limit`` most-recently-updated threads."""
-    s = get_settings()
-    rows = await list_threads(s.langgraph_pg_uri, limit=limit)
+    rows = await list_threads(limit=limit)
     return [ThreadSummary(**row) for row in rows]
 
 
@@ -155,8 +153,7 @@ async def threads_messages(thread_id: str, request: Request) -> list[ThreadMessa
 @router.delete("/threads/{thread_id}")
 async def threads_delete(thread_id: str) -> dict[str, Any]:
     """Wipe all checkpoint state + context pins for ``thread_id``."""
-    s = get_settings()
-    removed = await delete_thread(s.langgraph_pg_uri, thread_id)
+    removed = await delete_thread(thread_id)
     pins_removed = await clear_thread(thread_id)
     return {"thread_id": thread_id, "checkpoints_removed": removed, "pins_removed": pins_removed}
 

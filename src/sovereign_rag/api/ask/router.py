@@ -131,7 +131,6 @@ async def ask(req: AskRequest, graph: GraphDep) -> AskResponse:
         logger.exception("graph invocation failed")
         # Persist the failed run so the history page surfaces errors too.
         await record_run(
-            settings_at_call.langgraph_pg_uri,
             thread_id=thread_id,
             question=req.question,
             answer=None,
@@ -153,7 +152,6 @@ async def ask(req: AskRequest, graph: GraphDep) -> AskResponse:
     response = _build_response(thread_id, state)
     # Best-effort persistence; errors are swallowed inside record_run.
     await record_run(
-        settings_at_call.langgraph_pg_uri,
         thread_id=response.thread_id,
         question=req.question,
         answer=response.answer,
@@ -265,7 +263,6 @@ async def _stream_generator(
         logger.exception("stream failed")
         # Record the failed run so it shows up in /api/runs.
         await record_run(
-            get_settings().langgraph_pg_uri,
             thread_id=thread_id,
             question=str(initial.get("question") or ""),
             answer=None,
@@ -302,7 +299,6 @@ async def _stream_generator(
     # Persist before yielding done so the run is in the audit log by the
     # time the client navigates to /history.
     await record_run(
-        get_settings().langgraph_pg_uri,
         thread_id=thread_id,
         question=str(initial.get("question") or ""),
         answer=final_state.get("answer"),

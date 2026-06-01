@@ -3,7 +3,8 @@
 LangGraph's ``AsyncPostgresSaver`` doesn't expose a list-all-threads or
 delete-thread API — both are easy to do against the underlying tables
 (``checkpoints``, ``checkpoint_writes``, ``checkpoint_blobs``). We query
-through ``psycopg`` directly here so the router stays declarative.
+through ``psycopg`` directly here (on the shared pool) so the router stays
+declarative.
 
 Schema reference (LangGraph 1.x checkpoint-postgres):
 
@@ -25,6 +26,10 @@ import logging
 from typing import Any
 
 import psycopg
+from psycopg import AsyncConnection
+from psycopg.rows import DictRow, tuple_row
+
+from sovereign_rag.shared.pg_pool import get_pg_pool
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +88,7 @@ def _extract_citations(values: dict[str, Any] | None) -> int:
 
 
 async def _latest_run_per_thread(
-    conn: psycopg.AsyncConnection[tuple[Any, ...]],
+    conn: AsyncConnection[DictRow],
 ) -> dict[str, dict[str, Any]]:
     """Map ``thread_id`` → most-recent run's ``{model, status, error_count}``.
 
@@ -109,7 +114,7 @@ async def _latest_run_per_thread(
         LEFT JOIN counts c ON c.thread_id = l.thread_id
     """
     try:
-        async with conn.cursor() as cur:
+        async with conn.cursor(row_factory=tuple_row) as cur:
             await cur.execute(sql)
             rows = await cur.fetchall()
     except psycopg.errors.UndefinedTable:
@@ -120,7 +125,7 @@ async def _latest_run_per_thread(
     return {r[0]: {"model": r[1], "status": r[2], "error_count": int(r[3] or 0)} for r in rows}
 
 
-async def list_threads(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
+async def list_threads(*, limit: int = 50) -> list[dict[str, Any]]:
     """Return one row per distinct thread_id, latest checkpoint first.
 
     The shape matches ``ThreadSummary`` in the router. Joins with the
@@ -147,8 +152,8 @@ async def list_threads(pg_uri: str, *, limit: int = 50) -> list[dict[str, Any]]:
         LIMIT %s
     """
     try:
-        async with await psycopg.AsyncConnection.connect(pg_uri) as conn:
-            async with conn.cursor() as cur:
+        async with get_pg_pool().connection() as conn:
+            async with conn.cursor(row_factory=tuple_row) as cur:
                 await cur.execute(sql, (limit,))
                 rows = await cur.fetchall()
             runs_index = await _latest_run_per_thread(conn)
@@ -304,22 +309,24 @@ async def read_thread_messages(checkpointer: Any, thread_id: str) -> list[dict[s
     return messages
 
 
-async def delete_thread(pg_uri: str, thread_id: str) -> int:
+async def delete_thread(thread_id: str) -> int:
     """Wipe every checkpoint row for ``thread_id``. Returns the row count.
 
-    Touches all three checkpoint tables so the thread is fully gone.
+    Touches all three checkpoint tables in one transaction so the thread is
+    fully gone (the pool's connections are autocommit, so we open an explicit
+    transaction to keep the three DELETEs atomic).
     """
     deleted_checkpoints = 0
     try:
-        async with await psycopg.AsyncConnection.connect(pg_uri) as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "DELETE FROM checkpoint_writes WHERE thread_id = %s", (thread_id,)
-                )
-                await cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,))
-                await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
-                deleted_checkpoints = cur.rowcount or 0
-            await conn.commit()
+        async with (
+            get_pg_pool().connection() as conn,
+            conn.transaction(),
+            conn.cursor() as cur,
+        ):
+            await cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (thread_id,))
+            await cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (thread_id,))
+            await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
+            deleted_checkpoints = cur.rowcount or 0
     except psycopg.errors.UndefinedTable:
         return 0
     except Exception as exc:
