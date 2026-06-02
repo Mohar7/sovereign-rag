@@ -32,6 +32,10 @@ def stub_graph(monkeypatch: pytest.MonkeyPatch) -> Any:
     grade_candidates always returns 'ambiguous' → the corrective path fires on
     every grade; the correction_attempts guard is what stops the loop.
     """
+    from sovereign_rag.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "enable_corrective_rag", True)
+
     from sovereign_rag.retrieval.grading import Grade
 
     pipe = MagicMock()

@@ -104,11 +104,13 @@ class Settings(BaseSettings):
     rerank_score_floor: float = 0.0
     adaptive_rerank: bool = False
     # ---- Corrective RAG (CRAG) ----
-    # Master toggle. False → the original linear retrieve→rerank→generate graph
-    # is built (no grade/correction nodes). This is a build-time structural flag:
-    # changing it requires recompiling the graph (process restart), so it is NOT
-    # part of the per-request AskOverrides.
-    enable_corrective_rag: bool = True
+    # Master toggle. Off by default so merging to main keeps the live /ask on the
+    # linear graph until a later plan makes the API interrupt-aware.
+    # False → the original linear retrieve→rerank→generate graph is built (no
+    # grade/correction nodes). This is a build-time structural flag: changing it
+    # requires recompiling the graph (process restart), so it is NOT part of the
+    # per-request AskOverrides.
+    enable_corrective_rag: bool = False
     # The grade band over the sigmoid-normalized top-1 reranker score (0..1):
     #   score >= correct   → Correct   (answer now, no LLM)
     #   score <= incorrect → Incorrect (correct via web, no LLM)

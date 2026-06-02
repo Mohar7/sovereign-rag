@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from sovereign_rag.config import get_settings
 from sovereign_rag.documents import Chunk, RetrievedChunk
 from sovereign_rag.graphs.rag_qa import nodes as agent_nodes
 from sovereign_rag.retrieval.pipeline import Citation
@@ -163,19 +164,22 @@ class TestGrade:
 
 
 class TestRouteAfterGrade:
-    def test_correct_goes_to_generate(self) -> None:
+    def test_correct_goes_to_generate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(get_settings(), "enable_corrective_rag", True)
         assert (
             agent_nodes.route_after_grade({"grade": "correct", "correction_attempts": 0})
             == "generate"
         )
 
-    def test_weak_under_budget_goes_to_transform(self) -> None:
+    def test_weak_under_budget_goes_to_transform(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(get_settings(), "enable_corrective_rag", True)
         assert (
             agent_nodes.route_after_grade({"grade": "ambiguous", "correction_attempts": 0})
             == "transform_query"
         )
 
-    def test_weak_at_budget_goes_to_generate(self) -> None:
+    def test_weak_at_budget_goes_to_generate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(get_settings(), "enable_corrective_rag", True)
         # default crag_max_corrections == 1, so attempts==1 is exhausted
         assert (
             agent_nodes.route_after_grade({"grade": "incorrect", "correction_attempts": 1})
@@ -183,8 +187,6 @@ class TestRouteAfterGrade:
         )
 
     def test_disabled_always_generates(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from sovereign_rag.config import get_settings
-
         monkeypatch.setattr(get_settings(), "enable_corrective_rag", False)
         assert (
             agent_nodes.route_after_grade({"grade": "incorrect", "correction_attempts": 0})
@@ -236,9 +238,6 @@ class TestWebSearch:
             "snippet": "snippet a",
         }
         assert len(out["candidate_urls"]) == 2
-
-        from sovereign_rag.config import get_settings
-
         assert captured["max_results"] == get_settings().web_fallback_max_urls
 
     async def test_falls_back_to_question_when_no_query(

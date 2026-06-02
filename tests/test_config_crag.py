@@ -12,7 +12,7 @@ def test_crag_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     # .env entry; unset it so we can assert the code default.
     monkeypatch.delenv("WEB_FALLBACK_MAX_URLS", raising=False)
     s = Settings(_env_file=None)  # ignore the local .env; assert code defaults
-    assert s.enable_corrective_rag is True
+    assert s.enable_corrective_rag is False
     assert s.crag_correct_threshold == 0.70
     assert s.crag_incorrect_threshold == 0.30
     assert s.crag_max_corrections == 1
