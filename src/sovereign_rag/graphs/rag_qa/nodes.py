@@ -11,16 +11,15 @@ import logging
 from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.types import Command, interrupt
 
 from sovereign_rag.config import get_settings
 from sovereign_rag.documents import RetrievedChunk
-from langgraph.types import Command, interrupt
-
+from sovereign_rag.graphs.rag_qa.state import RAGState
 from sovereign_rag.ingestion.search import search
 from sovereign_rag.ingestion.web import crawl_url
-from sovereign_rag.retrieval.grading import grade_candidates
-from sovereign_rag.graphs.rag_qa.state import RAGState
 from sovereign_rag.providers.reranker import rerank
+from sovereign_rag.retrieval.grading import grade_candidates
 from sovereign_rag.retrieval.pipeline import (
     _ANSWER_SYSTEM,
     _dedup_by_chunk,
@@ -215,7 +214,7 @@ async def crawl_index(state: RAGState) -> dict[str, object]:
         try:
             doc = await crawl_url(url)
             total += await pipe.index_document(doc)
-        except Exception:  # noqa: BLE001 — one bad URL must not sink the batch
+        except Exception:  # one bad URL must not sink the batch
             logger.warning("crawl_index: skipping URL that failed: %s", url, exc_info=True)
     logger.info("crawl_index: indexed %d chunks from %d urls", total, len(urls))
     return {
