@@ -280,6 +280,48 @@ def _run_offline(
 
 
 # --------------------------------------------------------------------------- #
+# Graph-driven mode (EVAL_USE_GRAPH=1)                                        #
+# --------------------------------------------------------------------------- #
+async def _run_graph_mode(
+    qa_pairs: list[dict[str, Any]], corpus: dict[str, str], k: int
+) -> dict[str, Any]:
+    """Graph-driven CRAG A/B mode (EVAL_USE_GRAPH=1).
+
+    Installs the recorded web fixture (deterministic, offline) unless
+    EVAL_WEB_LIVE=1, runs the CRAG-off vs CRAG-on A/B through the real graph,
+    and shapes the result into the standard report plus a ``crag`` block the
+    Evals dashboard reads.
+    """
+    from eval.graph_eval import run_ab
+
+    use_live_web = os.environ.get("EVAL_WEB_LIVE", "").lower() in ("1", "true", "yes")
+    orig = None
+    if not use_live_web:
+        from eval import web_fixture
+
+        orig = web_fixture.install()
+    try:
+        ab = await run_ab(qa_pairs, corpus, k)
+    finally:
+        if orig is not None:
+            from eval import web_fixture
+
+            web_fixture.uninstall(*orig)
+
+    on_rows = ab["per_question_on"]
+    return {
+        "mode": "graph",
+        "k": k,
+        "retrieval": {
+            "per_question": on_rows,  # the CRAG-on arm is the headline
+            "aggregate": ab["summary"]["aggregate_on"],
+        },
+        "ragas": {"available": False, "scores": {}, "reason": "graph mode: IR + CRAG A/B only"},
+        "crag": ab["summary"],
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Reporting                                                                    #
 # --------------------------------------------------------------------------- #
 def _print_table(report: dict[str, Any]) -> None:
@@ -340,9 +382,12 @@ async def _amain(k: int = _K) -> dict[str, Any]:
     qa_pairs = load_qa_pairs()
     corpus = load_corpus()
 
-    report = await _run_live(qa_pairs, corpus, k)
-    if report is None:
-        report = _run_offline(qa_pairs, corpus, k)
+    if os.environ.get("EVAL_USE_GRAPH", "").lower() in ("1", "true", "yes"):
+        report = await _run_graph_mode(qa_pairs, corpus, k)
+    else:
+        report = await _run_live(qa_pairs, corpus, k)
+        if report is None:
+            report = _run_offline(qa_pairs, corpus, k)
 
     _print_table(report)
     _write_results(report)

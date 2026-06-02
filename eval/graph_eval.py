@@ -12,9 +12,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sovereign_rag.documents import RetrievedChunk, SourceDocument, SourceType
-
 from eval.retrieval_metrics import mrr, ndcg_at_k, precision_at_k, recall_at_k
+from sovereign_rag.documents import RetrievedChunk, SourceDocument, SourceType
 
 _AUTO_APPROVE_GUARD = 5  # never loop forever even if max_corrections is misconfigured
 

@@ -106,3 +106,22 @@ async def test_crag_off_no_fallback(stub_eval_graph: None) -> None:
     rows = await graph_eval.run_graph_eval(qa, corpus={}, k=5, enable_crag=False)
     assert rows[0]["fallback_used"] is False     # linear graph never interrupts
     assert rows[0]["precision@5"] == 0           # local corpus can't answer it
+
+
+class TestAB:
+    def test_grade_distribution_and_lift(self) -> None:
+        off = [
+            {"question": "q1", "precision@5": 0.0, "recall@5": 0.0, "mrr": 0.0, "ndcg@5": 0.0,
+             "grade": None, "fallback_used": False, "requires_web": True},
+        ]
+        on = [
+            {"question": "q1", "precision@5": 1.0, "recall@5": 1.0, "mrr": 1.0, "ndcg@5": 1.0,
+             "grade": "correct", "fallback_used": True, "requires_web": True},
+        ]
+        ab = graph_eval.summarize_ab(off, on, k=5)
+        assert ab["fallback_fired"] == 1
+        assert ab["grade_distribution"] == {"correct": 1, "ambiguous": 0, "incorrect": 0}
+        # lift on the requires_web slice
+        assert ab["lift_on_corrected"]["precision@5"] == pytest.approx(1.0)
+        assert ab["aggregate_off"]["precision@5"] == pytest.approx(0.0)
+        assert ab["aggregate_on"]["precision@5"] == pytest.approx(1.0)
