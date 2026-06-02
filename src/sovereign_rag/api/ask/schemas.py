@@ -51,13 +51,59 @@ class CitationModel(BaseModel):
     snippet: str
 
 
+class CandidateUrl(BaseModel):
+    """One web result the human may approve for crawling."""
+
+    url: str
+    title: str
+    snippet: str
+    # Optional trust hint (e.g. domain not on a low-trust list). None = unknown;
+    # the UI only renders an "unverified" badge when this is explicitly False.
+    verified: bool | None = None
+
+
+class GradeModel(BaseModel):
+    """The retrieval grade surfaced to the client."""
+
+    label: Literal["correct", "ambiguous", "incorrect"]
+    confidence: float
+    reason: str
+
+
+class InterruptModel(BaseModel):
+    """Payload when the graph paused for human URL approval."""
+
+    reason: Literal["approve_urls"]
+    candidate_urls: list[CandidateUrl] = Field(default_factory=list)
+
+
+class ResumeRequest(BaseModel):
+    """Body for /ask/resume. ``approved_urls`` non-empty = approve those;
+    ``[]`` = decline (answer from the local corpus only)."""
+
+    thread_id: str = Field(min_length=1)
+    approved_urls: list[str] = Field(default_factory=list)
+
+
 class AskResponse(BaseModel):
     thread_id: str
-    status: Literal["ok"]
+    status: Literal["ok", "interrupted"]
     answer: str | None = None
     citations: list[CitationModel] = Field(default_factory=list)
     retrieved: int = 0
     used: int = 0
+    fallback_used: bool = False
+    grade: GradeModel | None = None
+    interrupt: InterruptModel | None = None
 
 
-__all__ = ["AskOverrides", "AskRequest", "AskResponse", "CitationModel"]
+__all__ = [
+    "AskOverrides",
+    "AskRequest",
+    "AskResponse",
+    "CandidateUrl",
+    "CitationModel",
+    "GradeModel",
+    "InterruptModel",
+    "ResumeRequest",
+]
