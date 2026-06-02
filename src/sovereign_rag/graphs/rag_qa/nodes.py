@@ -17,6 +17,7 @@ from sovereign_rag.documents import RetrievedChunk
 from langgraph.types import Command, interrupt
 
 from sovereign_rag.ingestion.search import search
+from sovereign_rag.ingestion.web import crawl_url
 from sovereign_rag.retrieval.grading import grade_candidates
 from sovereign_rag.graphs.rag_qa.state import RAGState
 from sovereign_rag.providers.reranker import rerank
@@ -196,6 +197,32 @@ async def request_approval(state: RAGState) -> Command[Literal["crawl_index", "g
         goto="generate",
         update={"approved_urls": [], "declined": True, "fallback_used": False},
     )
+
+
+# ---------------------------------------------------------------------------
+# Node: crawl_index  (CRAG) — crawl approved URLs, index, increment the guard
+# ---------------------------------------------------------------------------
+async def crawl_index(state: RAGState) -> dict[str, object]:
+    """Crawl each approved URL and index it via the pipeline, then bump the
+    correction counter. A single bad URL is logged and skipped, never fatal.
+    Always loops back to retrieve_local (the conditional guard already decided
+    we may correct, and the counter stops a second round)."""
+    pipe = get_pipeline()
+    urls = state.get("approved_urls") or []
+    attempts = state.get("correction_attempts", 0)
+    total = 0
+    for url in urls:
+        try:
+            doc = await crawl_url(url)
+            total += await pipe.index_document(doc)
+        except Exception:  # noqa: BLE001 — one bad URL must not sink the batch
+            logger.warning("crawl_index: skipping URL that failed: %s", url, exc_info=True)
+    logger.info("crawl_index: indexed %d chunks from %d urls", total, len(urls))
+    return {
+        "web_ingested": total,
+        "fallback_used": total > 0,
+        "correction_attempts": attempts + 1,
+    }
 
 
 # ---------------------------------------------------------------------------

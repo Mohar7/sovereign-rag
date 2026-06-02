@@ -269,3 +269,56 @@ class TestParseResume:
         assert agent_nodes._parse_resume({"approved_urls": ["https://a", 5, None]}) == [
             "https://a"
         ]
+
+
+# ---------------------------------------------------------------------------
+# crawl_index
+# ---------------------------------------------------------------------------
+class TestCrawlIndex:
+    async def test_crawls_indexes_and_increments_attempts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        crawled: list[str] = []
+
+        async def fake_crawl(url: str) -> Any:
+            crawled.append(url)
+            return MagicMock(name=f"doc::{url}")
+
+        pipe = MagicMock()
+        pipe.index_document = AsyncMock(side_effect=[18, 23])
+        monkeypatch.setattr(agent_nodes, "crawl_url", fake_crawl)
+        monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+
+        out = await agent_nodes.crawl_index(
+            {"approved_urls": ["https://a", "https://b"], "correction_attempts": 0}
+        )
+        assert crawled == ["https://a", "https://b"]
+        assert out["web_ingested"] == 41
+        assert out["fallback_used"] is True
+        assert out["correction_attempts"] == 1
+
+    async def test_skips_failed_crawls(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def fake_crawl(url: str) -> Any:
+            if "bad" in url:
+                raise RuntimeError("403")
+            return MagicMock()
+
+        pipe = MagicMock()
+        pipe.index_document = AsyncMock(return_value=10)
+        monkeypatch.setattr(agent_nodes, "crawl_url", fake_crawl)
+        monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+
+        out = await agent_nodes.crawl_index(
+            {"approved_urls": ["https://bad", "https://ok"], "correction_attempts": 0}
+        )
+        assert out["web_ingested"] == 10  # only the one that succeeded
+        assert out["fallback_used"] is True
+
+    async def test_no_urls_indexes_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        pipe = MagicMock()
+        pipe.index_document = AsyncMock(side_effect=AssertionError("should not index"))
+        monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+        out = await agent_nodes.crawl_index({"approved_urls": [], "correction_attempts": 0})
+        assert out["web_ingested"] == 0
+        assert out["fallback_used"] is False
+        assert out["correction_attempts"] == 1
