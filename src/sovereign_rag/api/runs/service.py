@@ -47,6 +47,14 @@ _INDEXES_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_runs_thread_id ON runs (thread_id);",
 ]
 
+_ALTER_SQL = [
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS grade TEXT;",
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS grade_confidence REAL;",
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS fallback_used BOOLEAN NOT NULL DEFAULT FALSE;",
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS decision TEXT;",
+    "ALTER TABLE runs ADD COLUMN IF NOT EXISTS correction_attempts INT NOT NULL DEFAULT 0;",
+]
+
 
 async def ensure_runs_table() -> None:
     """Idempotent: create the runs table + indexes if they don't exist.
@@ -58,6 +66,8 @@ async def ensure_runs_table() -> None:
         async with get_pg_pool().connection() as conn, conn.cursor() as cur:
             await cur.execute(_CREATE_SQL)
             for stmt in _INDEXES_SQL:
+                await cur.execute(stmt)
+            for stmt in _ALTER_SQL:
                 await cur.execute(stmt)
         logger.info("runs table ready")
     except Exception as exc:
@@ -78,6 +88,11 @@ async def record_run(
     model: str | None,
     status: str = "ok",
     error: str | None = None,
+    grade: str | None = None,
+    grade_confidence: float | None = None,
+    fallback_used: bool = False,
+    decision: str | None = None,
+    correction_attempts: int = 0,
 ) -> None:
     """Insert one row into ``runs``. Best-effort: errors are logged, not raised.
 
@@ -87,8 +102,11 @@ async def record_run(
     """
     sql = """
         INSERT INTO runs (thread_id, question, answer, retrieved, used,
-                          citations, timings, overrides, model, status, error)
-        VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s)
+                          citations, timings, overrides, model, status, error,
+                          grade, grade_confidence, fallback_used, decision,
+                          correction_attempts)
+        VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s,
+                %s, %s, %s, %s, %s)
     """
     try:
         async with get_pg_pool().connection() as conn, conn.cursor() as cur:
@@ -106,6 +124,11 @@ async def record_run(
                     model,
                     status,
                     error,
+                    grade,
+                    float(grade_confidence) if grade_confidence is not None else None,
+                    bool(fallback_used),
+                    decision,
+                    int(correction_attempts),
                 ),
             )
     except Exception as exc:
@@ -116,7 +139,8 @@ async def list_runs(*, limit: int = 50) -> list[dict[str, Any]]:
     """Return the most-recent runs (newest first)."""
     sql = """
         SELECT id, thread_id, question, answer, retrieved, used,
-               citations, timings, overrides, model, status, error, created_at
+               citations, timings, overrides, model, status, error, created_at,
+               grade, grade_confidence, fallback_used, decision, correction_attempts
         FROM runs
         ORDER BY created_at DESC
         LIMIT %s

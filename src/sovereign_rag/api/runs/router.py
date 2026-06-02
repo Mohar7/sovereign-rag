@@ -38,6 +38,11 @@ class RunRow(BaseModel):
     status: str = "ok"
     error: str | None = None
     created_at: datetime | None = None
+    grade: str | None = None
+    grade_confidence: float | None = None
+    fallback_used: bool = False
+    decision: str | None = None
+    correction_attempts: int = 0
 
 
 @router.get("/runs", response_model=list[RunRow])
@@ -61,6 +66,11 @@ async def runs_list(limit: int = Query(50, ge=1, le=500)) -> list[RunRow]:
                 status=r.get("status") or "ok",
                 error=r.get("error"),
                 created_at=r.get("created_at"),
+                grade=r.get("grade"),
+                grade_confidence=r.get("grade_confidence"),
+                fallback_used=bool(r.get("fallback_used") or False),
+                decision=r.get("decision"),
+                correction_attempts=int(r.get("correction_attempts") or 0),
             ),
         )
     return out
