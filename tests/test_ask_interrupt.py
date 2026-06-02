@@ -122,3 +122,89 @@ class TestAskEndpointInterrupt:
         assert resp.interrupt is not None
         assert resp.interrupt.candidate_urls[0].url == "https://a"
         assert resp.grade is not None and resp.grade.label == "ambiguous"
+
+
+class TestStreamGenerator:
+    async def _drain(self, gen: Any) -> list[dict[str, Any]]:
+        import json
+
+        out: list[dict[str, Any]] = []
+        async for raw in gen:
+            line = raw.decode() if isinstance(raw, bytes) else raw
+            for part in line.strip().split("\n"):
+                if part.startswith("data: "):
+                    out.append(json.loads(part[len("data: ") :]))
+        return out
+
+    async def _events_from(self, evlist: list[dict[str, Any]]) -> Any:
+        for e in evlist:
+            yield e
+
+    async def test_grade_and_interrupt_events(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # astream_events emits: grade node end (with grade fields), then the
+        # run pauses. aget_state reports the pending interrupt.
+        ev = [
+            {"event": "on_chain_start", "name": "grade", "data": {}},
+            {
+                "event": "on_chain_end",
+                "name": "grade",
+                "data": {"output": {"grade": "ambiguous", "grade_confidence": 0.46,
+                                    "grade_reason": "thin"}},
+            },
+        ]
+        graph = AsyncMock()
+        graph.astream_events = lambda *a, **k: self._events_from(ev)
+
+        class _Snap:
+            next = ("request_approval",)
+
+            class _Task:
+                interrupts = (
+                    type("I", (), {"value": {
+                        "reason": "approve_urls",
+                        "grade": {"label": "ambiguous", "confidence": 0.46, "reason": "thin"},
+                        "candidate_urls": [{"title": "A", "url": "https://a", "snippet": "s"}],
+                    }})(),
+                )
+
+            tasks = (_Task(),)
+
+        graph.aget_state = AsyncMock(return_value=_Snap())
+        rec = AsyncMock(side_effect=AssertionError("pause is not a run"))
+        monkeypatch.setattr(ask_router, "record_run", rec)
+
+        gen = ask_router._stream_generator(
+            graph, {"question": "q"}, {"configurable": {"thread_id": "t"}}, "t", None
+        )
+        events = await self._drain(gen)
+        types = [e["type"] for e in events]
+        assert "grade" in types
+        grade_ev = next(e for e in events if e["type"] == "grade")
+        assert grade_ev["label"] == "ambiguous" and grade_ev["confidence"] == 0.46
+        assert "interrupt" in types
+        intr = next(e for e in events if e["type"] == "interrupt")
+        assert intr["candidate_urls"][0]["url"] == "https://a"
+        assert "done" not in types  # a pause does not emit done
+
+    async def test_crawl_progress_passthrough(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ev = [
+            {"event": "on_custom_event", "name": "crawl_progress",
+             "data": {"url": "https://a", "status": "indexed", "chunks": 7}},
+        ]
+        graph = AsyncMock()
+        graph.astream_events = lambda *a, **k: self._events_from(ev)
+
+        class _Snap:
+            next = ()
+            tasks = ()
+            values = {"answer": "done", "citations": [], "retrieved": 1, "used": 1}
+
+        graph.aget_state = AsyncMock(return_value=_Snap())
+        monkeypatch.setattr(ask_router, "record_run", AsyncMock())
+
+        gen = ask_router._stream_generator(
+            graph, {"question": "q"}, {"configurable": {"thread_id": "t"}}, "t", None
+        )
+        events = await self._drain(gen)
+        cp = [e for e in events if e["type"] == "crawl_progress"]
+        assert cp and cp[0]["url"] == "https://a" and cp[0]["chunks"] == 7

@@ -41,6 +41,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ask"])
 
+# All CRAG pipeline nodes whose on_chain_start/on_chain_end events are
+# tracked for per-node timings and surfaced to the client.
+_CRAG_NODES = {
+    "retrieve_local",
+    "rerank",
+    "grade",
+    "transform_query",
+    "web_search",
+    "crawl_index",
+    "generate",
+}
+
 
 # ─────────────────────────────────────────────────────────────────
 # Overrides
@@ -166,6 +178,23 @@ def _extract_interrupt(
     return interrupt, grade
 
 
+def _pending_interrupt(
+    snapshot: Any,
+) -> tuple[InterruptModel, GradeModel | None] | None:
+    """Build the interrupt from a state snapshot's pending tasks, if any.
+
+    On a pause, ``aget_state`` returns a snapshot whose ``.tasks[*].interrupts``
+    carry the Interrupt objects (and ``.next`` names the paused node)."""
+    if snapshot is None or not getattr(snapshot, "next", None):
+        return None
+    for task in getattr(snapshot, "tasks", ()) or ():
+        for intr in getattr(task, "interrupts", ()) or ():
+            payload = getattr(intr, "value", None)
+            if isinstance(payload, dict):
+                return _extract_interrupt({"__interrupt__": (intr,)})
+    return None
+
+
 @router.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest, graph: GraphDep) -> AskResponse:
     """Run the QA graph and return the cited answer."""
@@ -245,7 +274,7 @@ def _sse(payload: dict[str, Any]) -> bytes:
 
 async def _stream_generator(
     graph: Any,
-    initial: dict[str, Any],
+    initial: Any,
     config: dict[str, Any],
     thread_id: str,
     overrides: AskOverrides | None,
@@ -254,9 +283,12 @@ async def _stream_generator(
 
     Event types (all carry ``"type"``):
     - ``open`` — first event, includes ``thread_id``
-    - ``node`` — graph node started or finished
+    - ``node`` — graph node started or finished (for all _CRAG_NODES)
     - ``token`` — LLM stream chunk; ``delta`` is the text piece
     - ``citations`` — emitted when the ``generate`` node returns citations
+    - ``grade`` — emitted when the ``grade`` node finishes
+    - ``crawl_progress`` — per-URL crawl status from crawl_index
+    - ``interrupt`` — graph paused for human approval (no ``done`` follows)
     - ``done`` — final state summary (``answer``, ``citations``, ``retrieved``, ``used``)
     - ``error`` — fatal error; the stream then closes
     """
@@ -283,19 +315,11 @@ async def _stream_generator(
                     if isinstance(delta, str) and delta:
                         yield _sse({"type": "token", "delta": delta})
 
-                elif kind == "on_chain_start" and name in {
-                    "retrieve_local",
-                    "rerank",
-                    "generate",
-                }:
+                elif kind == "on_chain_start" and name in _CRAG_NODES:
                     node_started_at[name] = time.perf_counter()
                     yield _sse({"type": "node", "name": name, "phase": "start"})
 
-                elif kind == "on_chain_end" and name in {
-                    "retrieve_local",
-                    "rerank",
-                    "generate",
-                }:
+                elif kind == "on_chain_end" and name in _CRAG_NODES:
                     output = event.get("data", {}).get("output") or {}
                     if not isinstance(output, dict):
                         output = {}
@@ -308,6 +332,15 @@ async def _stream_generator(
                             for c in (output.get("citations") or [])
                         ]
                         yield _sse({"type": "citations", "items": cites})
+                    if name == "grade":
+                        yield _sse(
+                            {
+                                "type": "grade",
+                                "label": output.get("grade"),
+                                "confidence": output.get("grade_confidence"),
+                                "reason": output.get("grade_reason"),
+                            }
+                        )
                     yield _sse(
                         {
                             "type": "node",
@@ -316,6 +349,11 @@ async def _stream_generator(
                             "elapsed_ms": elapsed_ms,
                         },
                     )
+
+                elif kind == "on_custom_event" and name == "crawl_progress":
+                    data = event.get("data") or {}
+                    if isinstance(data, dict):
+                        yield _sse({"type": "crawl_progress", **data})
 
                 elif kind == "on_chain_end" and name == "LangGraph":
                     # Top-level graph finished; capture the final state.
@@ -327,7 +365,7 @@ async def _stream_generator(
         # Record the failed run so it shows up in /api/runs.
         await record_run(
             thread_id=thread_id,
-            question=str(initial.get("question") or ""),
+            question=str(initial.get("question") or "") if isinstance(initial, dict) else "",
             answer=None,
             retrieved=0,
             used=0,
@@ -341,17 +379,42 @@ async def _stream_generator(
         yield _sse({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
         return
 
-    # Fallback: if astream_events didn't surface the top-level output, fetch
-    # the final state ourselves (every node already ran).
+    # Compute snapshot once — used for both interrupt detection and final_state fallback.
+    try:
+        snapshot = await graph.aget_state(config)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("aget_state failed: %s", exc)
+        snapshot = None
+
+    # The graph may have paused at request_approval — the top-level on_chain_end
+    # does not fire on an interrupt, so check the snapshot.
+    pending = _pending_interrupt(snapshot)
+    if pending is not None:
+        interrupt_model, grade = pending
+        if grade is not None:
+            yield _sse(
+                {
+                    "type": "grade",
+                    "label": grade.label,
+                    "confidence": grade.confidence,
+                    "reason": grade.reason,
+                }
+            )
+        yield _sse(
+            {
+                "type": "interrupt",
+                "thread_id": thread_id,
+                "reason": interrupt_model.reason,
+                "candidate_urls": [c.model_dump() for c in interrupt_model.candidate_urls],
+            }
+        )
+        return  # a pause is not a completed run — no record_run, no done
+
+    # Fallback: if astream_events didn't surface the top-level output, use snapshot.
     if not final_state:
-        try:
-            snapshot = await graph.aget_state(config)
-            final_state = (
-                snapshot.values if snapshot is not None and hasattr(snapshot, "values") else {}
-            ) or {}
-        except Exception as exc:
-            logger.warning("aget_state failed: %s", exc)
-            final_state = {}
+        final_state = (
+            snapshot.values if snapshot is not None and hasattr(snapshot, "values") else {}
+        ) or {}
 
     citations = [
         asdict(c) if hasattr(c, "__dataclass_fields__") else c
@@ -363,7 +426,7 @@ async def _stream_generator(
     # time the client navigates to /history.
     await record_run(
         thread_id=thread_id,
-        question=str(initial.get("question") or ""),
+        question=str(initial.get("question") or "") if isinstance(initial, dict) else "",
         answer=final_state.get("answer"),
         retrieved=int(final_state.get("retrieved", 0)),
         used=int(final_state.get("used", 0)),
