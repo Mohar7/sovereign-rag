@@ -208,3 +208,70 @@ class TestStreamGenerator:
         events = await self._drain(gen)
         cp = [e for e in events if e["type"] == "crawl_progress"]
         assert cp and cp[0]["url"] == "https://a" and cp[0]["chunks"] == 7
+
+
+class TestResume:
+    async def test_resume_approve_completes_with_fallback(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from langgraph.types import Command
+
+        graph = AsyncMock()
+        graph.ainvoke.return_value = {
+            "answer": "answer with web [1]",
+            "citations": [],
+            "retrieved": 4,
+            "used": 1,
+            "fallback_used": True,
+            "grade": "correct",
+            "grade_confidence": 0.79,
+            "grade_reason": "ok",
+            "correction_attempts": 1,
+        }
+        captured: dict[str, Any] = {}
+        monkeypatch.setattr(
+            ask_router,
+            "record_run",
+            AsyncMock(side_effect=lambda **kw: captured.update(kw)),
+        )
+
+        from sovereign_rag.api.ask.schemas import ResumeRequest
+
+        resp = await ask_router.ask_resume(
+            ResumeRequest(thread_id="t1", approved_urls=["https://a"]), graph
+        )
+        # resumed with Command(resume={"approved_urls": [...]}) on the same thread
+        sent = graph.ainvoke.call_args.args[0]
+        assert isinstance(sent, Command)
+        assert sent.resume == {"approved_urls": ["https://a"]}
+        assert graph.ainvoke.call_args.kwargs["config"]["configurable"]["thread_id"] == "t1"
+        assert resp.status == "ok"
+        assert resp.fallback_used is True
+        assert resp.answer == "answer with web [1]"
+        # the run was recorded with CRAG fields
+        assert captured["fallback_used"] is True
+        assert captured["grade"] == "correct"
+
+    async def test_resume_decline_answers_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        graph = AsyncMock()
+        graph.ainvoke.return_value = {
+            "answer": "local only [1]",
+            "citations": [],
+            "retrieved": 2,
+            "used": 1,
+            "fallback_used": False,
+            "declined": True,
+            "grade": "ambiguous",
+            "grade_confidence": 0.46,
+            "grade_reason": "thin",
+        }
+        monkeypatch.setattr(ask_router, "record_run", AsyncMock())
+
+        from sovereign_rag.api.ask.schemas import ResumeRequest
+
+        resp = await ask_router.ask_resume(
+            ResumeRequest(thread_id="t1", approved_urls=[]), graph
+        )
+        assert resp.status == "ok"
+        assert resp.fallback_used is False
+        assert resp.answer == "local only [1]"

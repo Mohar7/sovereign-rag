@@ -33,6 +33,8 @@ from sovereign_rag.api.ask.schemas import (
     InterruptModel,
     ResumeRequest,
 )
+from langgraph.types import Command
+
 from sovereign_rag.api.dependencies import GraphDep
 from sovereign_rag.api.runs import record_run
 from sovereign_rag.config import get_settings
@@ -468,6 +470,71 @@ async def ask_stream(req: AskRequest, graph: GraphDep) -> StreamingResponse:
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # bypass nginx buffering when proxied
+        },
+    )
+
+
+@router.post("/ask/resume", response_model=AskResponse)
+async def ask_resume(req: ResumeRequest, graph: GraphDep) -> AskResponse:
+    """Resume a thread paused at the HITL approval interrupt.
+
+    ``approved_urls`` non-empty → approve those (crawl + re-retrieve);
+    ``[]`` → decline (answer from the local corpus). With the default
+    ``crag_max_corrections=1`` the resumed run completes without pausing again.
+    """
+    thread_id = req.thread_id
+    config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+    started = time.perf_counter()
+    try:
+        state = await graph.ainvoke(
+            Command(resume={"approved_urls": req.approved_urls}), config=config
+        )
+    except Exception as exc:
+        logger.exception("resume failed")
+        raise HTTPException(500, f"Resume failed: {exc}") from exc
+
+    # A second interrupt is possible only if crag_max_corrections > 1.
+    paused = _extract_interrupt(state)
+    if paused is not None:
+        interrupt_model, grade = paused
+        return AskResponse(
+            thread_id=thread_id, status="interrupted", interrupt=interrupt_model, grade=grade
+        )
+
+    response = _build_response(thread_id, state)
+    await record_run(
+        thread_id=thread_id,
+        question=str(state.get("question") or ""),
+        answer=response.answer,
+        retrieved=response.retrieved,
+        used=response.used,
+        citations=[c.model_dump() for c in response.citations],
+        timings={"total": round((time.perf_counter() - started) * 1000)},
+        overrides=None,
+        model=get_settings().llm_model,
+        status="ok",
+        grade=state.get("grade"),
+        grade_confidence=state.get("grade_confidence"),
+        fallback_used=bool(state.get("fallback_used", False)),
+        decision="approved" if req.approved_urls else "declined",
+        correction_attempts=int(state.get("correction_attempts", 0)),
+    )
+    return response
+
+
+@router.post("/ask/resume/stream")
+async def ask_resume_stream(req: ResumeRequest, graph: GraphDep) -> StreamingResponse:
+    """SSE variant of /ask/resume — streams the post-approval tokens + events."""
+    thread_id = req.thread_id
+    config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+    resume_input: Any = Command(resume={"approved_urls": req.approved_urls})
+    return StreamingResponse(
+        _stream_generator(graph, resume_input, config, thread_id, None),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 
