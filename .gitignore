@@ -50,6 +50,11 @@ deploy/searxng/uwsgi.ini
 .claude/
 skills-lock.json
 
+# Downloaded Claude Design bundle — local design reference only, not vendored.
+# Regenerable from docs/crag-hitl-design-prompt.md. The CRAG spec references
+# design/Sovereign RAG Design System/crag/ as a local implementation reference.
+design/
+
 # IDE / OS
 .idea/
 .vscode/

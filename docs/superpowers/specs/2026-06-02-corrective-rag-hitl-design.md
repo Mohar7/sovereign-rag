@@ -5,7 +5,7 @@
 - **Feature area:** Agentic RAG — self-correcting retrieval in the LangGraph control plane
 - **Companion artifacts:**
   - [`docs/crag-hitl-design-prompt.md`](../../crag-hitl-design-prompt.md) — the Claude Design prompt for all UI surfaces.
-  - `design/Sovereign RAG Design System/` — the **delivered** Claude Design bundle. CRAG-specific mocks live under `crag/` (`screens/{pipeline,approval,ask-context,app-surfaces,misc}.jsx`, `components/crag-primitives.jsx`); open `crag/Corrective RAG.html` to view. The bundle's visual primitives (indigo-600/zinc, Inter + JetBrains Mono, `hybrid|graph|vector|web` kind icons) **match the shipped `frontend/`**, so the CRAG components port directly — no design-system migration.
+  - `design/Sovereign RAG Design System/` — the **delivered** Claude Design bundle. CRAG-specific mocks live under `crag/` (`screens/{pipeline,approval,ask-context,app-surfaces,misc}.jsx`, `components/crag-primitives.jsx`); open `crag/Corrective RAG.html` to view. The bundle's visual primitives (indigo-600/zinc, Inter + JetBrains Mono, `hybrid|graph|vector|web` kind icons) **match the shipped `frontend/`**, so the CRAG components port directly — no design-system migration. **Note:** this bundle is **git-ignored** (local reference only); it is regenerable from `docs/crag-hitl-design-prompt.md`, so these paths resolve on the author's machine but won't be present in a fresh clone.
 
 ---
 
