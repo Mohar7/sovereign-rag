@@ -280,9 +280,14 @@ class TestParseResume:
 # crawl_index
 # ---------------------------------------------------------------------------
 class TestCrawlIndex:
+    async def _noop_dispatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Patch adispatch_custom_event with a no-op; unit tests run outside a LangGraph run."""
+        monkeypatch.setattr(agent_nodes, "adispatch_custom_event", AsyncMock())
+
     async def test_crawls_indexes_and_increments_attempts(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        await self._noop_dispatch(monkeypatch)
         crawled: list[str] = []
 
         async def fake_crawl(url: str) -> Any:
@@ -303,6 +308,8 @@ class TestCrawlIndex:
         assert out["correction_attempts"] == 1
 
     async def test_skips_failed_crawls(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        await self._noop_dispatch(monkeypatch)
+
         async def fake_crawl(url: str) -> Any:
             if "bad" in url:
                 raise RuntimeError("403")
@@ -320,6 +327,7 @@ class TestCrawlIndex:
         assert out["fallback_used"] is True
 
     async def test_no_urls_indexes_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        await self._noop_dispatch(monkeypatch)
         pipe = MagicMock()
         pipe.index_document = AsyncMock(side_effect=AssertionError("should not index"))
         monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
@@ -391,3 +399,37 @@ class TestWebSearchUrlFilter:
         monkeypatch.setattr(agent_nodes, "search", fake_search)
         out = await agent_nodes.web_search({"question": "q", "search_query": "x"})
         assert [c["url"] for c in out["candidate_urls"]] == ["https://ok"]
+
+
+# ---------------------------------------------------------------------------
+# crawl_index — per-URL crawl_progress custom events
+# ---------------------------------------------------------------------------
+class TestCrawlIndexProgress:
+    async def test_emits_crawl_progress_per_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        events: list[tuple[str, dict[str, Any]]] = []
+
+        async def fake_dispatch(name: str, data: dict[str, Any], **_: Any) -> None:
+            events.append((name, data))
+
+        async def fake_crawl(url: str) -> Any:
+            if "bad" in url:
+                raise RuntimeError("403")
+            return MagicMock()
+
+        pipe = MagicMock()
+        pipe.index_document = AsyncMock(return_value=7)
+        monkeypatch.setattr(agent_nodes, "adispatch_custom_event", fake_dispatch)
+        monkeypatch.setattr(agent_nodes, "crawl_url", fake_crawl)
+        monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+
+        out = await agent_nodes.crawl_index(
+            {"approved_urls": ["https://ok", "https://bad"], "correction_attempts": 0}
+        )
+
+        names = [n for n, _ in events]
+        # one "crawling" then a terminal status per url
+        assert ("crawl_progress", {"url": "https://ok", "status": "crawling"}) in events
+        assert ("crawl_progress", {"url": "https://ok", "status": "indexed", "chunks": 7}) in events
+        assert ("crawl_progress", {"url": "https://bad", "status": "failed"}) in events
+        assert names.count("crawl_progress") == 4  # 2 crawling + indexed + failed
+        assert out["web_ingested"] == 7

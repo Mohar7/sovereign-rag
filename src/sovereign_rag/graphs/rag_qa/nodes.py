@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
+from langchain_core.callbacks.manager import adispatch_custom_event
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import Command, interrupt
 
@@ -209,19 +210,26 @@ async def request_approval(state: RAGState) -> Command[Literal["crawl_index", "g
 # ---------------------------------------------------------------------------
 async def crawl_index(state: RAGState) -> dict[str, object]:
     """Crawl each approved URL and index it via the pipeline, then bump the
-    correction counter. A single bad URL is logged and skipped, never fatal.
-    Always loops back to retrieve_local (the conditional guard already decided
-    we may correct, and the counter stops a second round)."""
+    correction counter. Emits a ``crawl_progress`` custom event per URL
+    (``crawling`` → ``indexed``/``failed``) so the SSE layer can render
+    per-URL progress. A single bad URL is logged + skipped, never fatal.
+    Always loops back to retrieve_local (the guard stops a second round)."""
     pipe = get_pipeline()
     urls = state.get("approved_urls") or []
     attempts = state.get("correction_attempts", 0)
     total = 0
     for url in urls:
+        await adispatch_custom_event("crawl_progress", {"url": url, "status": "crawling"})
         try:
             doc = await crawl_url(url)
-            total += await pipe.index_document(doc)
+            n = await pipe.index_document(doc)
+            total += n
+            await adispatch_custom_event(
+                "crawl_progress", {"url": url, "status": "indexed", "chunks": n}
+            )
         except Exception:  # one bad URL must not sink the batch
             logger.warning("crawl_index: skipping URL that failed: %s", url, exc_info=True)
+            await adispatch_custom_event("crawl_progress", {"url": url, "status": "failed"})
     logger.info("crawl_index: indexed %d chunks from %d urls", total, len(urls))
     return {
         "web_ingested": total,
