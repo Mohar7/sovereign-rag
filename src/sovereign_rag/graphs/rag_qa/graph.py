@@ -130,9 +130,12 @@ def build_graph(checkpointer: BaseCheckpointSaver[Any] | None = None) -> Any:
     allowlist (see ``shared/checkpoint_serde.py``) so that ``Chunk``,
     ``RetrievedChunk``, and ``Citation`` are silently allowed on
     deserialization instead of emitting an "unregistered type" warning on
-    every resume.  The checkpointer's own ``serde`` attribute is replaced
-    with a new ``JsonPlusSerializer`` that merges the base allowlist with our
-    types via ``with_msgpack_allowlist``.
+    every resume.  The checkpointer's ``serde`` attribute is replaced with a
+    ``JsonPlusSerializer`` constructed with an explicit
+    ``allowed_msgpack_modules`` list for those three types; LangGraph's
+    built-in safe types (messages, datetimes, UUID, Send/Interrupt/Command,
+    etc.) remain allowed automatically via ``SAFE_MSGPACK_TYPES`` and are not
+    stripped by this replacement.
     """
     setup_tracing()
     if checkpointer is not None:

@@ -383,6 +383,7 @@ async def test_full_interrupt_resume_against_real_graph() -> None:
     grades weak, /ask returns interrupted, /ask/resume(approve) crawls + answers.
     Gated: requires Milvus/Neo4j/Postgres/SearXNG + ENABLE_CORRECTIVE_RAG=1."""
     pytest.importorskip("pymilvus")
+    pytest.skip("end-to-end interrupt/resume e2e not yet implemented — Plan 2 follow-up")
     # Build the real graph via build_graph(AsyncPostgresSaver), ask a question
     # with no local coverage, assert status=interrupted, resume with the top
     # candidate, assert an answer + fallback_used.

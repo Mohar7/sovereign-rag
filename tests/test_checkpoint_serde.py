@@ -13,8 +13,9 @@ We therefore assert the absence of the warning by capturing the
 asserting zero "unregistered type" messages were emitted.
 
 The fix (``shared/checkpoint_serde.py``) creates a ``JsonPlusSerializer``
-with ``Chunk``, ``RetrievedChunk``, and ``Citation`` in its
-``allowed_msgpack_modules`` allowlist via ``with_msgpack_allowlist()``.
+with ``Chunk``, ``RetrievedChunk``, and ``Citation`` supplied as an explicit
+``allowed_msgpack_modules`` list (not via ``with_msgpack_allowlist()``, which
+is a no-op when the base allowlist is ``True``).
 ``build_graph(checkpointer)`` applies this serde to the checkpointer so
 every compile path — both the FastAPI lifespan (``AsyncPostgresSaver``) and
 the stubbed-graph test helper (``InMemorySaver``) — gets the allowlist.
