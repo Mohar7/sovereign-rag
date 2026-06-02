@@ -102,6 +102,28 @@ class Settings(BaseSettings):
     # crosses ~0.85 (saves LLM context on easy queries).
     rerank_score_floor: float = 0.0
     adaptive_rerank: bool = False
+    # ---- Corrective RAG (CRAG) ----
+    # Master toggle. False → the original linear retrieve→rerank→generate graph
+    # is built (no grade/correction nodes). This is a build-time structural flag:
+    # changing it requires recompiling the graph (process restart), so it is NOT
+    # part of the per-request AskOverrides.
+    enable_corrective_rag: bool = True
+    # The grade band over the sigmoid-normalized top-1 reranker score (0..1):
+    #   score >= correct   → Correct   (answer now, no LLM)
+    #   score <= incorrect → Incorrect (correct via web, no LLM)
+    #   in between         → one light-tier LLM call decides the label
+    # Defaults are placeholders pending an empirical sweep on the golden set
+    # (gte-reranker logits aren't centered — see the spec's risks section).
+    crag_correct_threshold: float = 0.70
+    crag_incorrect_threshold: float = 0.30
+    # How many corrective web rounds before the graph answers with what it has.
+    crag_max_corrections: int = 1
+    # Model tier for the middle-band grader (mirrors llm_factory tiers).
+    crag_grader_tier: str = "light"
+    # Candidate URLs surfaced to the human for approval per correction.
+    web_fallback_max_urls: int = 5
+    # URLs the eval auto-approver picks (Plan 3); unused by the product path.
+    web_fallback_crawl_top_k: int = 3
     # Cross-encoder via sentence-transformers. Default: gte-reranker-modernbert-base
     # — 149M params (~3.8x smaller than bge-reranker-v2-m3), Apache 2.0, multilingual
     # via ModernBERT; matches nemotron-rerank-1b on Hit@1 at a fraction of memory.
