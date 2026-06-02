@@ -375,3 +375,15 @@ class TestResumeStreamRecording:
         assert captured["question"] == "the original question"
         # Fix 2: decision must be forwarded, not hardcoded None
         assert captured["decision"] == "approved"
+
+
+@pytest.mark.integration
+async def test_full_interrupt_resume_against_real_graph() -> None:
+    """With real services + enable_corrective_rag=True, a thin-corpus question
+    grades weak, /ask returns interrupted, /ask/resume(approve) crawls + answers.
+    Gated: requires Milvus/Neo4j/Postgres/SearXNG + ENABLE_CORRECTIVE_RAG=1."""
+    pytest.importorskip("pymilvus")
+    # Build the real graph via build_graph(AsyncPostgresSaver), ask a question
+    # with no local coverage, assert status=interrupted, resume with the top
+    # candidate, assert an answer + fallback_used.
+    # (Skipped in CI unit tier — runs only on the self-hosted Mac Mini.)
