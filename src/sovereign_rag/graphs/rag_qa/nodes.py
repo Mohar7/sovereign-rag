@@ -8,11 +8,13 @@ them out via monkeypatch).
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from sovereign_rag.config import get_settings
 from sovereign_rag.documents import RetrievedChunk
+from sovereign_rag.retrieval.grading import grade_candidates
 from sovereign_rag.graphs.rag_qa.state import RAGState
 from sovereign_rag.providers.reranker import rerank
 from sovereign_rag.retrieval.pipeline import (
@@ -73,6 +75,35 @@ async def do_rerank(state: RAGState) -> dict[str, object]:
     candidates = state.get("candidates") or []
     reranked = rerank(state["question"], candidates, top_k=s.rerank_top_k) if candidates else []
     return {"reranked": reranked, "retrieved": len(candidates)}
+
+
+# ---------------------------------------------------------------------------
+# Node: grade  (CRAG)
+# ---------------------------------------------------------------------------
+async def grade(state: RAGState) -> dict[str, object]:
+    """Grade the reranked context; flatten the Grade into state primitives."""
+    s = get_settings()
+    reranked = state.get("reranked") or []
+    g = await grade_candidates(state["question"], reranked, s)
+    logger.info("grade: %s (%.3f) — %s", g.label, g.confidence, g.reason)
+    return {
+        "grade": g.label,
+        "grade_confidence": g.confidence,
+        "grade_reason": g.reason,
+    }
+
+
+def route_after_grade(state: RAGState) -> Literal["transform_query", "generate"]:
+    """Conditional edge after grade. Weak + under the correction budget → correct
+    via the web; otherwise answer with what we have."""
+    s = get_settings()
+    if not s.enable_corrective_rag:
+        return "generate"
+    label = state.get("grade")
+    attempts = state.get("correction_attempts", 0)
+    if label in ("ambiguous", "incorrect") and attempts < s.crag_max_corrections:
+        return "transform_query"
+    return "generate"
 
 
 # ---------------------------------------------------------------------------

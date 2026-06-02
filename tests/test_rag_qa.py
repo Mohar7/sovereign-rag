@@ -141,3 +141,50 @@ class TestRetrieveLocal:
         assert cands["c1"].score == 0.95
         # doc_id propagated to milvus call:
         milvus.hybrid_search.assert_awaited_once_with("q", doc_id="d1")
+
+
+# ---------------------------------------------------------------------------
+# grade + route_after_grade
+# ---------------------------------------------------------------------------
+class TestGrade:
+    async def test_writes_grade_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from sovereign_rag.retrieval.grading import Grade
+
+        async def fake_grade(question, reranked, settings, **kw):  # type: ignore[no-untyped-def]
+            return Grade("ambiguous", 0.46, "thin coverage")
+
+        monkeypatch.setattr(agent_nodes, "grade_candidates", fake_grade)
+        out = await agent_nodes.grade({"question": "q", "reranked": [_rc("a", 0.4)]})
+        assert out["grade"] == "ambiguous"
+        assert out["grade_confidence"] == 0.46
+        assert out["grade_reason"] == "thin coverage"
+
+
+class TestRouteAfterGrade:
+    def test_correct_goes_to_generate(self) -> None:
+        assert (
+            agent_nodes.route_after_grade({"grade": "correct", "correction_attempts": 0})
+            == "generate"
+        )
+
+    def test_weak_under_budget_goes_to_transform(self) -> None:
+        assert (
+            agent_nodes.route_after_grade({"grade": "ambiguous", "correction_attempts": 0})
+            == "transform_query"
+        )
+
+    def test_weak_at_budget_goes_to_generate(self) -> None:
+        # default crag_max_corrections == 1, so attempts==1 is exhausted
+        assert (
+            agent_nodes.route_after_grade({"grade": "incorrect", "correction_attempts": 1})
+            == "generate"
+        )
+
+    def test_disabled_always_generates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from sovereign_rag.config import get_settings
+
+        monkeypatch.setattr(get_settings(), "enable_corrective_rag", False)
+        assert (
+            agent_nodes.route_after_grade({"grade": "incorrect", "correction_attempts": 0})
+            == "generate"
+        )
