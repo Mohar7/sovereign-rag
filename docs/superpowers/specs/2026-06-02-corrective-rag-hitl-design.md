@@ -1,9 +1,11 @@
 # Corrective RAG (CRAG) with Human-Approved Web Fallback — Design Spec
 
 - **Date:** 2026-06-02
-- **Status:** Approved (design); Section 4 visuals pending Claude Design
+- **Status:** Approved (design); Section 4 mocks delivered (2026-06-02)
 - **Feature area:** Agentic RAG — self-correcting retrieval in the LangGraph control plane
-- **Companion artifact:** [`docs/crag-hitl-design-prompt.md`](../../crag-hitl-design-prompt.md) (Claude Design prompt for all UI surfaces)
+- **Companion artifacts:**
+  - [`docs/crag-hitl-design-prompt.md`](../../crag-hitl-design-prompt.md) — the Claude Design prompt for all UI surfaces.
+  - `design/Sovereign RAG Design System/` — the **delivered** Claude Design bundle. CRAG-specific mocks live under `crag/` (`screens/{pipeline,approval,ask-context,app-surfaces,misc}.jsx`, `components/crag-primitives.jsx`); open `crag/Corrective RAG.html` to view. The bundle's visual primitives (indigo-600/zinc, Inter + JetBrains Mono, `hybrid|graph|vector|web` kind icons) **match the shipped `frontend/`**, so the CRAG components port directly — no design-system migration.
 
 ---
 
@@ -138,29 +140,32 @@ small dataclass `Grade(label, confidence, reason)`; the node writes it to state.
 
 ### 5.3 Interrupt, API, SSE, approve/decline (`api/ask`)
 
-**`web_search` interrupt payload** → `{reason:"approve_urls", question, grade, candidate_urls:[{title,url,snippet}]}`. The resume value flows back via `Command(resume={"approved_urls":[...]})`.
+**`web_search` interrupt payload** → `{reason:"approve_urls", question, grade, candidate_urls:[{title,url,snippet,verified?}]}`. The resume value flows back via `Command(resume={"approved_urls":[...]})`. `verified` is an **optional** trust hint (e.g. domain not on a known-low-trust list); the delivered mock renders an "unverified" badge on e.g. `reddit.com`. v1 may omit it (UI just doesn't render the badge) — it is not load-bearing.
 
 **API**
 - `POST /ask` — after `ainvoke`, detect the pending interrupt (via `aget_state(config)`); return `status:"interrupted"` with `interrupt:{reason, candidate_urls}` instead of an answer.
 - `POST /ask/resume` **(revived)** — body `{thread_id, approved_urls:[]}`; resumes via `Command(resume=...)`; non-empty = approve, `[]` = **decline**. Returns the completed `AskResponse`.
 - `POST /ask/resume/stream` **(new)** — SSE continuation so approval→answer still streams tokens.
 
-**SSE (`/ask/stream` + resume/stream)** — add `grade│transform_query│web_search│crawl_index` to the tracked node set; emit `{type:"grade", label, confidence, reason}` on grade-done and `{type:"interrupt", reason, candidate_urls, thread_id}` at the interrupt (then close; client resumes via `/ask/resume/stream`).
+**SSE (`/ask/stream` + resume/stream)** — add `grade│transform_query│web_search│crawl_index` to the tracked node set; emit `{type:"grade", label, confidence, reason}` on grade-done and `{type:"interrupt", reason, candidate_urls, thread_id}` at the interrupt (then close; client resumes via `/ask/resume/stream`). The `crawl_index` node emits **per-URL** `{type:"crawl_progress", url, status:"crawling"|"indexed"|"failed", chunks?}` events as each approved URL resolves — the delivered "crawling" mock renders a per-URL list (done / running / failed) plus an aggregate progress bar, so node-level events alone are insufficient.
 
 Runs are recorded on **final** completion only (after resume), carrying the CRAG fields (§5.5). An interrupt is a pause, not a completed run.
 
-### 5.4 Frontend (pending Claude Design mocks)
+### 5.4 Frontend (mocks delivered — `design/Sovereign RAG Design System/crag/`)
 
-Visuals are out at Claude Design — see [`docs/crag-hitl-design-prompt.md`](../../crag-hitl-design-prompt.md). Surfaces and their port targets (decisions locked; only layout pending):
+The Claude Design bundle landed and implements every surface below, light + dark, EN + RU, at 1920 / lg-1024 / mobile-390. Primitives match the shipped `frontend/` (same indigo/zinc tokens, same `hybrid|graph|vector|web` kind icons via `Sparkles/Share2/Box/Globe`, same `StageName` base), so these port directly. Each surface maps to a delivered mock (the React source is the implementation reference, not just a picture):
 
-1. **Agentic pipeline strip** — extend `components/ask/pipeline-strip.tsx` `StageName` with the new nodes + a grade outcome chip + the loop-back rendering.
-2. **HITL approval card** — new `components/ask/approval-card.tsx`: states `deciding` (approve **and** decline co-equal) / `crawling` / `partial-fail` / `declined`.
-3. **`Ask.tsx`** — extend the `Turn` status union with `"awaiting_approval" | "crawling"`; wire `use-ask-stream.ts` to the `interrupt`/`grade` events + `/ask/resume/stream`.
-4. **Provenance** — "↻ corrected via web" badge + web-kind citation icon (`citation-chip.tsx` / `sources-rail.tsx`).
-5. **Settings** — "Corrective RAG" section (grade-band dual slider, max corrections, max urls, enable switch).
-6. **Run History** — `grade` + `fallback` column + filter.
-7. **Evals** — "Corrective RAG impact" panel (A/B deltas, grade distribution, fallback count).
-8. **i18n** — EN/RU keys into `src/locales/{en,ru}.json`.
+1. **Agentic pipeline strip** → extend `components/ask/pipeline-strip.tsx`. Mock: `crag/screens/pipeline.jsx`. Two renders: **happy** (linear `retrieve · rerank · grade(✓0.82) · generate`) and **corrective** (three stacked lanes — `pass 1 · local corpus` → `correction · web fallback` → `pass 2 · re-retrieve` — joined by `CornerDownLeft` return arrows with captions "sources ambiguous — correcting" / "re-retrieve with crawled pages"). New `StageName`s: `grade`, `transform_query`, `web_search`, `crawl_index`. The human-decision stage uses **warning/amber** tone (not the brand indigo) to read as "your turn". Mobile = vertical lane stack with a left accent border (`CorrectiveStripMobile`).
+2. **HITL approval card** → new `components/ask/approval-card.tsx`. Mock: `crag/screens/approval.jsx`. Four states: **deciding** (warning header + grade chip + "your call" badge; select-all w/ indeterminate; per-row checkbox + favicon-tile + title + globe icon + optional "unverified" badge + snippet + mono URL; footer with **co-equal** primary "Crawl N & continue →" and solid-secondary "Decline — answer from local"), **crawling** (aggregate progress bar + 4-phase stage idiom `crawling→indexing→re-retrieving→answering` + per-URL list driven by `crawl_progress` events + Cancel), **partial-fail** (non-blocking amber alert + per-URL done/failed list), **declined** (compact muted chip above the answer).
+3. **`Ask.tsx`** → extend the `Turn` status union with `"awaiting_approval" | "crawling"`; wire `use-ask-stream.ts` to the `grade` / `interrupt` / `crawl_progress` events + the `/ask/resume/stream` continuation. The grade chip also renders on the happy-path answer meta line.
+4. **Provenance** → "↻ corrected via web" `ProvenanceBadge` on the answer meta line + the `web` (globe) kind icon on crawled-this-turn citations; a small citation legend ("web — crawled this turn" / "local corpus"). Touches `citation-chip.tsx` / `sources-rail.tsx`. Mock: `crag/screens/ask-context.jsx` (`ProvenanceBoard`).
+5. **Settings → "Corrective RAG"** → mock: `crag/screens/app-surfaces.jsx` (`SettingsCorrective`). A dedicated settings-nav entry; field rows show the mono config key under each label. Controls: enable `Switch`; the **grade-band dual-handle slider** (`GradeBandSlider`: three labeled zones Incorrect ≤0.30 / "LLM decides" / Correct ≥0.70, red→amber→green track); `Stepper` (max corrections 0–3); `ValueSlider` (max URLs 1–10).
+6. **Run History** → mock `HistoryGrade`: a `grade` cell (`GradeChip`), a `fallback` cell (`RotateCcw` icon when web fired), a `decision` cell (approved/declined badge), a "used web fallback" filter chip, and fallback rows tinted with a faint brand wash.
+7. **Evals → "Corrective RAG impact"** → mock `EvalsImpact`: paired off→on stat cards with ▲/▼ delta badges (precision@5, recall@5), a "fallback fired N/M" card with a per-question cell strip, and a grade-distribution stacked bar + legend.
+8. **Threads "needs approval"** → mock `ThreadsNeedsApproval`: an amber-ringed thread card with a "needs your approval" badge; reopening shows the approval card with the composer **disabled** behind a `Lock` + "Resume the pending approval to continue" tooltip.
+9. **i18n** — every string above is already in EN + RU in the mocks (RU uses thin-space thousands + comma decimals); lift the keys into `src/locales/{en,ru}.json`.
+
+New shared primitives to port from `crag/components/crag-primitives.jsx`: `GradeChip`, `ProvenanceBadge`, `GradeBandSlider`, `Stepper`, `ValueSlider`, `FavTile`, plus the grade-chip pop-in / card slide-in CSS (both gated on `prefers-reduced-motion`).
 
 ### 5.5 Eval, runs, observability
 
@@ -189,9 +194,9 @@ Visuals are out at Claude Design — see [`docs/crag-hitl-design-prompt.md`](../
 | `fallback_used` | `bool` | web contributed to the answer |
 | `declined` | `bool` | human declined the web search |
 
-**API schemas (`api/ask/schemas.py`)** — `AskResponse` gains `status:"ok"|"interrupted"`, `interrupt: InterruptModel | None`, `fallback_used: bool`, `grade: GradeModel | None`. New: `InterruptModel{reason:Literal["approve_urls"], candidate_urls:[CandidateUrl{url,title,snippet}]}`, `ResumeRequest{thread_id, approved_urls:list[str]}`, `GradeModel{label, confidence, reason}`.
+**API schemas (`api/ask/schemas.py`)** — `AskResponse` gains `status:"ok"|"interrupted"`, `interrupt: InterruptModel | None`, `fallback_used: bool`, `grade: GradeModel | None`. New: `InterruptModel{reason:Literal["approve_urls"], candidate_urls:[CandidateUrl{url,title,snippet,verified?:bool}]}`, `ResumeRequest{thread_id, approved_urls:list[str]}`, `GradeModel{label, confidence, reason}`. `CandidateUrl.verified` is optional (see §5.3).
 
-**SSE events** — `{type:"grade", label, confidence, reason}`; `{type:"interrupt", reason:"approve_urls", thread_id, candidate_urls}`; node events extended to the four new nodes.
+**SSE events** — `{type:"grade", label, confidence, reason}`; `{type:"interrupt", reason:"approve_urls", thread_id, candidate_urls}`; `{type:"crawl_progress", url, status:"crawling"|"indexed"|"failed", chunks?}` (per approved URL, during `crawl_index`); node events extended to the four new nodes.
 
 ## 7. Config knobs (`config.py`)
 
@@ -255,7 +260,7 @@ All are honored end to end (unlike the existing accepted-but-ignored `fusion_str
 2. API interrupt + resume + SSE (Section 3).
 3. Eval graph-mode + fixture + A/B (Section 5 backend); prove lift.
 4. Runs schema + History/Evals data.
-5. Frontend (Section 4) once mocks return.
+5. Frontend (Section 4) — mocks delivered (`design/.../crag/`); port from the JSX reference.
 6. Docs reconciliation.
 
 Each step is independently shippable; `enable_corrective_rag=False` keeps prod on today's linear graph until the loop is proven.
@@ -263,8 +268,12 @@ Each step is independently shippable; `enable_corrective_rag=False` keeps prod o
 ## 13. Open questions / risks
 
 - **Score calibration** — gte-reranker logits aren't centered; the sigmoid + default thresholds (0.70/0.30) need a quick empirical sweep on the golden set to land sane defaults.
-- **Crawl latency in HITL** — crawling several URLs can take seconds; the `crawling` UI state + per-URL progress (and partial-fail handling) must keep the wait legible.
+- **Crawl latency in HITL** — crawling several URLs can take seconds. *Addressed by design:* the `crawling` state streams per-URL `crawl_progress` events + an aggregate bar + the 4-phase stage idiom, so the wait stays legible; partial failures degrade to a non-blocking alert.
 - **Fixture drift** — recorded web fixtures can rot; keep them tiny and regenerate from the live runner periodically.
+
+**Deferred affordances (present in mocks, NOT in v1 scope):**
+- **"Reconsider"** on the declined chip — would re-open the web fallback after a decline. v1 keeps decline **terminal** (the graph already routed to `generate` and the run completed); re-opening needs a "re-ask with fallback forced" path. Render the affordance disabled or omit it in v1.
+- **"Cancel"** during crawl — aborting an in-flight resume (stop crawling, answer from what indexed so far) needs cancellation plumbing through the stream. v1 may simply not render Cancel, or have it abort the SSE without a graph-level cancel.
 
 ## 14. Decision log
 
@@ -273,3 +282,5 @@ Each step is independently shippable; `enable_corrective_rag=False` keeps prod o
 - Correction: **HITL only**; eval uses a programmatic auto-approver (same graph, different approver).
 - Placement: **extend `rag_qa`**, grader as a shared pure function.
 - Human options: **approve and decline both first-class**; decline = answer local-only.
+- Design (delivered 2026-06-02): corrective strip = **3 stacked lanes + return arrows** (not a single row); human-decision stage = **amber**; approval card = **4 states** (deciding/crawling/partial/declined) with co-equal approve/decline; grade band = **dual-handle slider**. Primitives match shipped `frontend/`, so no design-system migration.
+- Surfaced by mocks → folded into backend: a **per-URL `crawl_progress` SSE event** (Section 3/6); an **optional `verified` hint** on candidate URLs; **"Reconsider"** and **"Cancel during crawl"** deferred out of v1 (decline stays terminal).
