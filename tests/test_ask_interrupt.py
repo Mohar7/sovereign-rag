@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sovereign_rag.api.ask import router as ask_router
+import sovereign_rag.api.ask.router as ask_router
 from sovereign_rag.api.ask.schemas import (
     AskResponse,
     CandidateUrl,
@@ -176,7 +176,9 @@ class TestStreamGenerator:
         events = await self._drain(gen)
         types = [e["type"] for e in events]
         assert "grade" in types
-        grade_ev = next(e for e in events if e["type"] == "grade")
+        grade_events = [e for e in events if e["type"] == "grade"]
+        assert len(grade_events) == 1, f"expected exactly 1 grade event, got {len(grade_events)}"
+        grade_ev = grade_events[0]
         assert grade_ev["label"] == "ambiguous" and grade_ev["confidence"] == 0.46
         assert "interrupt" in types
         intr = next(e for e in events if e["type"] == "interrupt")
@@ -296,3 +298,80 @@ class TestAskRecordsGrade:
         assert captured["grade"] == "correct"
         assert captured["fallback_used"] is False
         assert captured["decision"] is None  # no web fallback path was taken
+
+
+class TestResumeStreamRecording:
+    async def _drain(self, gen: Any) -> list[dict[str, Any]]:
+        import json
+
+        out: list[dict[str, Any]] = []
+        async for raw in gen:
+            line = raw.decode() if isinstance(raw, bytes) else raw
+            for part in line.strip().split("\n"):
+                if part.startswith("data: "):
+                    out.append(json.loads(part[len("data: "):]))
+        return out
+
+    async def _events_from(self, evlist: list[dict[str, Any]]) -> Any:
+        for e in evlist:
+            yield e
+
+    async def test_resume_stream_records_question_and_decision(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from langgraph.types import Command
+
+        ev = [
+            {
+                "event": "on_chain_end",
+                "name": "generate",
+                "data": {"output": {"answer": "web answer [1]", "citations": []}},
+            },
+            {
+                "event": "on_chain_end",
+                "name": "LangGraph",
+                "data": {
+                    "output": {
+                        "answer": "web answer [1]",
+                        "citations": [],
+                        "retrieved": 4,
+                        "used": 1,
+                        "fallback_used": True,
+                        "question": "the original question",
+                    }
+                },
+            },
+        ]
+        graph = AsyncMock()
+        graph.astream_events = lambda *a, **k: self._events_from(ev)
+
+        class _Snap:
+            next: tuple[()] = ()
+            tasks: tuple[()] = ()
+
+            def __init__(self) -> None:
+                self.values = {
+                    "answer": "web answer [1]",
+                    "question": "the original question",
+                }
+
+        graph.aget_state = AsyncMock(return_value=_Snap())
+        captured: dict[str, Any] = {}
+        monkeypatch.setattr(
+            ask_router, "record_run", AsyncMock(side_effect=lambda **kw: captured.update(kw))
+        )
+
+        gen = ask_router._stream_generator(
+            graph,
+            Command(resume={"approved_urls": ["https://a"]}),
+            {"configurable": {"thread_id": "t"}},
+            "t",
+            None,
+            "approved",  # Fix 2: decision passed explicitly
+        )
+        events = await self._drain(gen)
+        assert any(e["type"] == "done" for e in events)
+        # Fix 1: question must come from final_state, not from the Command initial
+        assert captured["question"] == "the original question"
+        # Fix 2: decision must be forwarded, not hardcoded None
+        assert captured["decision"] == "approved"

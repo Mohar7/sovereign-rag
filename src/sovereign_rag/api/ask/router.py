@@ -284,6 +284,7 @@ async def _stream_generator(
     config: dict[str, Any],
     thread_id: str,
     overrides: AskOverrides | None,
+    decision: str | None = None,
 ) -> AsyncIterator[bytes]:
     """Drive the graph and emit one SSE event per interesting occurrence.
 
@@ -309,6 +310,7 @@ async def _stream_generator(
     # strip without recomputing.
     stage_timings: dict[str, int] = {}
     started_at = time.perf_counter()
+    grade_emitted = False  # Fix 5: track whether grade event was already sent
     try:
         with _apply_overrides(overrides):
             async for event in graph.astream_events(initial, config=config, version="v2"):
@@ -347,6 +349,7 @@ async def _stream_generator(
                                 "reason": output.get("grade_reason"),
                             }
                         )
+                        grade_emitted = True  # Fix 5: mark grade as sent
                     yield _sse(
                         {
                             "type": "node",
@@ -359,7 +362,8 @@ async def _stream_generator(
                 elif kind == "on_custom_event" and name == "crawl_progress":
                     data = event.get("data") or {}
                     if isinstance(data, dict):
-                        yield _sse({"type": "crawl_progress", **data})
+                        # Fix 6: put data first so a stray "type" key cannot override event type
+                        yield _sse({**data, "type": "crawl_progress"})
 
                 elif kind == "on_chain_end" and name == "LangGraph":
                     # Top-level graph finished; capture the final state.
@@ -397,7 +401,10 @@ async def _stream_generator(
     pending = _pending_interrupt(snapshot)
     if pending is not None:
         interrupt_model, grade = pending
-        if grade is not None:
+        # Fix 5: only emit the snapshot grade if the on_chain_end grade event was
+        # NOT already sent (avoids a duplicate grade event on the initial /ask/stream
+        # interrupt path where grade fires as an on_chain_end AND again here).
+        if grade is not None and not grade_emitted:
             yield _sse(
                 {
                     "type": "grade",
@@ -430,9 +437,15 @@ async def _stream_generator(
     timings_payload = {**stage_timings, "total": total_elapsed_ms}
     # Persist before yielding done so the run is in the audit log by the
     # time the client navigates to /history.
+    # Fix 1: read question from final_state first (correct on resume where initial
+    # is a Command, not a dict).  Fix 2: pass decision through from the parameter.
     await record_run(
         thread_id=thread_id,
-        question=str(initial.get("question") or "") if isinstance(initial, dict) else "",
+        question=str(
+            final_state.get("question")
+            or (initial.get("question") if isinstance(initial, dict) else "")
+            or ""
+        ),
         answer=final_state.get("answer"),
         retrieved=int(final_state.get("retrieved", 0)),
         used=int(final_state.get("used", 0)),
@@ -444,7 +457,7 @@ async def _stream_generator(
         grade=final_state.get("grade"),
         grade_confidence=final_state.get("grade_confidence"),
         fallback_used=bool(final_state.get("fallback_used", False)),
-        decision=None,
+        decision=decision,
         correction_attempts=int(final_state.get("correction_attempts", 0)),
     )
     yield _sse(
@@ -500,6 +513,21 @@ async def ask_resume(req: ResumeRequest, graph: GraphDep) -> AskResponse:
         )
     except Exception as exc:
         logger.exception("resume failed")
+        # Fix 4: record the failed run for history-page parity with /ask error handling.
+        await record_run(
+            thread_id=thread_id,
+            question="",
+            answer=None,
+            retrieved=0,
+            used=0,
+            citations=[],
+            timings={"total": round((time.perf_counter() - started) * 1000)},
+            overrides=None,
+            model=get_settings().llm_model,
+            status="error",
+            error=f"{type(exc).__name__}: {exc}",
+            decision="approved" if req.approved_urls else "declined",
+        )
         raise HTTPException(500, f"Resume failed: {exc}") from exc
 
     # A second interrupt is possible only if crag_max_corrections > 1.
@@ -538,7 +566,14 @@ async def ask_resume_stream(req: ResumeRequest, graph: GraphDep) -> StreamingRes
     config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
     resume_input: Any = Command(resume={"approved_urls": req.approved_urls})
     return StreamingResponse(
-        _stream_generator(graph, resume_input, config, thread_id, None),
+        _stream_generator(
+            graph,
+            resume_input,
+            config,
+            thread_id,
+            None,
+            "approved" if req.approved_urls else "declined",  # Fix 2: pass decision
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
