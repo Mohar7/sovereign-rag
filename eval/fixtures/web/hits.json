@@ -1,0 +1,9 @@
+{
+  "ferret activation codeword": [
+    {
+      "title": "Activation passes — provisioning",
+      "url": "https://example.test/ferret-activation",
+      "content": "FERRET activation codewords are provisioned out-of-band as short-lived activation passes."
+    }
+  ]
+}
