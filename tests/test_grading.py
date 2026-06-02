@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from sovereign_rag.config import Settings
 from sovereign_rag.documents import Chunk, RetrievedChunk
 from sovereign_rag.retrieval.grading import Grade, grade_candidates
