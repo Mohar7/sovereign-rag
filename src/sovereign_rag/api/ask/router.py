@@ -27,7 +27,11 @@ from sovereign_rag.api.ask.schemas import (
     AskOverrides,
     AskRequest,
     AskResponse,
+    CandidateUrl,
     CitationModel,
+    GradeModel,
+    InterruptModel,
+    ResumeRequest,
 )
 from sovereign_rag.api.dependencies import GraphDep
 from sovereign_rag.api.runs import record_run
@@ -105,6 +109,13 @@ def _apply_overrides(overrides: AskOverrides | None) -> Iterator[None]:
 def _build_response(thread_id: str, state: dict[str, Any]) -> AskResponse:
     """Convert a compiled-graph result dict into the API response."""
     citations = state.get("citations") or []
+    grade = None
+    if state.get("grade"):
+        grade = GradeModel(
+            label=state["grade"],
+            confidence=float(state.get("grade_confidence") or 0.0),
+            reason=str(state.get("grade_reason") or ""),
+        )
     return AskResponse(
         thread_id=thread_id,
         status="ok",
@@ -112,7 +123,47 @@ def _build_response(thread_id: str, state: dict[str, Any]) -> AskResponse:
         citations=[CitationModel(**asdict(c)) for c in citations],
         retrieved=int(state.get("retrieved", 0)),
         used=int(state.get("used", 0)),
+        fallback_used=bool(state.get("fallback_used", False)),
+        grade=grade,
     )
+
+
+def _extract_interrupt(
+    state: dict[str, Any],
+) -> tuple[InterruptModel, GradeModel | None] | None:
+    """If the graph paused, build the InterruptModel (+ grade) from the state.
+
+    ``ainvoke`` surfaces a pending interrupt under ``state["__interrupt__"]`` —
+    a tuple of Interrupt objects whose ``.value`` is the payload our
+    ``request_approval`` node passed to ``interrupt(...)``. Returns None when
+    the state carries no interrupt.
+    """
+    interrupts = state.get("__interrupt__")
+    if not interrupts:
+        return None
+    payload = getattr(interrupts[0], "value", None)
+    if not isinstance(payload, dict):
+        return None
+    candidates = [
+        CandidateUrl(
+            url=str(c.get("url", "")),
+            title=str(c.get("title", "")),
+            snippet=str(c.get("snippet", "")),
+            verified=c.get("verified"),
+        )
+        for c in (payload.get("candidate_urls") or [])
+        if isinstance(c, dict) and c.get("url")
+    ]
+    interrupt = InterruptModel(reason="approve_urls", candidate_urls=candidates)
+    grade_raw = payload.get("grade") or {}
+    grade = None
+    if isinstance(grade_raw, dict) and grade_raw.get("label"):
+        grade = GradeModel(
+            label=grade_raw["label"],
+            confidence=float(grade_raw.get("confidence") or 0.0),
+            reason=str(grade_raw.get("reason") or ""),
+        )
+    return interrupt, grade
 
 
 @router.post("/ask", response_model=AskResponse)
@@ -148,6 +199,18 @@ async def ask(req: AskRequest, graph: GraphDep) -> AskResponse:
             error=f"{type(exc).__name__}: {exc}",
         )
         raise HTTPException(500, f"Graph failed: {exc}") from exc
+
+    paused = _extract_interrupt(state)
+    if paused is not None:
+        interrupt_model, grade = paused
+        # A pause is not a completed run — do not record_run here.
+        return AskResponse(
+            thread_id=thread_id,
+            status="interrupted",
+            answer=None,
+            interrupt=interrupt_model,
+            grade=grade,
+        )
 
     response = _build_response(thread_id, state)
     # Best-effort persistence; errors are swallowed inside record_run.
