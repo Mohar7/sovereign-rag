@@ -127,6 +127,25 @@ class TestAB:
         assert ab["aggregate_on"]["precision@5"] == pytest.approx(1.0)
 
 
+class TestGraphModeSmoke:
+    async def test_run_graph_mode_offline_produces_crag_block(
+        self, stub_eval_graph: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from eval.evaluate import _run_graph_mode
+
+        qa = [
+            {"question": "How is FERRET's activation codeword provisioned?",
+             "ground_truth": "...", "relevant_substrings": ["short-lived activation pass"],
+             "requires_web": True},
+        ]
+        report = await _run_graph_mode(qa, corpus={}, k=5)
+        assert report["mode"] == "graph"
+        crag = report["crag"]
+        assert crag["fallback_fired"] == 1
+        # off can't answer it (0), on can (>0) → positive lift on the web slice
+        assert crag["lift_on_corrected"]["precision@5"] > 0
+
+
 class TestReport:
     def test_print_table_renders_crag_block(self, capsys: pytest.CaptureFixture[str]) -> None:
         from eval.evaluate import _print_table

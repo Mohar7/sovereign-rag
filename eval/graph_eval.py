@@ -62,42 +62,46 @@ async def run_graph_eval(
     from sovereign_rag.shared.pipeline_deps import set_pipeline
 
     settings = get_settings()
+    orig_crag = settings.enable_corrective_rag
     settings.enable_corrective_rag = enable_crag
 
     pipeline = _make_pipeline()
     set_pipeline(pipeline)
-    for doc_id, text in corpus.items():
-        await pipeline.index_document(
-            SourceDocument(
-                title=doc_id,
-                source_uri=f"corpus://{doc_id}",
-                source_type=SourceType.TEXT,
-                markdown=text,
+    try:
+        for doc_id, text in corpus.items():
+            await pipeline.index_document(
+                SourceDocument(
+                    title=doc_id,
+                    source_uri=f"corpus://{doc_id}",
+                    source_type=SourceType.TEXT,
+                    markdown=text,
+                )
             )
-        )
 
-    graph = build_graph(InMemorySaver())
-    rows: list[dict[str, Any]] = []
-    for item in qa_pairs:
-        cfg = {"configurable": {"thread_id": str(uuid.uuid4())}}
-        state = await graph.ainvoke({"question": item["question"]}, config=cfg)
+        graph = build_graph(InMemorySaver())
+        rows: list[dict[str, Any]] = []
+        for item in qa_pairs:
+            cfg = {"configurable": {"thread_id": str(uuid.uuid4())}}
+            state = await graph.ainvoke({"question": item["question"]}, config=cfg)
 
-        guard = 0
-        while "__interrupt__" in state and guard < _AUTO_APPROVE_GUARD:
-            payload = getattr(state["__interrupt__"][0], "value", {}) or {}
-            candidates = payload.get("candidate_urls", []) if isinstance(payload, dict) else []
-            approved = [c["url"] for c in candidates[: settings.web_fallback_crawl_top_k] if c.get("url")]
-            state = await graph.ainvoke(Command(resume={"approved_urls": approved}), config=cfg)
-            guard += 1
+            guard = 0
+            while "__interrupt__" in state and guard < _AUTO_APPROVE_GUARD:
+                payload = getattr(state["__interrupt__"][0], "value", {}) or {}
+                candidates = payload.get("candidate_urls", []) if isinstance(payload, dict) else []
+                approved = [c["url"] for c in candidates[: settings.web_fallback_crawl_top_k] if c.get("url")]
+                state = await graph.ainvoke(Command(resume={"approved_urls": approved}), config=cfg)
+                guard += 1
 
-        reranked = state.get("reranked") or []
-        row = _row(item["question"], reranked, item.get("relevant_substrings", []), k, state)
-        row["requires_web"] = bool(item.get("requires_web", False))
-        rows.append(row)
+            reranked = state.get("reranked") or []
+            row = _row(item["question"], reranked, item.get("relevant_substrings", []), k, state)
+            row["requires_web"] = bool(item.get("requires_web", False))
+            rows.append(row)
+    finally:
+        close = getattr(pipeline, "aclose", None)
+        if close is not None:
+            await close()
+        settings.enable_corrective_rag = orig_crag
 
-    close = getattr(pipeline, "aclose", None)
-    if close is not None:
-        await close()
     return rows
 
 

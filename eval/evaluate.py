@@ -302,6 +302,9 @@ async def _run_graph_mode(
         orig = web_fixture.install()
     try:
         ab = await run_ab(qa_pairs, corpus, k)
+    except Exception as exc:
+        print(f"  graph mode failed ({exc}); falling back to offline IR demo.")
+        return _run_offline(qa_pairs, corpus, k)
     finally:
         if orig is not None:
             from eval import web_fixture
