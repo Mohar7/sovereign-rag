@@ -28,6 +28,20 @@ class RAGState(TypedDict, total=False):
     candidates: list[RetrievedChunk]
     reranked: list[RetrievedChunk]
 
+    # -- CRAG: grade --
+    grade: str  # "correct" | "ambiguous" | "incorrect"
+    grade_confidence: float  # normalized top-1 reranker score, 0..1
+    grade_reason: str  # one-line, surfaced to the UI
+
+    # -- CRAG: correction loop --
+    correction_attempts: int  # loop guard; incremented in crawl_index
+    search_query: str  # rewritten web query
+    candidate_urls: list[dict[str, str]]  # [{title, url, snippet}]
+    approved_urls: list[str]  # resume value; [] == decline
+    web_ingested: int  # chunks indexed this correction
+    fallback_used: bool  # web contributed to the answer
+    declined: bool  # human declined the web search
+
     # -- output --
     answer: str
     citations: list[Citation]
