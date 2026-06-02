@@ -308,14 +308,24 @@ def stub_eval_graph(monkeypatch: pytest.MonkeyPatch) -> None:
     pipe._milvus = MagicMock()
     pipe._milvus.hybrid_search = AsyncMock(return_value=[_rc("local async note", 0.4)])
     pipe._graph = None
-    pipe.index_document = AsyncMock(return_value=3)
     pipe.aclose = AsyncMock()
     monkeypatch.setattr(nodes, "get_pipeline", lambda: pipe)
     monkeypatch.setattr(graph_eval, "_make_pipeline", lambda: pipe)
 
     # After a web crawl, retrieval includes the fixture chunk; model that by
-    # flipping the rerank output once crawl_index has run (tracked via a flag).
+    # flipping the rerank output once a crawl has run. IMPORTANT: do NOT patch
+    # the `crawl_index` node function — graph.py imported it by value at module
+    # load, so the compiled graph holds the original reference and a
+    # monkeypatch on `nodes.crawl_index` would NOT be used by the graph. Instead
+    # track the crawl via the pipeline's index_document, which the *real*
+    # crawl_index calls at runtime (module-global lookup → the patch is seen).
     state_box = {"crawled": False}
+
+    async def _index_doc(doc: Any) -> int:
+        state_box["crawled"] = True
+        return 3
+
+    pipe.index_document = _index_doc
 
     def fake_rerank(q: str, c: list[RetrievedChunk], top_k: int | None = None) -> list[RetrievedChunk]:
         if state_box["crawled"]:
@@ -323,14 +333,6 @@ def stub_eval_graph(monkeypatch: pytest.MonkeyPatch) -> None:
         return [_rc("local async note", 0.4)]
 
     monkeypatch.setattr(nodes, "rerank", fake_rerank)
-
-    real_crawl_index = nodes.crawl_index
-
-    async def tracking_crawl_index(state: Any) -> Any:
-        state_box["crawled"] = True
-        return await real_crawl_index(state)
-
-    monkeypatch.setattr(nodes, "crawl_index", tracking_crawl_index)
 
     async def fake_grade(question, reranked, settings, **kw):  # type: ignore[no-untyped-def]
         top = reranked[0].score if reranked else 0.0
