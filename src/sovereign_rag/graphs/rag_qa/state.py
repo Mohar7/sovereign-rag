@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TypedDict
 
 from sovereign_rag.documents import RetrievedChunk
+from sovereign_rag.retrieval.grading import GradeLabel
 from sovereign_rag.retrieval.pipeline import Citation
 
 
@@ -29,7 +30,7 @@ class RAGState(TypedDict, total=False):
     reranked: list[RetrievedChunk]
 
     # -- CRAG: grade --
-    grade: str  # "correct" | "ambiguous" | "incorrect"
+    grade: GradeLabel  # "correct" | "ambiguous" | "incorrect"
     grade_confidence: float  # normalized top-1 reranker score, 0..1
     grade_reason: str  # one-line, surfaced to the UI
 

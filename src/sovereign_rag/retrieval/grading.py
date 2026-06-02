@@ -67,6 +67,7 @@ async def grade_candidates(
         return Grade("incorrect", top1, "top reranked chunk is a weak match")
 
     judge = llm_judge or _default_llm_judge
+    # rerank_top_k also controls how many snippets the LLM judge sees — tuning it down reduces grader context.
     snippets = [rc.chunk.raw_text[:240] for rc in reranked[: settings.rerank_top_k]]
     label, reason = await judge(question, snippets)
     return Grade(label, top1, reason)
@@ -79,7 +80,7 @@ async def _default_llm_judge(question: str, snippets: list[str]) -> tuple[GradeL
     from pydantic import BaseModel, Field
 
     from sovereign_rag.config import get_settings
-    from sovereign_rag.shared.llm_factory import ModelTier, get_chat_model
+    from sovereign_rag.shared.llm_factory import get_chat_model
 
     class _Verdict(BaseModel):
         label: GradeLabel = Field(
@@ -89,7 +90,7 @@ async def _default_llm_judge(question: str, snippets: list[str]) -> tuple[GradeL
         reason: str = Field(description="one short sentence explaining the label")
 
     s = get_settings()
-    llm = get_chat_model(model_tier=cast(ModelTier, s.crag_grader_tier))
+    llm = get_chat_model(model_tier=s.crag_grader_tier)
     structured = llm.with_structured_output(_Verdict)
     context = "\n\n".join(f"[{i + 1}] {t}" for i, t in enumerate(snippets))
     prompt = (

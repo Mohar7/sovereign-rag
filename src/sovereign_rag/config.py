@@ -7,6 +7,7 @@ Neo4j on :7687, SearXNG on :8080. No setting requires a paid API key.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -119,7 +120,7 @@ class Settings(BaseSettings):
     # How many corrective web rounds before the graph answers with what it has.
     crag_max_corrections: int = 1
     # Model tier for the middle-band grader (mirrors llm_factory tiers).
-    crag_grader_tier: str = "light"
+    crag_grader_tier: Literal["default", "light", "nano"] = "light"
     # Candidate URLs surfaced to the human for approval per correction.
     web_fallback_max_urls: int = 5
     # URLs the eval auto-approver picks (Plan 3); unused by the product path.
