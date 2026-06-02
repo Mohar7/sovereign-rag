@@ -244,3 +244,28 @@ class TestWebSearch:
         monkeypatch.setattr(agent_nodes, "search", fake_search)
         out = await agent_nodes.web_search({"question": "the question"})
         assert out["candidate_urls"] == []
+
+
+# ---------------------------------------------------------------------------
+# request_approval — resume parsing helper
+# ---------------------------------------------------------------------------
+class TestParseResume:
+    def test_dict_with_urls_is_approve(self) -> None:
+        assert agent_nodes._parse_resume({"approved_urls": ["https://a", "https://b"]}) == [
+            "https://a",
+            "https://b",
+        ]
+
+    def test_empty_list_is_decline(self) -> None:
+        assert agent_nodes._parse_resume({"approved_urls": []}) == []
+
+    def test_none_is_decline(self) -> None:
+        assert agent_nodes._parse_resume(None) == []
+
+    def test_non_dict_is_decline(self) -> None:
+        assert agent_nodes._parse_resume("nonsense") == []
+
+    def test_non_string_urls_filtered(self) -> None:
+        assert agent_nodes._parse_resume({"approved_urls": ["https://a", 5, None]}) == [
+            "https://a"
+        ]
