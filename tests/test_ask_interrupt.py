@@ -145,8 +145,13 @@ class TestStreamGenerator:
             {
                 "event": "on_chain_end",
                 "name": "grade",
-                "data": {"output": {"grade": "ambiguous", "grade_confidence": 0.46,
-                                    "grade_reason": "thin"}},
+                "data": {
+                    "output": {
+                        "grade": "ambiguous",
+                        "grade_confidence": 0.46,
+                        "grade_reason": "thin",
+                    }
+                },
             },
         ]
         graph = AsyncMock()
@@ -157,11 +162,23 @@ class TestStreamGenerator:
 
             class _Task:
                 interrupts = (
-                    type("I", (), {"value": {
-                        "reason": "approve_urls",
-                        "grade": {"label": "ambiguous", "confidence": 0.46, "reason": "thin"},
-                        "candidate_urls": [{"title": "A", "url": "https://a", "snippet": "s"}],
-                    }})(),
+                    type(
+                        "I",
+                        (),
+                        {
+                            "value": {
+                                "reason": "approve_urls",
+                                "grade": {
+                                    "label": "ambiguous",
+                                    "confidence": 0.46,
+                                    "reason": "thin",
+                                },
+                                "candidate_urls": [
+                                    {"title": "A", "url": "https://a", "snippet": "s"}
+                                ],
+                            }
+                        },
+                    )(),
                 )
 
             tasks = (_Task(),)
@@ -187,8 +204,11 @@ class TestStreamGenerator:
 
     async def test_crawl_progress_passthrough(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ev = [
-            {"event": "on_custom_event", "name": "crawl_progress",
-             "data": {"url": "https://a", "status": "indexed", "chunks": 7}},
+            {
+                "event": "on_custom_event",
+                "name": "crawl_progress",
+                "data": {"url": "https://a", "status": "indexed", "chunks": 7},
+            },
         ]
         graph = AsyncMock()
         graph.astream_events = lambda *a, **k: self._events_from(ev)
@@ -270,9 +290,7 @@ class TestResume:
 
         from sovereign_rag.api.ask.schemas import ResumeRequest
 
-        resp = await ask_router.ask_resume(
-            ResumeRequest(thread_id="t1", approved_urls=[]), graph
-        )
+        resp = await ask_router.ask_resume(ResumeRequest(thread_id="t1", approved_urls=[]), graph)
         assert resp.status == "ok"
         assert resp.fallback_used is False
         assert resp.answer == "local only [1]"
@@ -282,9 +300,15 @@ class TestAskRecordsGrade:
     async def test_ok_answer_records_grade_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
         graph = AsyncMock()
         graph.ainvoke.return_value = {
-            "answer": "direct [1]", "citations": [], "retrieved": 5, "used": 1,
-            "fallback_used": False, "grade": "correct", "grade_confidence": 0.82,
-            "grade_reason": "strong", "question": "q?",
+            "answer": "direct [1]",
+            "citations": [],
+            "retrieved": 5,
+            "used": 1,
+            "fallback_used": False,
+            "grade": "correct",
+            "grade_confidence": 0.82,
+            "grade_reason": "strong",
+            "question": "q?",
         }
         captured: dict[str, Any] = {}
         monkeypatch.setattr(
@@ -309,7 +333,7 @@ class TestResumeStreamRecording:
             line = raw.decode() if isinstance(raw, bytes) else raw
             for part in line.strip().split("\n"):
                 if part.startswith("data: "):
-                    out.append(json.loads(part[len("data: "):]))
+                    out.append(json.loads(part[len("data: ") :]))
         return out
 
     async def _events_from(self, evlist: list[dict[str, Any]]) -> Any:

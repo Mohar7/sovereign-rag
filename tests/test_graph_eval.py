@@ -18,7 +18,9 @@ from sovereign_rag.documents import Chunk, RetrievedChunk
 
 def _rc(text: str, score: float) -> RetrievedChunk:
     return RetrievedChunk(
-        chunk=Chunk(doc_id="d", text=text, raw_text=text, position=0), score=score, source="reranked"
+        chunk=Chunk(doc_id="d", text=text, raw_text=text, position=0),
+        score=score,
+        source="reranked",
     )
 
 
@@ -54,7 +56,9 @@ def stub_eval_graph(monkeypatch: pytest.MonkeyPatch) -> None:
 
     pipe.index_document = _index_doc
 
-    def fake_rerank(q: str, c: list[RetrievedChunk], top_k: int | None = None) -> list[RetrievedChunk]:
+    def fake_rerank(
+        q: str, c: list[RetrievedChunk], top_k: int | None = None
+    ) -> list[RetrievedChunk]:
         if state_box["crawled"]:
             return [_rc("short-lived activation pass; combined with the account secret", 0.9)]
         return [_rc("local async note", 0.4)]
@@ -85,38 +89,64 @@ async def test_auto_approver_resumes_and_answers(stub_eval_graph: None) -> None:
 
     orig = install()
     try:
-        qa = [{"question": "How is FERRET's activation codeword provisioned?",
-               "ground_truth": "...", "relevant_substrings": ["short-lived activation pass"],
-               "requires_web": True}]
+        qa = [
+            {
+                "question": "How is FERRET's activation codeword provisioned?",
+                "ground_truth": "...",
+                "relevant_substrings": ["short-lived activation pass"],
+                "requires_web": True,
+            }
+        ]
         rows = await graph_eval.run_graph_eval(qa, corpus={}, k=5, enable_crag=True)
     finally:
         uninstall(*orig)
 
     assert len(rows) == 1
     row = rows[0]
-    assert row["fallback_used"] is True          # auto-approver crawled the fixture
-    assert row["grade"] == "correct"             # post-crawl grade
-    assert row["precision@5"] > 0                # the fixture chunk matches the substring
+    assert row["fallback_used"] is True  # auto-approver crawled the fixture
+    assert row["grade"] == "correct"  # post-crawl grade
+    assert row["precision@5"] > 0  # the fixture chunk matches the substring
 
 
 async def test_crag_off_no_fallback(stub_eval_graph: None) -> None:
-    qa = [{"question": "How is FERRET's activation codeword provisioned?",
-           "ground_truth": "...", "relevant_substrings": ["short-lived activation pass"],
-           "requires_web": True}]
+    qa = [
+        {
+            "question": "How is FERRET's activation codeword provisioned?",
+            "ground_truth": "...",
+            "relevant_substrings": ["short-lived activation pass"],
+            "requires_web": True,
+        }
+    ]
     rows = await graph_eval.run_graph_eval(qa, corpus={}, k=5, enable_crag=False)
-    assert rows[0]["fallback_used"] is False     # linear graph never interrupts
-    assert rows[0]["precision@5"] == 0           # local corpus can't answer it
+    assert rows[0]["fallback_used"] is False  # linear graph never interrupts
+    assert rows[0]["precision@5"] == 0  # local corpus can't answer it
 
 
 class TestAB:
     def test_grade_distribution_and_lift(self) -> None:
         off = [
-            {"question": "q1", "precision@5": 0.0, "recall@5": 0.0, "mrr": 0.0, "ndcg@5": 0.0,
-             "grade": None, "fallback_used": False, "requires_web": True},
+            {
+                "question": "q1",
+                "precision@5": 0.0,
+                "recall@5": 0.0,
+                "mrr": 0.0,
+                "ndcg@5": 0.0,
+                "grade": None,
+                "fallback_used": False,
+                "requires_web": True,
+            },
         ]
         on = [
-            {"question": "q1", "precision@5": 1.0, "recall@5": 1.0, "mrr": 1.0, "ndcg@5": 1.0,
-             "grade": "correct", "fallback_used": True, "requires_web": True},
+            {
+                "question": "q1",
+                "precision@5": 1.0,
+                "recall@5": 1.0,
+                "mrr": 1.0,
+                "ndcg@5": 1.0,
+                "grade": "correct",
+                "fallback_used": True,
+                "requires_web": True,
+            },
         ]
         ab = graph_eval.summarize_ab(off, on, k=5)
         assert ab["fallback_fired"] == 1
@@ -134,9 +164,12 @@ class TestGraphModeSmoke:
         from eval.evaluate import _run_graph_mode
 
         qa = [
-            {"question": "How is FERRET's activation codeword provisioned?",
-             "ground_truth": "...", "relevant_substrings": ["short-lived activation pass"],
-             "requires_web": True},
+            {
+                "question": "How is FERRET's activation codeword provisioned?",
+                "ground_truth": "...",
+                "relevant_substrings": ["short-lived activation pass"],
+                "requires_web": True,
+            },
         ]
         report = await _run_graph_mode(qa, corpus={}, k=5)
         assert report["mode"] == "graph"

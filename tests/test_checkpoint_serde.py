@@ -93,9 +93,7 @@ async def test_paused_state_serializes_without_unregistered_warning(
         serde_logger.removeHandler(capture)
         serde_logger.propagate = original_propagate
 
-    unregistered = [
-        m for m in capture.messages if "Deserializing unregistered type" in m
-    ]
+    unregistered = [m for m in capture.messages if "Deserializing unregistered type" in m]
     assert unregistered == [], (
         "Checkpoint serde emitted 'unregistered type' warnings — "
         "add the type(s) to the allowlist in shared/checkpoint_serde.py:\n"

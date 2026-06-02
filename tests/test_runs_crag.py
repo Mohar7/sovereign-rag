@@ -85,7 +85,14 @@ async def test_record_run_defaults_crag_fields_optional(monkeypatch: pytest.Monk
     _pool_with(cur, monkeypatch)
     # Called the old way (no CRAG kwargs) — must not raise.
     await service.record_run(
-        thread_id="t", question="q", answer="a", retrieved=0, used=0,
-        citations=[], timings={}, overrides=None, model="m",
+        thread_id="t",
+        question="q",
+        answer="a",
+        retrieved=0,
+        used=0,
+        citations=[],
+        timings={},
+        overrides=None,
+        model="m",
     )
     assert cur.executed  # an INSERT ran

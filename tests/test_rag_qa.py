@@ -151,9 +151,7 @@ class TestGrade:
     async def test_writes_grade_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from sovereign_rag.retrieval.grading import Grade
 
-        async def fake_grade(
-            question: str, reranked: list[Any], settings: Any
-        ) -> Grade:
+        async def fake_grade(question: str, reranked: list[Any], settings: Any) -> Grade:
             return Grade("ambiguous", 0.46, "thin coverage")
 
         monkeypatch.setattr(agent_nodes, "grade_candidates", fake_grade)
@@ -271,9 +269,7 @@ class TestParseResume:
         assert agent_nodes._parse_resume("nonsense") == []
 
     def test_non_string_urls_filtered(self) -> None:
-        assert agent_nodes._parse_resume({"approved_urls": ["https://a", 5, None]}) == [
-            "https://a"
-        ]
+        assert agent_nodes._parse_resume({"approved_urls": ["https://a", 5, None]}) == ["https://a"]
 
 
 # ---------------------------------------------------------------------------
@@ -363,7 +359,9 @@ class TestGenerateCaveat:
         fake_llm.ainvoke.return_value = MagicMock(content="Full answer [1].")
         monkeypatch.setattr(agent_nodes, "get_chat_model", lambda **_: fake_llm)
 
-        out = await agent_nodes.generate({"question": "q", "reranked": reranked, "grade": "correct"})
+        out = await agent_nodes.generate(
+            {"question": "q", "reranked": reranked, "grade": "correct"}
+        )
         assert out["answer"] == "Full answer [1]."
 
     async def test_weak_grade_after_failed_fallback_appends_caveat(

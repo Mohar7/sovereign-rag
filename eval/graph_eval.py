@@ -25,8 +25,9 @@ def _make_pipeline() -> Any:
     return RAGPipeline()
 
 
-def _row(question: str, reranked: list[RetrievedChunk], subs: list[str], k: int,
-         state: dict[str, Any]) -> dict[str, Any]:
+def _row(
+    question: str, reranked: list[RetrievedChunk], subs: list[str], k: int, state: dict[str, Any]
+) -> dict[str, Any]:
     return {
         "question": question,
         "n_retrieved": len(reranked),
@@ -88,7 +89,11 @@ async def run_graph_eval(
             while "__interrupt__" in state and guard < _AUTO_APPROVE_GUARD:
                 payload = getattr(state["__interrupt__"][0], "value", {}) or {}
                 candidates = payload.get("candidate_urls", []) if isinstance(payload, dict) else []
-                approved = [c["url"] for c in candidates[: settings.web_fallback_crawl_top_k] if c.get("url")]
+                approved = [
+                    c["url"]
+                    for c in candidates[: settings.web_fallback_crawl_top_k]
+                    if c.get("url")
+                ]
                 state = await graph.ainvoke(Command(resume={"approved_urls": approved}), config=cfg)
                 guard += 1
 
@@ -110,7 +115,9 @@ def _mean(rows: list[dict[str, Any]], key: str) -> float:
     return sum(vals) / len(vals) if vals else 0.0
 
 
-def summarize_ab(off_rows: list[dict[str, Any]], on_rows: list[dict[str, Any]], k: int) -> dict[str, Any]:
+def summarize_ab(
+    off_rows: list[dict[str, Any]], on_rows: list[dict[str, Any]], k: int
+) -> dict[str, Any]:
     """Compare CRAG-off vs CRAG-on rows (same question order).
 
     Reports the overall mean per IR metric for each arm, the lift on the
