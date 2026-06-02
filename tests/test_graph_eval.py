@@ -125,3 +125,30 @@ class TestAB:
         assert ab["lift_on_corrected"]["precision@5"] == pytest.approx(1.0)
         assert ab["aggregate_off"]["precision@5"] == pytest.approx(0.0)
         assert ab["aggregate_on"]["precision@5"] == pytest.approx(1.0)
+
+
+class TestReport:
+    def test_print_table_renders_crag_block(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from eval.evaluate import _print_table
+
+        report = {
+            "mode": "graph",
+            "k": 5,
+            "retrieval": {"per_question": [], "aggregate": {"precision@5": 0.86}},
+            "ragas": {"available": False, "scores": {}, "reason": "graph mode"},
+            "crag": {
+                "k": 5,
+                "aggregate_off": {"precision@5": 0.71},
+                "aggregate_on": {"precision@5": 0.86},
+                "lift_on_corrected": {"precision@5": 0.15},
+                "grade_distribution": {"correct": 9, "ambiguous": 3, "incorrect": 2},
+                "fallback_fired": 3,
+                "n_questions": 14,
+                "n_requires_web": 2,
+            },
+        }
+        _print_table(report)
+        out = capsys.readouterr().out
+        assert "CORRECTIVE RAG" in out.upper()
+        assert "fallback" in out.lower()
+        assert "0.15" in out  # the lift

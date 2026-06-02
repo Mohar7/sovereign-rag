@@ -366,6 +366,19 @@ def _print_table(report: dict[str, Any]) -> None:
                 print(f"    {name:<18} {ragas['scores'][name]:.4f}")
     else:
         print(f"    skipped — {ragas.get('reason')}")
+
+    crag = report.get("crag")
+    if crag:
+        print("  CORRECTIVE RAG (A/B — CRAG off → on):")
+        for metric, on_val in crag["aggregate_on"].items():
+            off_val = crag["aggregate_off"].get(metric, 0.0)
+            lift = crag["lift_on_corrected"].get(metric, 0.0)
+            print(f"    {metric:<14} {off_val:.3f} -> {on_val:.3f}   (lift@web {lift:+.3f})")
+        dist = crag["grade_distribution"]
+        print(
+            f"    grades         {dist['correct']}✓ / {dist['ambiguous']}~ / {dist['incorrect']}✗"
+        )
+        print(f"    fallback fired {crag['fallback_fired']} / {crag['n_questions']} questions")
     print("=" * 72)
 
 
