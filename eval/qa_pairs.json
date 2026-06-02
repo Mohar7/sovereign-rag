@@ -70,5 +70,19 @@
     "ground_truth": "task.cancel() raises asyncio.CancelledError inside the coroutine at its next suspension point. Code may catch it to clean up, but should re-raise CancelledError so cancellation actually takes effect rather than being silently swallowed.",
     "relevant_doc_ids": ["asyncio-tasks"],
     "relevant_substrings": ["raises `asyncio.CancelledError`", "re-raise it"]
+  },
+  {
+    "question": "How is FERRET's activation codeword provisioned?",
+    "ground_truth": "It is provisioned out-of-band as a short-lived activation pass bound to a single device; on first use the pass is combined with the account secret to derive the session key.",
+    "relevant_doc_ids": ["ferret-activation"],
+    "relevant_substrings": ["short-lived activation pass", "combined with the account secret"],
+    "requires_web": true
+  },
+  {
+    "question": "Is a FERRET activation codeword transmitted in cleartext?",
+    "ground_truth": "No. The codeword is never transmitted in cleartext and is rotated per deployment.",
+    "relevant_doc_ids": ["ferret-activation"],
+    "relevant_substrings": ["never transmitted in cleartext", "rotated per deployment"],
+    "requires_web": true
   }
 ]
