@@ -42,20 +42,20 @@ async def fixture_crawl_url(url: str) -> SourceDocument:
 
 def install() -> tuple[Any, Any]:
     """Patch the node module's search/crawl_url. Returns the originals."""
-    from sovereign_rag.graphs.rag_qa import nodes
+    import sovereign_rag.graphs.rag_qa.nodes as _nodes
 
-    orig = (nodes.search, nodes.crawl_url)
-    nodes.search = fixture_search  # type: ignore[assignment]
-    nodes.crawl_url = fixture_crawl_url  # type: ignore[assignment]
+    orig = (_nodes.search, _nodes.crawl_url)  # type: ignore[attr-defined]
+    _nodes.search = fixture_search  # type: ignore[attr-defined]
+    _nodes.crawl_url = fixture_crawl_url  # type: ignore[attr-defined]
     return orig
 
 
 def uninstall(orig_search: Any, orig_crawl: Any) -> None:
     """Restore the originals returned by install()."""
-    from sovereign_rag.graphs.rag_qa import nodes
+    import sovereign_rag.graphs.rag_qa.nodes as _nodes
 
-    nodes.search = orig_search
-    nodes.crawl_url = orig_crawl
+    _nodes.search = orig_search  # type: ignore[attr-defined]
+    _nodes.crawl_url = orig_crawl  # type: ignore[attr-defined]
 
 
 __all__ = ["fixture_crawl_url", "fixture_search", "install", "uninstall"]
