@@ -249,8 +249,16 @@ async def generate(state: RAGState) -> dict[str, object]:
         ]
     )
     answer_text = resp.content if isinstance(resp.content, str) else str(resp.content)
+    answer_text = answer_text.strip()
+    # Honesty caveat: we answered on a weak grade (corrections exhausted or
+    # the human declined the web search). Doesn't fire on a "correct" grade.
+    if state.get("grade") in ("ambiguous", "incorrect"):
+        if state.get("declined"):
+            answer_text += "\n\n_Confidence is lower than usual — the web was not consulted._"
+        elif not state.get("fallback_used"):
+            answer_text += "\n\n_Confidence is lower than usual — local sources were thin._"
     return {
-        "answer": answer_text.strip(),
+        "answer": answer_text,
         "citations": citations,
         "used": len(citations),
     }

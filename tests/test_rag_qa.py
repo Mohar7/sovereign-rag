@@ -322,3 +322,33 @@ class TestCrawlIndex:
         assert out["web_ingested"] == 0
         assert out["fallback_used"] is False
         assert out["correction_attempts"] == 1
+
+
+# ---------------------------------------------------------------------------
+# generate — low-confidence caveat
+# ---------------------------------------------------------------------------
+class TestGenerateCaveat:
+    async def test_declined_weak_grade_appends_caveat(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        chunk = Chunk(doc_id="d", text="t", raw_text="body", position=0, chunk_id="c1")
+        reranked = [RetrievedChunk(chunk=chunk, score=0.4, source="reranked")]
+        fake_llm = AsyncMock()
+        fake_llm.ainvoke.return_value = MagicMock(content="Partial answer [1].")
+        monkeypatch.setattr(agent_nodes, "get_chat_model", lambda **_: fake_llm)
+
+        out = await agent_nodes.generate(
+            {"question": "q", "reranked": reranked, "grade": "ambiguous", "declined": True}
+        )
+        assert "Partial answer [1]." in out["answer"]
+        assert "confidence" in out["answer"].lower()
+
+    async def test_correct_grade_no_caveat(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        chunk = Chunk(doc_id="d", text="t", raw_text="body", position=0, chunk_id="c1")
+        reranked = [RetrievedChunk(chunk=chunk, score=0.9, source="reranked")]
+        fake_llm = AsyncMock()
+        fake_llm.ainvoke.return_value = MagicMock(content="Full answer [1].")
+        monkeypatch.setattr(agent_nodes, "get_chat_model", lambda **_: fake_llm)
+
+        out = await agent_nodes.generate({"question": "q", "reranked": reranked, "grade": "correct"})
+        assert out["answer"] == "Full answer [1]."
