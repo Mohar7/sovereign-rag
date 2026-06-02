@@ -48,6 +48,7 @@ from sovereign_rag.graphs.rag_qa.nodes import (
     web_search,
 )
 from sovereign_rag.graphs.rag_qa.state import RAGState
+from sovereign_rag.shared.checkpoint_serde import make_serde
 from sovereign_rag.shared.tracing import setup_tracing
 
 if TYPE_CHECKING:
@@ -124,8 +125,18 @@ def build_graph(checkpointer: BaseCheckpointSaver[Any] | None = None) -> Any:
     FastAPI's lifespan passes an ``AsyncPostgresSaver`` here so QA threads
     persist across restarts. Tests can pass ``None`` to get an in-memory
     runtime.
+
+    When a checkpointer is provided we attach the retrieval-dataclass
+    allowlist (see ``shared/checkpoint_serde.py``) so that ``Chunk``,
+    ``RetrievedChunk``, and ``Citation`` are silently allowed on
+    deserialization instead of emitting an "unregistered type" warning on
+    every resume.  The checkpointer's own ``serde`` attribute is replaced
+    with a new ``JsonPlusSerializer`` that merges the base allowlist with our
+    types via ``with_msgpack_allowlist``.
     """
     setup_tracing()
+    if checkpointer is not None:
+        checkpointer.serde = make_serde()
     return _build_state_graph().compile(checkpointer=checkpointer)
 
 

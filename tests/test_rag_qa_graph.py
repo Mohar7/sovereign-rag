@@ -25,12 +25,18 @@ def _rc(chunk_id: str, score: float, source: str = "reranked") -> RetrievedChunk
     return RetrievedChunk(chunk=chunk, score=score, source=source)
 
 
-@pytest.fixture
-def stub_graph(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """A compiled CRAG graph with all node collaborators stubbed.
+def _build_stubbed_graph(
+    monkeypatch: pytest.MonkeyPatch,
+    checkpointer: Any = None,
+) -> Any:
+    """Build a compiled CRAG graph with all node collaborators stubbed.
+
+    Can be imported by other test modules (e.g. test_checkpoint_serde) to
+    reuse the same stub configuration without duplicating setup.
 
     grade_candidates always returns 'ambiguous' → the corrective path fires on
     every grade; the correction_attempts guard is what stops the loop.
+    If ``checkpointer`` is None an ``InMemorySaver`` is used.
     """
     from sovereign_rag.config import get_settings
 
@@ -66,7 +72,19 @@ def stub_graph(monkeypatch: pytest.MonkeyPatch) -> Any:
     fake_llm.ainvoke.return_value = MagicMock(content="rewritten or answer text [1]")
     monkeypatch.setattr(agent_nodes, "get_chat_model", lambda **_: fake_llm)
 
-    return _build_state_graph().compile(checkpointer=InMemorySaver())
+    if checkpointer is None:
+        checkpointer = InMemorySaver()
+    return _build_state_graph().compile(checkpointer=checkpointer)
+
+
+@pytest.fixture
+def stub_graph(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """A compiled CRAG graph with all node collaborators stubbed.
+
+    Delegates to the module-level ``_build_stubbed_graph`` so other test
+    modules can reuse the same stub configuration.
+    """
+    return _build_stubbed_graph(monkeypatch)
 
 
 def _config() -> dict[str, Any]:

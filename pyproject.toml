@@ -109,6 +109,7 @@ disallow_untyped_decorators = false
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
     "integration: tests that need Milvus/Neo4j/Ollama running",
