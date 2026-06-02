@@ -22,6 +22,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from langgraph.types import Command
 
 from sovereign_rag.api.ask.schemas import (
     AskOverrides,
@@ -33,8 +34,6 @@ from sovereign_rag.api.ask.schemas import (
     InterruptModel,
     ResumeRequest,
 )
-from langgraph.types import Command
-
 from sovereign_rag.api.dependencies import GraphDep
 from sovereign_rag.api.runs import record_run
 from sovereign_rag.config import get_settings

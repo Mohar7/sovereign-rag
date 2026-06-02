@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+from unittest.mock import AsyncMock
+
+import pytest
+
+from sovereign_rag.api.ask import router as ask_router
 from sovereign_rag.api.ask.schemas import (
     AskResponse,
     CandidateUrl,
@@ -50,15 +56,6 @@ def test_resume_request_defaults_and_decline() -> None:
 def test_candidate_url_verified_optional() -> None:
     c = CandidateUrl(url="https://a", title="A", snippet="s")
     assert c.verified is None
-
-
-import uuid
-from typing import Any
-from unittest.mock import AsyncMock
-
-import pytest
-
-from sovereign_rag.api.ask import router as ask_router
 
 
 def _interrupt_obj(value: dict[str, Any]) -> Any:
@@ -195,9 +192,11 @@ class TestStreamGenerator:
         graph.astream_events = lambda *a, **k: self._events_from(ev)
 
         class _Snap:
-            next = ()
-            tasks = ()
-            values = {"answer": "done", "citations": [], "retrieved": 1, "used": 1}
+            next: tuple[()] = ()
+            tasks: tuple[()] = ()
+
+            def __init__(self) -> None:
+                self.values = {"answer": "done", "citations": [], "retrieved": 1, "used": 1}
 
         graph.aget_state = AsyncMock(return_value=_Snap())
         monkeypatch.setattr(ask_router, "record_run", AsyncMock())
