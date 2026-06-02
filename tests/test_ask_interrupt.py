@@ -275,3 +275,25 @@ class TestResume:
         assert resp.status == "ok"
         assert resp.fallback_used is False
         assert resp.answer == "local only [1]"
+
+
+class TestAskRecordsGrade:
+    async def test_ok_answer_records_grade_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        graph = AsyncMock()
+        graph.ainvoke.return_value = {
+            "answer": "direct [1]", "citations": [], "retrieved": 5, "used": 1,
+            "fallback_used": False, "grade": "correct", "grade_confidence": 0.82,
+            "grade_reason": "strong", "question": "q?",
+        }
+        captured: dict[str, Any] = {}
+        monkeypatch.setattr(
+            ask_router, "record_run", AsyncMock(side_effect=lambda **kw: captured.update(kw))
+        )
+        from sovereign_rag.api.ask.schemas import AskRequest
+
+        resp = await ask_router.ask(AskRequest(question="q?"), graph)
+        assert resp.status == "ok"
+        assert resp.grade is not None and resp.grade.label == "correct"
+        assert captured["grade"] == "correct"
+        assert captured["fallback_used"] is False
+        assert captured["decision"] is None  # no web fallback path was taken

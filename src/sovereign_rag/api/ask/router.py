@@ -260,6 +260,11 @@ async def ask(req: AskRequest, graph: GraphDep) -> AskResponse:
             else settings_at_call.llm_model
         ),
         status="ok",
+        grade=state.get("grade"),
+        grade_confidence=state.get("grade_confidence"),
+        fallback_used=bool(state.get("fallback_used", False)),
+        decision=None,
+        correction_attempts=int(state.get("correction_attempts", 0)),
     )
     return response
 
@@ -437,6 +442,11 @@ async def _stream_generator(
         overrides=overrides.model_dump(exclude_none=True) if overrides else None,
         model=(overrides.model if overrides and overrides.model else get_settings().llm_model),
         status="ok",
+        grade=final_state.get("grade"),
+        grade_confidence=final_state.get("grade_confidence"),
+        fallback_used=bool(final_state.get("fallback_used", False)),
+        decision=None,
+        correction_attempts=int(final_state.get("correction_attempts", 0)),
     )
     yield _sse(
         {
