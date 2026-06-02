@@ -143,7 +143,22 @@
         "retrieve": "retrieve",
         "rerank": "rerank",
         "generate": "generate",
-        "progress": "retrieval pipeline progress"
+        "progress": "retrieval pipeline progress",
+        "grade": "grade",
+        "transformQuery": "rewrite query",
+        "webSearch": "web search",
+        "crawlIndex": "crawl + index",
+        "corpusSufficient": "corpus sufficient",
+        "selfCorrected": "self-corrected",
+        "stages": "stages",
+        "passes": "passes",
+        "pass1": "pass 1 · local corpus",
+        "correction": "correction · web fallback",
+        "pass2": "pass 2 · re-retrieve",
+        "sourcesAmbiguous": "sources ambiguous — correcting",
+        "reRetrieveWithCrawled": "re-retrieve with crawled pages",
+        "humanDecision": "human decision",
+        "approved": "approved"
       },
       "context": {
         "title": "Context manager",
@@ -377,7 +392,10 @@
       "copied": "Copied.",
       "copyMessage": "copy message",
       "emptyMessage": "(empty)",
-      "pageLabel": "p.{{page}}"
+      "pageLabel": "p.{{page}}",
+      "needsApproval": "needs your approval",
+      "pausedCount_one": "{{formattedCount}} paused",
+      "pausedCount_other": "{{formattedCount}} paused"
     },
     "graph": {
       "title": "Knowledge graph",
@@ -444,7 +462,13 @@
       "chunksUsed_other": "{{used}} of {{retrieved}} chunks",
       "serverDefaults": "Server defaults (no overrides).",
       "noAnswer": "(no answer)",
-      "error": "Error"
+      "error": "Error",
+      "grade": "grade",
+      "fallback": "web fallback",
+      "decision": "decision",
+      "usedWebFallback": "used web fallback",
+      "approved": "approved",
+      "declined": "declined"
     },
     "settings": {
       "title": "Settings.",
@@ -454,6 +478,7 @@
         "model": "Model",
         "indexing": "Indexing",
         "rerank": "Rerank",
+        "corrective": "Corrective RAG",
         "services": "Services",
         "danger": "Danger"
       },
@@ -562,6 +587,27 @@
           "description": "Stop collecting once cumulative score-mass crosses 0.85 — keeps LLM context lean on easy queries."
         }
       },
+      "crag": {
+        "title": "Corrective RAG",
+        "subtitle": "After reranking, the agent grades the local sources. Weak grades trigger a query rewrite and a web search you approve before anything is crawled.",
+        "enable": {
+          "label": "Enable Corrective RAG",
+          "description": "Grade local sources and self-correct when they are thin."
+        },
+        "gradeBand": {
+          "label": "Grade band",
+          "description": "Below the low handle answers are graded Incorrect; above the high handle, Correct; the middle lets the LLM decide."
+        },
+        "maxCorrections": {
+          "label": "Max corrections per question",
+          "description": "How many times the agent may loop back to the web before answering anyway."
+        },
+        "maxUrls": {
+          "label": "Web fallback · max URLs",
+          "description": "Cap the candidate URLs shown for approval per correction."
+        },
+        "disabledNote": "Corrective RAG is disabled. Enable it above to have the agent self-correct weak local retrievals via web fallback."
+      },
       "services": {
         "title": "Service health",
         "subtitle": "Live per-service liveness + p50 latency. Re-probed every 30 seconds.",
@@ -610,5 +656,54 @@
     "chunks": "chunks",
     "citations": "citation",
     "citationsPlural": "citations"
+  },
+  "crag": {
+    "grade": {
+      "correct": "Correct",
+      "ambiguous": "Ambiguous",
+      "incorrect": "Incorrect"
+    },
+    "correctedViaWeb": "corrected via web",
+    "gradeBand": {
+      "incorrect": "Incorrect",
+      "llmDecides": "LLM decides",
+      "correct": "Correct",
+      "lowThreshold": "Incorrect threshold",
+      "highThreshold": "Correct threshold"
+    },
+    "approval": {
+      "title": "Need more sources?",
+      "why": "Local sources were",
+      "on": "on",
+      "selectAll": "Select all",
+      "candidatesInfo": "{{count}} candidates · top {{top}} pre-checked",
+      "crawlContinue": "Crawl {{n}} & continue",
+      "declineLocal": "Decline — answer from local",
+      "yourCall": "your call",
+      "unverified": "unverified",
+      "selectedOf": "{{n}} of {{total}} selected · ~{{size}}",
+      "crawlingTitle": "Crawling {{n}} of {{total}} selected pages.",
+      "crawlingSubtitle": "Indexing into the corpus, then re-retrieving and answering.",
+      "crawlDone": "indexed",
+      "crawlRunning": "crawling",
+      "crawlFailed": "failed",
+      "partialFailTitle": "{{failed}} of {{total}} URLs failed to crawl — answered from the rest.",
+      "partialFailSubtitle": "The corpus gained {{chunks}} chunks from the page that succeeded.",
+      "chunksIndexed": "{{n}} chunks indexed"
+    },
+    "crawling": {
+      "crawling": "crawling",
+      "indexing": "indexing",
+      "reRetrieving": "re-retrieving",
+      "answering": "answering"
+    },
+    "declinedChip": "Declined web search · answered from local corpus.",
+    "needsApproval": "needs your approval",
+    "composerLocked": "Resume the pending approval to continue",
+    "citationLegend": {
+      "title": "citations",
+      "webCrawled": "web — crawled this turn",
+      "localCorpus": "local corpus"
+    }
   }
 }

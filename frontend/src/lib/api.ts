@@ -30,6 +30,33 @@ function postJSON<T>(path: string, body: unknown): Promise<T> {
   })
 }
 
+// ---------- CRAG types ----------
+
+export type GradeLabel = "correct" | "ambiguous" | "incorrect"
+
+export interface GradeModel {
+  label: GradeLabel
+  confidence: number
+  reason: string
+}
+
+export interface CandidateUrl {
+  url: string
+  title: string
+  snippet: string
+  verified?: boolean | null
+}
+
+export interface InterruptModel {
+  reason: "approve_urls"
+  candidate_urls: CandidateUrl[]
+}
+
+export interface ResumeRequest {
+  thread_id: string
+  approved_urls: string[]
+}
+
 // ---------- evals ----------
 
 export interface EvalsPerQuestion {
@@ -39,6 +66,9 @@ export interface EvalsPerQuestion {
   "recall@5": number
   mrr: number
   "ndcg@5": number
+  grade?: GradeLabel | null
+  fallback_used?: boolean
+  requires_web?: boolean
 }
 
 export interface EvalsAggregate {
@@ -55,6 +85,17 @@ export interface EvalsRagas {
   reason: string | null
 }
 
+export interface CragSummary {
+  k: number
+  aggregate_off: Record<string, number>
+  aggregate_on: Record<string, number>
+  lift_on_corrected: Record<string, number>
+  grade_distribution: { correct: number; ambiguous: number; incorrect: number }
+  fallback_fired: number
+  n_questions: number
+  n_requires_web: number
+}
+
 export interface EvalsResults {
   available: boolean
   mode: string
@@ -66,6 +107,7 @@ export interface EvalsResults {
   ragas: EvalsRagas
   generated_at: string | null
   path: string | null
+  crag?: CragSummary | null
 }
 
 // ---------- run history ----------
@@ -89,6 +131,11 @@ export interface RunRow {
   status: "ok" | "error"
   error: string | null
   created_at: string | null
+  grade: GradeLabel | null
+  grade_confidence: number | null
+  fallback_used: boolean
+  decision: "approved" | "declined" | null
+  correction_attempts: number
 }
 
 // ---------- graph explorer ----------
@@ -212,11 +259,14 @@ export interface AskRequest {
 
 export interface AskResponse {
   thread_id: string
-  status: "ok"
+  status: "ok" | "interrupted"
   answer: string | null
   citations: CitationModel[]
   retrieved: number
   used: number
+  fallback_used: boolean
+  grade: GradeModel | null
+  interrupt: InterruptModel | null
 }
 
 export interface ThreadSummary {
@@ -231,6 +281,8 @@ export interface ThreadSummary {
   status: "ok" | "error"
   /** Total error runs in this thread's history. */
   error_count: number
+  /** True when the latest checkpoint has a pending __interrupt__ (CRAG approval waiting). */
+  paused_at_interrupt?: boolean
 }
 
 export interface ThreadDetail {
@@ -325,6 +377,12 @@ export interface SettingsResponse {
   adaptive_rerank: boolean
   reranker_model: string
   reranker_device: "auto" | "mps" | "cuda" | "cpu"
+  // Corrective RAG
+  enable_corrective_rag: boolean
+  crag_correct_threshold: number
+  crag_incorrect_threshold: number
+  crag_max_corrections: number
+  web_fallback_max_urls: number
 }
 
 export type SettingsPatch = Partial<SettingsResponse>
@@ -435,6 +493,7 @@ export const api = {
 
   // root-mounted (no /api prefix)
   ask: (body: AskRequest) => postJSON<AskResponse>("/ask", body),
+  askResume: (body: ResumeRequest) => postJSON<AskResponse>("/ask/resume", body),
 
   // admin
   wipe: (scope: "all" | "corpus" | "threads" = "all") =>

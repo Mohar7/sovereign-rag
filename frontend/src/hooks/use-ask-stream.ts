@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import type { AskRequest, CitationModel } from "@/lib/api"
+import type { AskRequest, CandidateUrl, CitationModel, GradeLabel } from "@/lib/api"
 
 // ─────────────────────────────────────────────────────────────────
 // Event schema — must mirror api/ask/router.py:_stream_generator
@@ -17,6 +17,10 @@ import type { AskRequest, CitationModel } from "@/lib/api"
 export interface StageTimings {
   retrieve_local?: number
   rerank?: number
+  grade?: number
+  transform_query?: number
+  web_search?: number
+  crawl_index?: number
   generate?: number
   total?: number
 }
@@ -34,8 +38,18 @@ export type StreamEvent =
       retrieved: number
       used: number
       timings?: StageTimings
+      fallback_used?: boolean
+      grade?: GradeLabel | null
     }
   | { type: "error"; message: string }
+  | { type: "grade"; label: GradeLabel; confidence: number; reason: string }
+  | {
+      type: "interrupt"
+      thread_id: string
+      reason: "approve_urls"
+      candidate_urls: CandidateUrl[]
+    }
+  | { type: "crawl_progress"; url: string; status: "crawling" | "indexed" | "failed"; chunks?: number }
 
 export interface UseAskStreamOptions {
   onOpen?: (threadId: string) => void
@@ -44,10 +58,14 @@ export interface UseAskStreamOptions {
   onCitations?: (items: CitationModel[]) => void
   onDone?: (final: Extract<StreamEvent, { type: "done" }>) => void
   onError?: (message: string) => void
+  onGrade?: (label: GradeLabel, confidence: number, reason: string) => void
+  onInterrupt?: (payload: Extract<StreamEvent, { type: "interrupt" }>) => void
+  onCrawlProgress?: (ev: Extract<StreamEvent, { type: "crawl_progress" }>) => void
 }
 
 interface UseAskStreamReturn {
   submit: (req: AskRequest) => void
+  submitResume: (body: { thread_id: string; approved_urls: string[] }) => void
   cancel: () => void
   isStreaming: boolean
 }
@@ -71,19 +89,15 @@ export function useAskStream(options: UseAskStreamOptions = {}): UseAskStreamRet
 
   useEffect(() => cancel, [cancel])
 
-  const submit = useCallback(
-    (req: AskRequest) => {
-      cancel()
-      const ac = new AbortController()
-      abortRef.current = ac
-      setIsStreaming(true)
-
+  /** Shared stream-reading loop used by both submit and submitResume. */
+  const runStream = useCallback(
+    (url: string, body: unknown, ac: AbortController) => {
       void (async () => {
         try {
-          const r = await fetch("/ask/stream", {
+          const r = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-            body: JSON.stringify(req),
+            body: JSON.stringify(body),
             signal: ac.signal,
           })
           if (!r.ok) {
@@ -126,10 +140,32 @@ export function useAskStream(options: UseAskStreamOptions = {}): UseAskStreamRet
         }
       })()
     },
-    [cancel],
+    [],
   )
 
-  return { submit, cancel, isStreaming }
+  const submit = useCallback(
+    (req: AskRequest) => {
+      cancel()
+      const ac = new AbortController()
+      abortRef.current = ac
+      setIsStreaming(true)
+      runStream("/ask/stream", req, ac)
+    },
+    [cancel, runStream],
+  )
+
+  const submitResume = useCallback(
+    (body: { thread_id: string; approved_urls: string[] }) => {
+      cancel()
+      const ac = new AbortController()
+      abortRef.current = ac
+      setIsStreaming(true)
+      runStream("/ask/resume/stream", body, ac)
+    },
+    [cancel, runStream],
+  )
+
+  return { submit, submitResume, cancel, isStreaming }
 }
 
 function dispatch(event: StreamEvent, opts: UseAskStreamOptions) {
@@ -151,6 +187,15 @@ function dispatch(event: StreamEvent, opts: UseAskStreamOptions) {
       return
     case "error":
       opts.onError?.(event.message)
+      return
+    case "grade":
+      opts.onGrade?.(event.label, event.confidence, event.reason)
+      return
+    case "interrupt":
+      opts.onInterrupt?.(event)
+      return
+    case "crawl_progress":
+      opts.onCrawlProgress?.(event)
       return
   }
 }

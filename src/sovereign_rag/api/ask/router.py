@@ -469,6 +469,8 @@ async def _stream_generator(
             "retrieved": int(final_state.get("retrieved", 0)),
             "used": int(final_state.get("used", 0)),
             "timings": timings_payload,
+            "fallback_used": bool(final_state.get("fallback_used", False)),
+            "grade": final_state.get("grade"),
         }
     )
 

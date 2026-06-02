@@ -5,8 +5,10 @@ import {
   MessageSquare,
   MoreHorizontal,
   RefreshCw,
+  RotateCcw,
   Search,
   Trash2,
+  User,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -102,6 +104,7 @@ export function ThreadsPage() {
   }, [threads.data])
 
   const errorCount = (threads.data ?? []).filter((t) => t.status === "error").length
+  const pausedCount = (threads.data ?? []).filter((t) => t.paused_at_interrupt).length
 
   const selectedIds = Object.keys(selected).filter((id) => selected[id])
   const toggle = (id: string) =>
@@ -139,6 +142,7 @@ export function ThreadsPage() {
         modelFacets={modelFacets}
         totalCount={(threads.data ?? []).length}
         errorCount={errorCount}
+        pausedCount={pausedCount}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 border-b border-border px-6 py-3">
@@ -291,7 +295,9 @@ function ThreadCard({
         "group relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors duration-[120ms]",
         selected
           ? "border-primary/60 ring-2 ring-primary/20"
-          : "border-border hover:bg-muted",
+          : thread.paused_at_interrupt
+            ? "border-warning/45 ring-2 ring-warning/15 hover:bg-muted"
+            : "border-border hover:bg-muted",
       )}
     >
       <div className="flex items-start gap-2.5">
@@ -341,6 +347,18 @@ function ThreadCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {thread.paused_at_interrupt && (
+        <div className="flex items-center gap-1.5">
+          <Badge
+            variant="outline"
+            className="gap-1 border-warning/50 bg-warning/8 font-mono text-[10.5px] text-warning"
+          >
+            <User className="size-2.5" strokeWidth={2} />
+            {t("pages.threads.needsApproval")}
+          </Badge>
+        </div>
+      )}
 
       <button
         type="button"
@@ -431,6 +449,7 @@ function ThreadsFilterRail({
   modelFacets,
   totalCount,
   errorCount,
+  pausedCount,
 }: {
   statusFilter: StatusFilter
   onStatusChange: (next: StatusFilter) => void
@@ -439,6 +458,7 @@ function ThreadsFilterRail({
   modelFacets: Array<{ model: string; count: number }>
   totalCount: number
   errorCount: number
+  pausedCount: number
 }) {
   const { t } = useTranslation()
   return (
@@ -451,6 +471,12 @@ function ThreadsFilterRail({
             {t("pages.threads.withErrors", { count: errorCount, formattedCount: formatCount(errorCount) })}
           </span>
         </p>
+        {pausedCount > 0 && (
+          <p className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] text-warning">
+            <RotateCcw className="size-3" strokeWidth={2} />
+            {t("pages.threads.pausedCount", { count: pausedCount, formattedCount: formatCount(pausedCount) })}
+          </p>
+        )}
       </div>
       <div className="space-y-4 border-b border-border px-4 py-3">
         <div>

@@ -384,6 +384,28 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   CRAG animations — grade-chip pop-in, approval slide-in
+   Gated on prefers-reduced-motion: no-preference so users who prefer
+   reduced motion see no animation.
+   ─────────────────────────────────────────────────────────────── */
+@keyframes crag-pop {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes crag-slidein {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-active] .crag-gradechip {
+    animation: crag-pop 120ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+  [data-active] .crag-approval-slide {
+    animation: crag-slidein 240ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
    Ask-page motion primitives
    ─────────────────────────────────────────────────────────────── */
 @keyframes sr-pulse {

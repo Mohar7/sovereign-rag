@@ -98,6 +98,11 @@ def _snapshot() -> SettingsResponse:
         adaptive_rerank=s.adaptive_rerank,
         reranker_model=s.reranker_model,
         reranker_device=s.reranker_device,
+        enable_corrective_rag=s.enable_corrective_rag,
+        crag_correct_threshold=s.crag_correct_threshold,
+        crag_incorrect_threshold=s.crag_incorrect_threshold,
+        crag_max_corrections=s.crag_max_corrections,
+        web_fallback_max_urls=s.web_fallback_max_urls,
     )
 
 

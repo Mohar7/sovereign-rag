@@ -57,6 +57,8 @@ class ThreadSummary(BaseModel):
     model: str | None = None
     status: str = "ok"
     error_count: int = 0
+    # True when the latest checkpoint has a pending __interrupt__ (CRAG approval).
+    paused_at_interrupt: bool = False
 
 
 class ThreadDetail(BaseModel):

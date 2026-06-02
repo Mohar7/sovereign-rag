@@ -38,44 +38,56 @@ The interface is a from-scratch design system in the register of **Linear · Ver
 | **Contextual Retrieval** (Anthropic, 2024) | Prepends chunk-situating context before indexing; ~-35% retrieval failures | Local LLM generates the prefix |
 | **GraphRAG local-search** | Multi-hop questions vector search can't answer | Neo4j entity graph: vector-seed -> 1-hop traverse |
 | **Evaluation harness** | Proves the above instead of cargo-culting it | RAGAS (Ollama judge) + retrieval precision@k |
-| **LangGraph orchestration** | Branching (web fallback when local hits are thin), HITL approval on crawl, persistent threads | `StateGraph` + conditional edges + `AsyncPostgresSaver` checkpointer |
+| **LangGraph orchestration** | Self-correcting CRAG loop (grade → rewrite → web search → HITL approval → crawl+index → re-retrieve), HITL approval on web fallback, persistent threads | `StateGraph` + conditional edges + `interrupt()` + `AsyncPostgresSaver` checkpointer |
 
 ## Architecture
 
-**Control plane** — LangGraph QA graph (`src/sovereign_rag/agent/`):
+**Control plane** — LangGraph QA graph (`src/sovereign_rag/graphs/rag_qa/`):
+
+**Linear path** (default, `ENABLE_CORRECTIVE_RAG` unset or `false`):
+
+```
+START → retrieve_local → rerank → generate → END
+```
+
+**Self-correcting CRAG loop** (`ENABLE_CORRECTIVE_RAG=true`):
 
 ```
                               START
                                 |
                                 v
-                       +-----------------+
-                       |  retrieve_local |   Milvus hybrid + Neo4j graph + dedup
-                       +--------+--------+
-                                |
-                  candidates < N|   else
-                                v
-            +------------------- decide ------------------+
-            v                                             v
-   +-----------------+   user approves                    |
-   |  web_fallback   |--- SearXNG -> interrupt()  -+      |
-   |                 |                             |      |
-   +--------+--------+   resume w/ approved URLs   |      |
-            |                                      |      |
-            +-- Crawl4AI -> index -> re-retrieve --+      |
-                                |                         |
-                                v                         |
-                          +-----------+                   |
-                          |  rerank   |<------------------+   gte-reranker-modernbert-base (MPS/CUDA/CPU)
-                          +-----+-----+
-                                |
-                                v
-                          +-----------+
-                          | generate  |     LLM with [n] citations
-                          +-----+-----+
-                                |
-                                v
-                               END
+             ┌──────► retrieve_local   Milvus hybrid + Neo4j graph + dedup
+             │                |
+             │                v
+             │            rerank       gte-reranker-modernbert-base (MPS/CUDA/CPU)
+             │                |
+             │                v
+             │            grade        hybrid: score thresholds + light-tier LLM
+             │                |
+             │    ┌───────────┴────────────────┐
+             │    │ Correct                    │ Ambiguous / Incorrect
+             │    │ (or attempts exhausted)    │ (attempts < crag_max_corrections)
+             │    v                            v
+             │  generate     LLM        transform_query
+             │    |          with [n]         |
+             │    v          citations        v
+             │   END                     web_search    SearXNG → candidate_urls
+             │                                |
+             │                                v
+             │                        request_approval  interrupt() — HITL pause
+             │                           /       \
+             │              approved_urls        approved_urls=[]
+             │              (non-empty)          (decline)
+             │                  |                    |
+             │                  v                    v
+             │            crawl_index            generate (local only) → END
+             │            Crawl4AI →
+             │            index_document
+             │            attempts++
+             └────────────────┘
 ```
+
+The CRAG loop is **default-OFF** — set `ENABLE_CORRECTIVE_RAG=true` to enable it. `enable_corrective_rag` is a build-time structural flag: changing it requires restarting the process (graph recompile). With it off, the original linear graph is built unchanged.
 
 **Data plane** — Milvus + Neo4j + ingestion (the bits LangChain's wrappers don't expose: RRF hybrid, GraphRAG local-search, contextual prefixing):
 
@@ -116,7 +128,7 @@ docker compose up -d          # etcd+minio+milvus, neo4j, postgres, searxng
 
 # 3. App
 uv sync
-uv run uvicorn sovereign_rag.api:app --reload
+uv run uvicorn sovereign_rag.api.main:app --reload
 # http://localhost:8000/docs
 
 # 4. (Optional) LangGraph dev server + Studio UI
@@ -141,31 +153,63 @@ curl -X POST http://localhost:8000/ingest/search \
   -H 'Content-Type: application/json' -d '{"query":"milvus hybrid search","max_results":3}'
 
 # Ask — hybrid + graph retrieval, reranked, cited.
-# If local hits are thin (< WEB_FALLBACK_MIN_CHUNKS), the LangGraph QA
-# graph pauses at the web_fallback node and returns an interrupt with
-# candidate URLs from SearXNG. The client approves a subset and POSTs
-# /ask/resume with the same thread_id.
+# When ENABLE_CORRECTIVE_RAG=true: after rerank a grade step classifies local
+# context quality. On a weak grade the graph rewrites the query, searches the
+# web with SearXNG, then pauses (interrupt()) for human approval of which URLs
+# to crawl. The client approves a subset via POST /ask/resume.
 curl -X POST http://localhost:8000/ask \
   -H 'Content-Type: application/json' -d '{"question":"How does BM25 fusion work here?"}'
-# -> {"thread_id":"...","status":"ok","answer":"...[1][2]...","citations":[...]}
-# or
-# -> {"thread_id":"...","status":"interrupted","interrupt":{"reason":"approve_urls","candidate_urls":[...]}}
+# -> {"thread_id":"...","status":"ok","answer":"...[1][2]...","citations":[...],"grade":{"label":"correct","confidence":0.87,"reason":"..."}}
+# or (when CRAG fires and grades the context weak):
+# -> {"thread_id":"...","status":"interrupted",
+#     "interrupt":{"reason":"approve_urls","candidate_urls":[{"url":"...","title":"...","snippet":"..."}]},
+#     "grade":{"label":"ambiguous","confidence":0.45,"reason":"..."}}
+
+# Approve a subset of URLs (crawl + re-retrieve + answer):
 curl -X POST http://localhost:8000/ask/resume \
+  -H 'Content-Type: application/json' \
+  -d '{"thread_id":"<above>","approved_urls":["https://example.com/article"]}'
+# -> {"thread_id":"...","status":"ok","answer":"...","fallback_used":true,"citations":[...]}
+
+# Decline (answer from local corpus only — approved_urls: []):
+curl -X POST http://localhost:8000/ask/resume \
+  -H 'Content-Type: application/json' \
+  -d '{"thread_id":"<above>","approved_urls":[]}'
+
+# SSE streaming variants (streams node progress + LLM tokens;
+# emits grade/interrupt/crawl_progress events for the CRAG path):
+curl -N -X POST http://localhost:8000/ask/stream \
+  -H 'Content-Type: application/json' -d '{"question":"..."}'
+# After an interrupt, resume with SSE:
+curl -N -X POST http://localhost:8000/ask/resume/stream \
   -H 'Content-Type: application/json' \
   -d '{"thread_id":"<above>","approved_urls":["https://example.com/article"]}'
 ```
 
 ## How retrieval works
 
-The QA path is a LangGraph `StateGraph` (see `src/sovereign_rag/agent/`):
+The QA path is a LangGraph `StateGraph` (`src/sovereign_rag/graphs/rag_qa/`).
+
+### Linear path (default)
 
 1. **`retrieve_local`** — Milvus `hybrid_search` (dense ANN + native BM25, fused with `RRFRanker`) and Neo4j `local_search` (vector-seed chunks → traverse `MENTIONS` edges 1 hop → append relation facts) run concurrently and get deduped by `chunk_id`.
-2. **Conditional edge** — if the deduped candidate count is below `WEB_FALLBACK_MIN_CHUNKS` and we haven't already tried, the graph routes through `web_fallback`; otherwise straight to `rerank`.
-3. **`web_fallback` (HITL)** — searches SearXNG, then `interrupt()`s with the candidate URLs. The client resumes with `approved_urls` via `/ask/resume`; the node crawls those, indexes them via `RAGPipeline.index_document`, re-runs local retrieval, and continues.
-4. **`rerank`** — `Alibaba-NLP/gte-reranker-modernbert-base` cross-encoder (sentence-transformers) re-scores the union and keeps top-`RERANK_TOP_K` on MPS / CUDA / CPU.
-5. **`generate`** — the LLM answers using only the numbered passages, citing `[n]` inline; the API returns structured citations.
+2. **`rerank`** — `Alibaba-NLP/gte-reranker-modernbert-base` cross-encoder (sentence-transformers) re-scores the union and keeps top-`RERANK_TOP_K` on MPS / CUDA / CPU.
+3. **`generate`** — the LLM answers using only the numbered passages, citing `[n]` inline; the API returns structured citations.
 
-Each thread is checkpointed in Postgres (`AsyncPostgresSaver`), so interrupted runs survive restarts and can be resumed from a different request. Every layer is toggle-able via env (`ENABLE_GRAPH_RETRIEVAL`, `ENABLE_CONTEXTUAL_RETRIEVAL`, `WEB_FALLBACK_MIN_CHUNKS=0` to disable fallback) so the eval harness can A/B their contribution.
+### Self-correcting CRAG loop (`ENABLE_CORRECTIVE_RAG=true`)
+
+After step 2 (`rerank`), a **`grade`** step is inserted:
+
+4. **`grade`** — hybrid grader classifies local context as **Correct / Ambiguous / Incorrect**. The top-1 reranker score is sigmoid-normalized to `[0,1]`; scores ≥ `crag_correct_threshold` (0.70) → Correct (skip LLM); scores ≤ `crag_incorrect_threshold` (0.30) → Incorrect; in-between → one light-tier LLM call decides. On **Correct** (or when `crag_max_corrections` attempts are exhausted), the graph routes to `generate`.
+
+On a weak grade (Ambiguous or Incorrect, under the attempt budget):
+
+5. **`transform_query`** — light-tier LLM rewrites the question into a focused web search query.
+6. **`web_search`** — SearXNG returns up to `web_fallback_max_urls` (5) candidate URLs; the graph pauses via `interrupt()`.
+7. **`request_approval` (HITL)** — the API returns `{"status":"interrupted","interrupt":{"reason":"approve_urls","candidate_urls":[...]}}`. The client resumes with `POST /ask/resume {"thread_id":"...","approved_urls":[...]}`. Passing `[]` = **decline** (answer from local corpus only). Passing URLs = **approve** (crawl + index + loop back to `retrieve_local`).
+8. **`crawl_index`** — each approved URL is crawled via Crawl4AI and indexed via `RAGPipeline.index_document`. `correction_attempts` is incremented; the loop returns to step 1 where `retrieve_local` now sees the newly-indexed web chunks.
+
+Each thread is checkpointed in Postgres (`AsyncPostgresSaver`), so interrupted runs survive restarts and can be resumed from a different request. Every layer is toggle-able via env (`ENABLE_GRAPH_RETRIEVAL`, `ENABLE_CONTEXTUAL_RETRIEVAL`, `ENABLE_CORRECTIVE_RAG`) so the eval harness can A/B their contribution.
 
 ### LangGraph dev / Studio
 
@@ -175,7 +219,33 @@ uv run langgraph dev   # serves the graph on http://127.0.0.1:2024
 # step through interrupts interactively.
 ```
 
-`langgraph.json` declares the uncompiled graph (`sovereign_rag.agent.graph:graph`); the CLI attaches its own in-memory checkpointer, so you don't need Postgres for dev-server play. FastAPI in production uses the Postgres-backed checkpointer.
+`langgraph.json` declares two graphs: `rag_qa` (`graphs/rag_qa/graph.py:make_graph`) and `indexer` (`graphs/indexer/graph.py:make_graph`). The CLI attaches its own in-memory checkpointer, so you don't need Postgres for dev-server play. FastAPI in production uses the Postgres-backed checkpointer.
+
+### Corrective RAG config knobs
+
+All CRAG settings live in `config.py` and are overridable via env:
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `ENABLE_CORRECTIVE_RAG` | `false` | Master toggle. Off → linear graph. On → CRAG self-correcting loop. Requires process restart (build-time structural flag). |
+| `CRAG_CORRECT_THRESHOLD` | `0.70` | Sigmoid-normalized top-1 reranker score ≥ this → Correct (no LLM call). |
+| `CRAG_INCORRECT_THRESHOLD` | `0.30` | Score ≤ this → Incorrect (no LLM call); between the two thresholds → light-tier LLM grader. |
+| `CRAG_MAX_CORRECTIONS` | `1` | Corrective rounds before forcing `generate` with what the graph has. |
+| `CRAG_GRADER_TIER` | `"light"` | LLM tier (`default` / `light` / `nano`) for the middle-band grader call. |
+| `WEB_FALLBACK_MAX_URLS` | `5` | Candidate URLs surfaced to the human for approval per correction. |
+| `WEB_FALLBACK_CRAWL_TOP_K` | `3` | URLs the eval auto-approver picks (graph-driven eval mode); not used on the product path. |
+
+### Web UI CRAG surfaces
+
+When CRAG is enabled, the web UI gains:
+- **HITL approval card** — inline in the Ask conversation: a grade chip + URL checklist (with optional "unverified" badge) + co-equal "Crawl & continue" / "Decline" buttons; live per-URL `crawl_progress` status during crawling.
+- **Grade chip** — appears on the answer meta line (happy path) and in the approval card header.
+- **"Corrected via web" provenance badge** — on the answer meta line + `web` kind icon on crawled-this-turn citations.
+- **Agentic pipeline strip** — shows the three-lane corrective pass (local corpus → correction → re-retrieve) with `grade`, `transform_query`, `web_search`, `crawl_index` stages.
+- **Settings → "Corrective RAG" section** — enable switch, grade-band dual-handle slider, max corrections stepper, max URLs slider.
+- **Run History** — grade chip, fallback indicator, approve/decline decision badge, "used web fallback" filter.
+- **Evals → "Corrective RAG impact" panel** — A/B precision/recall delta cards, fallback-fired rate, grade-distribution bar.
+- **Threads "needs approval" badge** — amber-ringed thread card for paused interrupts.
 
 ## Evaluation
 
@@ -190,7 +260,7 @@ Loads `eval/qa_pairs.json` (a golden set over a self-contained corpus in `eval/c
 ```
 src/sovereign_rag/
   documents.py        # SourceDocument / Chunk / RetrievedChunk contracts
-  config.py           # pydantic-settings, local-by-default
+  config.py           # pydantic-settings, local-by-default (incl. CRAG knobs)
   providers/
     ollama.py         # ChatOllama + OllamaEmbeddings
     reranker.py       # gte-reranker-modernbert-base via sentence-transformers (MPS/CUDA/CPU)
@@ -202,14 +272,23 @@ src/sovereign_rag/
     neo4j_store.py    # LLM entity extraction + vector-seed graph traverse
   retrieval/
     pipeline.py       # RAGPipeline (index_document path + shared helpers)
-  agent/              # LangGraph QA orchestration
-    state.py          # RAGState TypedDict
-    nodes.py          # retrieve_local / web_fallback (HITL) / rerank / generate
-    graph.py          # StateGraph build + compile-with-checkpointer
-  api.py              # FastAPI (graph.ainvoke + /ask/resume)
-langgraph.json        # langgraph dev / Studio entry point
+    grading.py        # hybrid grader: Grade dataclass + grade_candidates()
+  graphs/
+    rag_qa/           # LangGraph QA graph (linear or CRAG loop)
+      state.py        # RAGState TypedDict (incl. CRAG fields)
+      nodes.py        # retrieve_local / rerank / grade / transform_query /
+                      #   web_search / request_approval (interrupt) / crawl_index / generate
+      graph.py        # StateGraph build + compile-with-checkpointer
+    indexer/          # LangGraph indexer graph
+  api/
+    main.py           # FastAPI app + lifespan
+    ask/
+      router.py       # /ask · /ask/stream · /ask/resume · /ask/resume/stream
+      schemas.py      # AskRequest/Response, InterruptModel, ResumeRequest, GradeModel
+    runs/ · threads/ · settings/ · …
+langgraph.json        # exposes rag_qa + indexer graphs for langgraph dev / Studio
 eval/                 # golden set + RAGAS + IR metrics
-tests/                # 122 unit tests (services mocked); integration marked + skipped
+tests/                # unit tests (services mocked); integration marked + skipped
 ```
 
 ## Testing

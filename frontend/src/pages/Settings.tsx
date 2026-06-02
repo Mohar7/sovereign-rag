@@ -10,6 +10,7 @@ import {
   Database,
   Loader2,
   Network,
+  RotateCcw,
   Server,
   Sparkles,
 } from "lucide-react"
@@ -41,6 +42,9 @@ import {
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { GradeBandSlider } from "@/components/crag/grade-band-slider"
+import { Stepper } from "@/components/crag/stepper"
+import { ValueSlider } from "@/components/crag/value-slider"
 import { useHealth } from "@/hooks/use-ask"
 import { useModels, useSettings, useUpdateSettings } from "@/hooks/use-settings"
 import type { ModelChoice, ServiceStatus, SettingsResponse } from "@/lib/api"
@@ -112,6 +116,9 @@ export function SettingsPage() {
                 {t("pages.settings.tabs.indexing")}
               </TabsTrigger>
               <TabsTrigger value="rerank">{t("pages.settings.tabs.rerank")}</TabsTrigger>
+              <TabsTrigger value="corrective">
+                {t("pages.settings.tabs.corrective")}
+              </TabsTrigger>
               <TabsTrigger value="services">
                 {t("pages.settings.tabs.services")}
               </TabsTrigger>
@@ -131,6 +138,9 @@ export function SettingsPage() {
             </TabsContent>
             <TabsContent value="rerank">
               <RerankTab draft={draft} patch={patch} />
+            </TabsContent>
+            <TabsContent value="corrective">
+              <CorrectiveRagTab draft={draft} patch={patch} />
             </TabsContent>
             <TabsContent value="services">
               <ServicesTab />
@@ -611,6 +621,112 @@ function IndexingTab({ draft, patch }: TabProps) {
         onChange={(v) => patch("graph_max_nodes", v)}
       />
     </SectionCard>
+  )
+}
+
+function CorrectiveRagTab({ draft, patch }: TabProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title={t("pages.settings.crag.title")}
+        subtitle={t("pages.settings.crag.subtitle")}
+      >
+        {/* Enable/disable */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <Label className="text-[13px] font-medium">
+              {t("pages.settings.crag.enable.label")}
+            </Label>
+            <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
+              {t("pages.settings.crag.enable.description")}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              enable_corrective_rag
+            </p>
+          </div>
+          <Switch
+            checked={draft.enable_corrective_rag}
+            onCheckedChange={(v) => patch("enable_corrective_rag", v)}
+          />
+        </div>
+
+        {/* Grade band */}
+        <div className="space-y-2">
+          <div>
+            <Label className="text-[13px] font-medium">
+              {t("pages.settings.crag.gradeBand.label")}
+            </Label>
+            <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
+              {t("pages.settings.crag.gradeBand.description")}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              crag_incorrect_threshold = {draft.crag_incorrect_threshold.toFixed(2)} · crag_correct_threshold = {draft.crag_correct_threshold.toFixed(2)}
+            </p>
+          </div>
+          <GradeBandSlider
+            low={draft.crag_incorrect_threshold}
+            high={draft.crag_correct_threshold}
+            onChange={(low, high) => {
+              patch("crag_incorrect_threshold", low)
+              patch("crag_correct_threshold", high)
+            }}
+          />
+        </div>
+
+        {/* Max corrections */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <Label className="text-[13px] font-medium">
+              {t("pages.settings.crag.maxCorrections.label")}
+            </Label>
+            <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
+              {t("pages.settings.crag.maxCorrections.description")}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              crag_max_corrections · default 1
+            </p>
+          </div>
+          <Stepper
+            value={draft.crag_max_corrections}
+            min={0}
+            max={3}
+            onChange={(v) => patch("crag_max_corrections", v)}
+          />
+        </div>
+
+        {/* Web fallback max URLs */}
+        <div className="space-y-2">
+          <div>
+            <Label className="text-[13px] font-medium">
+              {t("pages.settings.crag.maxUrls.label")}
+            </Label>
+            <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
+              {t("pages.settings.crag.maxUrls.description")}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+              web_fallback_max_urls · default 5
+            </p>
+          </div>
+          <ValueSlider
+            value={draft.web_fallback_max_urls}
+            min={1}
+            max={10}
+            onChange={(v) => patch("web_fallback_max_urls", v)}
+          />
+        </div>
+      </SectionCard>
+
+      {/* CRAG status card */}
+      {!draft.enable_corrective_rag && (
+        <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-[12.5px] leading-[1.55]">
+          <RotateCcw className="mt-0.5 size-3.5 shrink-0 text-warning" />
+          <span className="text-foreground">
+            {t("pages.settings.crag.disabledNote")}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }
 

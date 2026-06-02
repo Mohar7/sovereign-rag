@@ -42,6 +42,12 @@ class SettingsResponse(BaseModel):
     adaptive_rerank: bool
     reranker_model: str
     reranker_device: str
+    # Corrective RAG
+    enable_corrective_rag: bool
+    crag_correct_threshold: float
+    crag_incorrect_threshold: float
+    crag_max_corrections: int
+    web_fallback_max_urls: int
 
 
 class SettingsPatch(BaseModel):
@@ -71,6 +77,12 @@ class SettingsPatch(BaseModel):
     rerank_score_floor: float | None = Field(default=None, ge=0.0, le=1.0)
     adaptive_rerank: bool | None = None
     reranker_device: str | None = Field(default=None, pattern="^(auto|mps|cuda|cpu)$")
+    # Corrective RAG
+    enable_corrective_rag: bool | None = None
+    crag_correct_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    crag_incorrect_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    crag_max_corrections: int | None = Field(default=None, ge=0, le=10)
+    web_fallback_max_urls: int | None = Field(default=None, ge=1, le=20)
 
 
 class ModelChoice(BaseModel):

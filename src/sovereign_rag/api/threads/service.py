@@ -125,6 +125,41 @@ async def _latest_run_per_thread(
     return {r[0]: {"model": r[1], "status": r[2], "error_count": int(r[3] or 0)} for r in rows}
 
 
+async def _paused_threads(
+    conn: AsyncConnection[DictRow],
+) -> set[str]:
+    """Return the set of thread_ids that have a pending __interrupt__ write.
+
+    A thread is paused at an interrupt when LangGraph has written an
+    ``__interrupt__`` entry into ``checkpoint_writes`` for its latest
+    checkpoint but the graph has not yet been resumed (i.e. no subsequent
+    checkpoint exists yet).  We use the presence of a ``channel = '__interrupt__'``
+    row as a lightweight proxy — exact enough for the UI badge, zero extra
+    graph-state decoding required.
+    """
+    sql = """
+        SELECT DISTINCT cw.thread_id
+        FROM checkpoint_writes cw
+        JOIN (
+            SELECT thread_id, MAX(checkpoint_id) AS latest_id
+            FROM checkpoints
+            GROUP BY thread_id
+        ) latest ON cw.thread_id = latest.thread_id
+                 AND cw.checkpoint_id = latest.latest_id
+        WHERE cw.channel = '__interrupt__'
+    """
+    try:
+        async with conn.cursor(row_factory=tuple_row) as cur:
+            await cur.execute(sql)
+            rows = await cur.fetchall()
+    except psycopg.errors.UndefinedTable:
+        return set()
+    except Exception as exc:
+        logger.warning("_paused_threads failed: %s", exc)
+        return set()
+    return {r[0] for r in rows}
+
+
 async def list_threads(*, limit: int = 50) -> list[dict[str, Any]]:
     """Return one row per distinct thread_id, latest checkpoint first.
 
@@ -157,6 +192,7 @@ async def list_threads(*, limit: int = 50) -> list[dict[str, Any]]:
                 await cur.execute(sql, (limit,))
                 rows = await cur.fetchall()
             runs_index = await _latest_run_per_thread(conn)
+            paused = await _paused_threads(conn)
     except psycopg.errors.UndefinedTable:
         # First boot — checkpointer.setup() hasn't run yet.
         return []
@@ -180,6 +216,7 @@ async def list_threads(*, limit: int = 50) -> list[dict[str, Any]]:
                 "model": run_meta.get("model"),
                 "status": run_meta.get("status") or "ok",
                 "error_count": int(run_meta.get("error_count") or 0),
+                "paused_at_interrupt": thread_id in paused,
             }
         )
     return out

@@ -22,6 +22,12 @@ import {
 import { AskEmptyHeader } from "@/components/ask/states"
 import { AssistantTurn, UserTurn } from "@/components/ask/turns"
 import { CitationChip, MonoTag } from "@/components/ask/citation-chip"
+import {
+  ApprovalCard,
+  DeclinedChip,
+  type CrawlProgressItem,
+} from "@/components/ask/approval-card"
+import { ProvenanceBadge } from "@/components/crag/provenance-badge"
 import { TurnInspectorSheet, type InspectableTurn } from "@/components/ask/turn-inspector-sheet"
 import { SourceDrawer } from "@/components/library/source-drawer"
 import { Badge } from "@/components/ui/badge"
@@ -33,13 +39,13 @@ import { useAskStream } from "@/hooks/use-ask-stream"
 import { useThreadMessages } from "@/hooks/use-threads"
 import { formatCount } from "@/lib/format"
 import i18n from "@/lib/i18n"
-import type { AskOverrides, CitationModel, DocumentSummary } from "@/lib/api"
+import type { AskOverrides, CitationModel, CandidateUrl, DocumentSummary, GradeModel } from "@/lib/api"
 import type { CitationKind } from "@/components/ask/citation-chip"
 
 interface Turn {
   id: number
   question: string
-  status: "pending" | "ok" | "error"
+  status: "pending" | "awaiting_approval" | "crawling" | "ok" | "error"
   answer?: string | null
   citations?: CitationModel[]
   retrieved?: number
@@ -52,11 +58,29 @@ interface Turn {
   stages?: Record<StageName, StageState>
   /** Total elapsed ms — populated on the final done event. */
   totalMs?: number
+  /** Grade outcome from the grader node. */
+  grade?: GradeModel | null
+  /** Candidate URLs surfaced by the interrupt event. */
+  candidateUrls?: CandidateUrl[]
+  /** Per-URL crawl progress events. */
+  crawlProgress?: CrawlProgressItem[]
+  /** True when the answer was augmented by a web fallback crawl. */
+  fallbackUsed?: boolean
+  /** True when the user declined the web fallback. */
+  declined?: boolean
 }
 
 /** Tag a stage name as known; everything else is a no-op. */
 function isKnownStage(name: string): name is StageName {
-  return name === "retrieve_local" || name === "rerank" || name === "generate"
+  return (
+    name === "retrieve_local" ||
+    name === "rerank" ||
+    name === "grade" ||
+    name === "transform_query" ||
+    name === "web_search" ||
+    name === "crawl_index" ||
+    name === "generate"
+  )
 }
 
 /** Convert a composer config to the wire-shape AskOverrides (drops nulls). */
@@ -69,8 +93,13 @@ function buildOverrides(cfg: ComposerConfig): AskOverrides | null {
   return Object.keys(o).length > 0 ? o : null
 }
 
-/** Backend doesn't yet tag citations with a retrieval kind — default hybrid. */
-function pickKind(_c: CitationModel): CitationKind {
+/**
+ * Infer the citation kind from the source_uri. Citations from the web fallback
+ * crawl have an http(s) URI (e.g. "https://example.com/…"). Local corpus
+ * citations use internal identifiers like "doc_<id> · chunk_<n>".
+ */
+function pickKind(c: CitationModel): CitationKind {
+  if (c.source_uri && /^https?:\/\//i.test(c.source_uri)) return "web"
   return "hybrid"
 }
 
@@ -204,7 +233,7 @@ export function AskPage() {
           // late `done` numbers replace running placeholders.
           const stages = { ...(t.stages ?? emptyStages()) }
           if (final.timings) {
-            for (const name of ["retrieve_local", "rerank", "generate"] as const) {
+            for (const name of ["retrieve_local", "rerank", "grade", "transform_query", "web_search", "crawl_index", "generate"] as const) {
               const v = final.timings[name]
               if (typeof v === "number") {
                 stages[name] = { phase: "done", elapsedMs: v }
@@ -213,7 +242,7 @@ export function AskPage() {
           }
           return {
             ...t,
-            status: "ok",
+            status: "ok" as const,
             // If the backend emitted tokens, t.answer is already populated;
             // only overwrite if the streamed answer was empty.
             answer: t.answer && t.answer.length > 0 ? t.answer : final.answer,
@@ -223,6 +252,10 @@ export function AskPage() {
             threadId: final.thread_id,
             stages,
             totalMs: final.timings?.total,
+            // Provenance: the done event reports whether the web fallback
+            // contributed. (turn.grade is already preserved via ...t from the
+            // onGrade event, so it isn't re-set here.)
+            fallbackUsed: final.fallback_used ?? t.fallbackUsed,
           }
         }),
       )
@@ -236,6 +269,50 @@ export function AskPage() {
         ),
       )
       toast.error(msg)
+    },
+    onGrade: (label, confidence, reason) => {
+      const id = currentTurnId.current
+      if (id == null) return
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === id ? { ...t, grade: { label, confidence, reason } } : t,
+        ),
+      )
+    },
+    onInterrupt: (payload) => {
+      const id = currentTurnId.current
+      if (id == null) return
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                status: "awaiting_approval",
+                candidateUrls: payload.candidate_urls,
+                threadId: payload.thread_id,
+              }
+            : t,
+        ),
+      )
+    },
+    onCrawlProgress: (ev) => {
+      const id = currentTurnId.current
+      if (id == null) return
+      setTurns((prev) =>
+        prev.map((t) => {
+          if (t.id !== id) return t
+          // Upsert: update existing entry by URL or append new one
+          const existing = t.crawlProgress ?? []
+          const idx = existing.findIndex((p) => p.url === ev.url)
+          const updated: CrawlProgressItem[] =
+            idx >= 0
+              ? existing.map((p, i) =>
+                  i === idx ? { url: ev.url, status: ev.status, chunks: ev.chunks } : p,
+                )
+              : [...existing, { url: ev.url, status: ev.status, chunks: ev.chunks }]
+          return { ...t, status: "crawling", crawlProgress: updated }
+        }),
+      )
     },
   })
 
@@ -272,6 +349,32 @@ export function AskPage() {
       rerankTopK: turn.overrides?.rerank_top_k ?? null,
       graphEnabled: turn.overrides?.enable_graph_retrieval ?? null,
     })
+  }
+
+  /** User approved the web fallback — resume the stream with selected URLs. */
+  const handleApprove = (turn: Turn, urls: string[]) => {
+    if (!turn.threadId) return
+    currentTurnId.current = turn.id
+    setTurns((prev) =>
+      prev.map((t) =>
+        t.id === turn.id ? { ...t, status: "crawling", crawlProgress: [] } : t,
+      ),
+    )
+    stream.submitResume({ thread_id: turn.threadId, approved_urls: urls })
+  }
+
+  /** User declined the web fallback — resume with empty approved_urls (signal for decline). */
+  const handleDecline = (turn: Turn) => {
+    if (!turn.threadId) return
+    currentTurnId.current = turn.id
+    setTurns((prev) =>
+      prev.map((t) =>
+        t.id === turn.id
+          ? { ...t, status: "crawling", crawlProgress: [], declined: true }
+          : t,
+      ),
+    )
+    stream.submitResume({ thread_id: turn.threadId, approved_urls: [] })
   }
 
   const inspectedTurnRaw = turns.find((t) => t.id === inspectorTurnId) ?? null
@@ -355,6 +458,8 @@ export function AskPage() {
                     onRegenerate={() => handleRegenerate(t)}
                     onOpenInspector={() => setInspectorTurnId(t.id)}
                     onOpenSource={setSourceCitation}
+                    onApprove={(urls) => handleApprove(t, urls)}
+                    onDecline={() => handleDecline(t)}
                   />
                 ))}
               </div>
@@ -518,13 +623,25 @@ function ConversationTurn({
   onRegenerate,
   onOpenInspector,
   onOpenSource,
+  onApprove,
+  onDecline,
 }: {
   turn: Turn
   onRegenerate?: () => void
   onOpenInspector?: () => void
   onOpenSource?: (cite: CitationModel) => void
+  onApprove?: (urls: string[]) => void
+  onDecline?: () => void
 }) {
   const { t } = useTranslation()
+
+  // Detect whether the corrective path ran
+  const corrective =
+    turn.stages != null &&
+    (turn.stages.transform_query.phase !== "idle" ||
+      turn.stages.web_search.phase !== "idle" ||
+      turn.stages.crawl_index.phase !== "idle")
+
   return (
     <>
       <UserTurn>{turn.question}</UserTurn>
@@ -549,7 +666,11 @@ function ConversationTurn({
         >
           {turn.stages && (
             <div className="mb-3">
-              <PipelineStrip stages={turn.stages} />
+              <PipelineStrip
+                stages={turn.stages}
+                grade={turn.grade}
+                corrective={corrective}
+              />
             </div>
           )}
           {turn.answer && turn.answer.length > 0 ? (
@@ -573,6 +694,61 @@ function ConversationTurn({
               />
             </p>
           )}
+        </AssistantTurn>
+      )}
+
+      {turn.status === "awaiting_approval" && (
+        <AssistantTurn
+          showActions={false}
+          meta={
+            <>
+              <span>sovereign-rag</span>
+              <span aria-hidden>·</span>
+              <span>{t("pages.ask.pipeline.grade")}</span>
+            </>
+          }
+        >
+          {turn.stages && (
+            <div className="mb-3">
+              <PipelineStrip
+                stages={turn.stages}
+                grade={turn.grade}
+                corrective={corrective}
+              />
+            </div>
+          )}
+          <ApprovalCard
+            state="deciding"
+            candidates={turn.candidateUrls ?? []}
+            grade={turn.grade}
+            question={turn.question}
+            onApprove={onApprove ?? (() => {})}
+            onDecline={onDecline ?? (() => {})}
+          />
+        </AssistantTurn>
+      )}
+
+      {turn.status === "crawling" && (
+        <AssistantTurn
+          showActions={false}
+          meta={
+            <>
+              <span>sovereign-rag</span>
+              <span aria-hidden>·</span>
+              <span className="text-primary">{t("crag.crawling.crawling")}</span>
+            </>
+          }
+        >
+          {turn.stages && (
+            <div className="mb-3">
+              <PipelineStrip
+                stages={turn.stages}
+                grade={turn.grade}
+                corrective
+              />
+            </div>
+          )}
+          <ApprovalCard state="crawling" progress={turn.crawlProgress ?? []} />
         </AssistantTurn>
       )}
 
@@ -611,17 +787,70 @@ function ConversationTurn({
                   <span className="text-primary/80">{turn.overrides.model}</span>
                 </>
               )}
+              {turn.fallbackUsed && (
+                <>
+                  <span aria-hidden>·</span>
+                  <ProvenanceBadge />
+                </>
+              )}
             </>
           }
         >
+          {turn.declined && (
+            <div className="mb-3">
+              <DeclinedChip />
+            </div>
+          )}
+          {turn.stages && (
+            <div className="mb-3">
+              <PipelineStrip
+                stages={turn.stages}
+                grade={turn.grade}
+                corrective={corrective}
+              />
+            </div>
+          )}
           <AnswerWithCitations
             answer={turn.answer ?? ""}
             citations={turn.citations ?? []}
             onOpenSource={onOpenSource}
           />
+          {turn.fallbackUsed && (turn.citations ?? []).length > 0 && (
+            <CitationLegend citations={turn.citations ?? []} />
+          )}
         </AssistantTurn>
       )}
     </>
+  )
+}
+
+/**
+ * Small provenance legend below the answer when fallbackUsed is true.
+ * Distinguishes web-crawled citations from local corpus citations.
+ */
+function CitationLegend({ citations }: { citations: CitationModel[] }) {
+  const { t } = useTranslation()
+  const hasWeb = citations.some((c) => pickKind(c) === "web")
+  const hasLocal = citations.some((c) => pickKind(c) !== "web")
+  if (!hasWeb && !hasLocal) return null
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-muted px-3.5 py-3">
+      <span className="font-mono text-[11.5px] text-muted-foreground">
+        {t("crag.citationLegend.title")}
+      </span>
+      {hasWeb && (
+        <span className="inline-flex items-center gap-1.5 text-[12.5px]">
+          <CitationChip n={2} kind="web" />
+          <span className="text-muted-foreground">{t("crag.citationLegend.webCrawled")}</span>
+        </span>
+      )}
+      {hasLocal && (
+        <span className="inline-flex items-center gap-1.5 text-[12.5px]">
+          <CitationChip n={1} kind="vector" />
+          <span className="text-muted-foreground">{t("crag.citationLegend.localCorpus")}</span>
+        </span>
+      )}
+    </div>
   )
 }
 

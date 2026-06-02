@@ -366,16 +366,36 @@ The designer will reuse these across screens. Each gets one spec card:
 ## 7. Data shapes (the UI consumes these)
 
 ```ts
-// /ask response, status="ok"
+// /ask response — status "ok" (completed) or "interrupted" (CRAG paused)
 type AskResponse = {
   thread_id: string;
   status: "ok" | "interrupted";
-  answer: string;            // markdown with inline [1][2]
+  answer: string | null;     // null when status === "interrupted"
   citations: Citation[];
   retrieved: number;         // candidates before rerank
   used: number;              // citations actually surfaced
   fallback_used: boolean;    // did web fallback fire & contribute?
-  interrupt?: AskInterrupt;  // set when status === "interrupted"
+  grade: GradeModel | null;  // set on both ok and interrupted (when CRAG ran)
+  interrupt: InterruptModel | null; // set when status === "interrupted"
+};
+
+type GradeModel = {
+  label: "correct" | "ambiguous" | "incorrect";
+  confidence: number;        // 0..1 sigmoid-normalized top-1 reranker score
+  reason: string;            // one-line explanation surfaced to the UI
+};
+
+type InterruptModel = {
+  reason: "approve_urls";    // stable enum
+  candidate_urls: CandidateUrl[];
+};
+
+type CandidateUrl = {
+  url: string;
+  title: string;
+  snippet: string;
+  verified?: boolean | null; // optional trust hint; null/undefined = unknown;
+                             // false = render "unverified" badge (e.g. reddit.com)
 };
 
 type Citation = {
@@ -388,15 +408,10 @@ type Citation = {
   snippet: string;           // first ~240 chars of chunk.raw_text
 };
 
-type AskInterrupt = {
-  reason: "approve_urls";    // stable enum
-  candidate_urls: { url: string; title: string; snippet: string }[];
-};
-
-// /ask/resume body
+// /ask/resume body — non-empty approved_urls = approve (crawl); [] = decline
 type ResumeRequest = {
   thread_id: string;
-  approved_urls: string[];   // [] = skip all
+  approved_urls: string[];   // [] = decline (answer from local corpus only)
 };
 
 // Document Library entry

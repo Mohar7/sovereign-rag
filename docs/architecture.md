@@ -14,17 +14,24 @@ flowchart TB
   CLIENT["WEB UI &nbsp; React 19 / shadcn-ui / Tailwind v4 / TanStack / i18next EN-RU / light-dark<br/>Ask · Library · Ingest · Threads · Graph · Evals · History · Settings"]
   CLIENT -->|"fetch + SSE token stream"| API
   API["FastAPI &nbsp; api/main.py :8000<br/>routers: ask · ingest · library · threads · runs · graph · evals · settings · health · admin"]
-  API -->|"/ask · /ask/stream"| RL
+  API -->|"/ask · /ask/stream · /ask/resume · /ask/resume/stream"| RL
   API -->|"/ingest · /documents/*"| SRC
 
   subgraph CTRL["CONTROL PLANE &nbsp; LangGraph StateGraph (graphs/rag_qa)"]
     direction LR
-    RL["retrieve_local"] --> COND{"local hits &lt; min?"}
-    COND -->|no| RR["rerank"]
-    COND -->|"yes, once"| WF["web_fallback<br/>interrupt() · HITL approval"]
-    WF -->|"approved URLs · /ask/resume"| RL
-    RR --> GEN["generate<br/>cited answer [n]"]
+    RL["retrieve_local"] --> RR["rerank"]
+    RR --> GR{"grade<br/>(CRAG only)"}
+    GR -->|"correct / exhausted"| GEN["generate<br/>cited answer [n]"]
+    GR -->|"weak &amp; under budget"| TQ["transform_query"]
+    TQ --> WS["web_search"]
+    WS --> RA["request_approval<br/>interrupt() · HITL"]
+    RA -->|"approved_urls · /ask/resume"| CI["crawl_index"]
+    RA -->|"declined ([])"| GEN
+    CI -->|"loop"| RL
+    RR -->|"linear (CRAG off)"| GEN
   end
+  NOTE_CRAG["grade node + corrective loop<br/>enabled only when<br/>ENABLE_CORRECTIVE_RAG=true<br/>(default: off)"]
+  CTRL -.-> NOTE_CRAG
 
   subgraph DATA["DATA PLANE &nbsp; raw async clients (no LangChain wrappers)"]
     MILVUS[("Milvus 2.6<br/>dense HNSW + native BM25<br/>hybrid_search + RRF")]
@@ -36,7 +43,7 @@ flowchart TB
   end
 
   RL --> MILVUS & NEO4J
-  WF --> SRC
+  CI --> SRC
   SRC --> MILVUS & NEO4J
 
   subgraph PROV["MODEL PROVIDERS"]
@@ -59,7 +66,7 @@ flowchart TB
   CTRL -->|"AsyncPostgresSaver (pooled)"| CKPT
   API --> RUNS & CTX
 
-  EVAL["EVAL HARNESS · RAGAS + precision@k / nDCG · eval/evaluate.py"] -.A/B each layer.-> DATA
+  EVAL["EVAL HARNESS · RAGAS + precision@k / nDCG · eval/evaluate.py<br/>EVAL_USE_GRAPH=1 → graph-driven mode + CRAG A/B (on vs off)"] -.A/B each layer.-> DATA
   DEPLOY["DEPLOY · Mac Mini / Tailscale · launchd: api:8000 · langgraph:2024 · vite:5173 · auto-deploy on push to main"]
   API -.deployed as.-> DEPLOY
 ```
@@ -69,10 +76,10 @@ flowchart TB
 | Layer | What it is |
 |---|---|
 | **Web UI** | React 19 + shadcn/ui (Tailwind v4) + TanStack Router/Query/Table/Form + i18next (EN/RU), light/dark. Talks to FastAPI over `fetch`, with SSE for streamed answers. |
-| **API** | FastAPI (`api/main.py`, :8000) with domain routers. A lifespan opens the Postgres pool + the compiled graph. |
-| **Control plane** | LangGraph `StateGraph` (`graphs/rag_qa`): `retrieve_local` → conditional `web_fallback` (HITL `interrupt()`) → `rerank` → `generate`. Checkpointed in Postgres via a **pooled** `AsyncPostgresSaver`, so threads + interrupts survive restarts. |
+| **API** | FastAPI (`api/main.py`, :8000) with domain routers. A lifespan opens the Postgres pool + the compiled graph. CRAG endpoints: `/ask` (may return `status:"interrupted"`), `/ask/resume` (approve/decline), `/ask/stream` + `/ask/resume/stream` (SSE, emitting `grade` / `interrupt` / `crawl_progress` events). |
+| **Control plane** | LangGraph `StateGraph` (`graphs/rag_qa`): linear `retrieve_local → rerank → generate` by default. When `ENABLE_CORRECTIVE_RAG=true`, adds a `grade` node after `rerank` and a self-correcting loop: `transform_query → web_search → request_approval (interrupt()) → crawl_index → retrieve_local`. `crawl_index` loops back for re-retrieval; decline routes directly to `generate`. Checkpointed in Postgres via a **pooled** `AsyncPostgresSaver`, so threads + interrupts survive restarts. |
 | **Data plane** | Raw async clients (not LangChain wrappers): **Milvus 2.6** dense HNSW + native BM25, fused with RRF; **Neo4j 5** chunk+entity graph, vector-seed then 1-hop traverse. |
 | **Ingestion** | Docling (PDF/DOCX) · Crawl4AI (web) · SearXNG (search) · text → recursive chunk → contextual prefix → index into both stores. |
 | **Providers** | LLM: Ollama Cloud `minimax-m3`. Embeddings: OpenAI `text-embedding-3-large` (3072-d). Reranker: `Alibaba-NLP/gte-reranker-modernbert-base` cross-encoder (~149M, multilingual, MPS/CUDA/CPU). |
 | **Persistence** | Postgres 16 (one shared psycopg pool): LangGraph checkpoints, the `runs` audit log, and `thread_context` pins/exclusions. |
-| **Eval & deploy** | RAGAS + precision@k/nDCG harness (`eval/`); deployed on a Mac Mini (Tailscale) as launchd services, auto-deployed on push to `main`. |
+| **Eval & deploy** | RAGAS + precision@k/nDCG harness (`eval/`). Graph-driven mode (`EVAL_USE_GRAPH=1`) drives `make_graph()` directly, auto-approving CRAG interrupts via a programmatic approver — enables CRAG A/B (on vs off) with `grade_distribution` + `fallback_fired` + precision/recall lift in results. Deployed on a Mac Mini (Tailscale) as launchd services, auto-deployed on push to `main`. |

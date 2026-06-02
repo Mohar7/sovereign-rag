@@ -1,4 +1,4 @@
-import { BarChart3, Loader2, RefreshCw, Target, TrendingUp, Zap } from "lucide-react"
+import { ArrowDown, ArrowRight, ArrowUp, BarChart3, Loader2, RefreshCw, RotateCcw, Sparkles, Target, TrendingUp, Zap } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useEvalsLatest } from "@/hooks/use-evals"
-import type { EvalsPerQuestion, EvalsResults } from "@/lib/api"
+import type { CragSummary, EvalsPerQuestion, EvalsResults } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 // ─────────────────────────────────────────────────────────────────
@@ -70,6 +70,7 @@ export function EvalsPage() {
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="p-6 space-y-6">
+            {data.crag && <CragImpactPanel crag={data.crag} />}
             <StatCards data={data} />
             <PerQuestionTable rows={data.retrieval.per_question} />
             <RagasFootnote data={data} />
@@ -96,6 +97,161 @@ export function EvalsPage() {
         </ScrollArea>
       </aside>
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Corrective RAG impact panel
+// ─────────────────────────────────────────────────────────────────
+
+function CragImpactPanel({ crag }: { crag: CragSummary }) {
+  const off = crag.aggregate_off
+  const on = crag.aggregate_on
+  const p5Off = off["precision@5"] ?? 0
+  const p5On = on["precision@5"] ?? 0
+  const r5Off = off["recall@5"] ?? 0
+  const r5On = on["recall@5"] ?? 0
+  const { correct, ambiguous, incorrect } = crag.grade_distribution
+  const gradeTotal = correct + ambiguous + incorrect
+
+  const grades = [
+    { label: "correct", n: correct, colorVar: "var(--success)" },
+    { label: "ambiguous", n: ambiguous, colorVar: "var(--warning)" },
+    { label: "incorrect", n: incorrect, colorVar: "var(--destructive)" },
+  ] as const
+
+  return (
+    <section>
+      <Card className="overflow-hidden">
+        <CardContent className="p-5 space-y-5">
+          {/* Header */}
+          <div className="flex items-center gap-3">
+            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <RotateCcw className="size-4" strokeWidth={2} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[15px] font-semibold">Corrective RAG impact.</div>
+              <div className="text-[12px] text-muted-foreground">
+                Same {crag.n_questions}-question slice, CRAG off vs on.
+              </div>
+            </div>
+            <Badge variant="secondary" className="gap-1 font-mono text-[10.5px]">
+              <Sparkles className="size-3" strokeWidth={2} />
+              on
+            </Badge>
+          </div>
+
+          {/* Paired stat cards */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* precision@5 */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">precision@5</div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="font-mono text-[14px] text-muted-foreground tabular-nums">{p5Off.toFixed(2)}</span>
+                  <ArrowRight className="size-3 text-muted-foreground" strokeWidth={2} />
+                  <span className="font-mono text-[24px] font-semibold tabular-nums">{p5On.toFixed(2)}</span>
+                  {p5On >= p5Off ? (
+                    <Badge variant="outline" className="gap-0.5 border-success/40 font-mono text-[10px] text-success">
+                      <ArrowUp className="size-2.5" strokeWidth={2.5} />
+                      {(p5On - p5Off).toFixed(2)}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="gap-0.5 border-destructive/40 font-mono text-[10px] text-destructive">
+                      <ArrowDown className="size-2.5" strokeWidth={2.5} />
+                      {(p5Off - p5On).toFixed(2)}
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">CRAG off → on</div>
+              </CardContent>
+            </Card>
+
+            {/* recall@5 */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">recall@5</div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="font-mono text-[14px] text-muted-foreground tabular-nums">{r5Off.toFixed(2)}</span>
+                  <ArrowRight className="size-3 text-muted-foreground" strokeWidth={2} />
+                  <span className="font-mono text-[24px] font-semibold tabular-nums">{r5On.toFixed(2)}</span>
+                  {r5On >= r5Off ? (
+                    <Badge variant="outline" className="gap-0.5 border-success/40 font-mono text-[10px] text-success">
+                      <ArrowUp className="size-2.5" strokeWidth={2.5} />
+                      {(r5On - r5Off).toFixed(2)}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="gap-0.5 border-destructive/40 font-mono text-[10px] text-destructive">
+                      <ArrowDown className="size-2.5" strokeWidth={2.5} />
+                      {(r5Off - r5On).toFixed(2)}
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">CRAG off → on</div>
+              </CardContent>
+            </Card>
+
+            {/* fallback fired */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">fallback fired</div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="font-mono text-[24px] font-semibold tabular-nums">{crag.fallback_fired}</span>
+                  <span className="font-mono text-[16px] text-muted-foreground">/ {crag.n_questions}</span>
+                  <span className="text-[12px] text-muted-foreground">questions</span>
+                </div>
+                <div className="mt-2.5 flex gap-[3px]">
+                  {Array.from({ length: crag.n_questions }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-4 flex-1 rounded-sm"
+                      style={{ background: i < crag.fallback_fired ? "var(--primary)" : "var(--muted)" }}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Grade distribution bar */}
+          <div className="border-t border-border pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold">Grade distribution</span>
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {correct}✓ / {ambiguous}~ / {incorrect}✕
+              </span>
+            </div>
+            <div className="flex h-6 overflow-hidden rounded-md border border-border">
+              {grades.map((g) =>
+                g.n > 0 ? (
+                  <div
+                    key={g.label}
+                    className="flex items-center justify-center font-mono text-[11px] font-semibold text-white"
+                    style={{
+                      width: `${(g.n / gradeTotal) * 100}%`,
+                      background: `color-mix(in oklab, ${g.colorVar} 75%, transparent)`,
+                    }}
+                  >
+                    {g.n}
+                  </div>
+                ) : null,
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {grades.map((g) => (
+                <span key={g.label} className="inline-flex items-center gap-1.5 font-mono text-[11.5px] text-muted-foreground">
+                  <span
+                    className="inline-block size-2 rounded-sm"
+                    style={{ background: g.colorVar }}
+                  />
+                  {g.label} · {g.n}
+                </span>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
   )
 }
 

@@ -231,6 +231,23 @@ const STAGE_ROW_META: Record<StageName, { labelKey: string; descriptionKey: stri
     labelKey: "pages.ask.inspector.stages.generate.label",
     descriptionKey: "pages.ask.inspector.stages.generate.description",
   },
+  // CRAG stages — shown in the inspector when present
+  grade: {
+    labelKey: "pages.ask.pipeline.grade",
+    descriptionKey: "pages.ask.pipeline.grade",
+  },
+  transform_query: {
+    labelKey: "pages.ask.pipeline.transformQuery",
+    descriptionKey: "pages.ask.pipeline.transformQuery",
+  },
+  web_search: {
+    labelKey: "pages.ask.pipeline.webSearch",
+    descriptionKey: "pages.ask.pipeline.webSearch",
+  },
+  crawl_index: {
+    labelKey: "pages.ask.pipeline.crawlIndex",
+    descriptionKey: "pages.ask.pipeline.crawlIndex",
+  },
 }
 
 function PipelineTimeline({

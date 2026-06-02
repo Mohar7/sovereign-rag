@@ -2,16 +2,20 @@ import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
   AlertCircle,
+  Check,
   ChevronDown,
   ChevronRight,
+  Database,
   Filter,
   History as HistoryIcon,
   MessageSquare,
   RefreshCw,
+  RotateCcw,
   Search,
   X,
 } from "lucide-react"
 
+import { GradeChip } from "@/components/crag/grade-chip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +40,7 @@ export function HistoryPage() {
   const { t } = useTranslation()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<StatusFilter>("all")
+  const [fallbackOnly, setFallbackOnly] = useState(false)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const runs = useRunsList(100)
 
@@ -44,6 +49,7 @@ export function HistoryPage() {
     const q = search.trim().toLowerCase()
     return all.filter((r) => {
       if (status !== "all" && r.status !== status) return false
+      if (fallbackOnly && !r.fallback_used) return false
       if (!q) return true
       return (
         r.question.toLowerCase().includes(q) ||
@@ -52,7 +58,7 @@ export function HistoryPage() {
         r.thread_id.toLowerCase().includes(q)
       )
     })
-  }, [runs.data, search, status])
+  }, [runs.data, search, status, fallbackOnly])
 
   const toggle = (id: number) =>
     setExpanded((prev) => {
@@ -131,6 +137,24 @@ export function HistoryPage() {
                 </button>
               ))}
             </div>
+          </div>
+          <div>
+            <div className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
+              {t("pages.history.grade")}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFallbackOnly((v) => !v)}
+              className={cn(
+                "mt-1 inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[11px]",
+                fallbackOnly
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-card hover:bg-muted",
+              )}
+            >
+              <RotateCcw className="size-3" strokeWidth={2} />
+              {t("pages.history.usedWebFallback")}
+            </button>
           </div>
         </div>
         <div className="mt-auto border-t border-border px-4 py-3 text-[11px] text-muted-foreground">
@@ -255,6 +279,7 @@ function RunRowItem({
         className={cn(
           "flex w-full items-start gap-3 px-6 py-3 text-left transition-colors",
           "hover:bg-muted/30 focus-visible:outline-none focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+          run.fallback_used && "bg-primary/[0.03]",
         )}
       >
         <span className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground">
@@ -308,6 +333,43 @@ function RunRowItem({
                 retrieved: formatCount(run.retrieved),
               })}
             </span>
+            {run.grade && (
+              <>
+                <span aria-hidden>·</span>
+                <GradeChip label={run.grade} confidence={run.grade_confidence} />
+              </>
+            )}
+            {run.fallback_used && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="inline-flex items-center gap-1 text-primary">
+                  <RotateCcw className="size-3" strokeWidth={2} />
+                  {t("pages.history.fallback")}
+                </span>
+              </>
+            )}
+            {run.decision && (
+              <>
+                <span aria-hidden>·</span>
+                {run.decision === "approved" ? (
+                  <Badge
+                    variant="outline"
+                    className="h-5 gap-1 border-success/40 px-1.5 font-mono text-[10px] text-success"
+                  >
+                    <Check className="size-2.5" strokeWidth={2.5} />
+                    {t("pages.history.approved")}
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="h-5 gap-1 border-muted-foreground/40 px-1.5 font-mono text-[10px] text-muted-foreground"
+                  >
+                    <Database className="size-2.5" strokeWidth={2} />
+                    {t("pages.history.declined")}
+                  </Badge>
+                )}
+              </>
+            )}
             <span aria-hidden>·</span>
             <button
               type="button"
