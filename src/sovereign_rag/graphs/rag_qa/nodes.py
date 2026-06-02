@@ -170,7 +170,7 @@ def _parse_resume(resume: object) -> list[str]:
 async def request_approval(state: RAGState) -> Command[Literal["crawl_index", "generate"]]:
     """Pause for human URL approval, then branch.
 
-    APPROVE (non-empty urls) → crawl_index (loops back to retrieve_local).
+    APPROVE (non-empty urls) → crawl_index.
     DECLINE ([] or anything else) → generate, answering from the local corpus.
 
     No I/O precedes interrupt(), so the mandatory node re-run on resume is a
@@ -256,6 +256,10 @@ async def generate(state: RAGState) -> dict[str, object]:
             answer_text += "\n\n_Confidence is lower than usual — the web was not consulted._"
         elif not state.get("fallback_used"):
             answer_text += "\n\n_Confidence is lower than usual — local sources were thin._"
+        else:
+            answer_text += (
+                "\n\n_Confidence is lower than usual — web sources did not improve coverage._"
+            )
     return {
         "answer": answer_text,
         "citations": citations,
@@ -264,7 +268,13 @@ async def generate(state: RAGState) -> dict[str, object]:
 
 
 __all__ = [
+    "crawl_index",
     "do_rerank",
     "generate",
+    "grade",
+    "request_approval",
     "retrieve_local",
+    "route_after_grade",
+    "transform_query",
+    "web_search",
 ]

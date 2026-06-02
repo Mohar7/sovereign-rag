@@ -150,7 +150,9 @@ class TestGrade:
     async def test_writes_grade_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from sovereign_rag.retrieval.grading import Grade
 
-        async def fake_grade(question, reranked, settings, **kw):  # type: ignore[no-untyped-def]
+        async def fake_grade(
+            question: str, reranked: list[Any], settings: Any
+        ) -> Grade:
             return Grade("ambiguous", 0.46, "thin coverage")
 
         monkeypatch.setattr(agent_nodes, "grade_candidates", fake_grade)
@@ -234,6 +236,10 @@ class TestWebSearch:
             "snippet": "snippet a",
         }
         assert len(out["candidate_urls"]) == 2
+
+        from sovereign_rag.config import get_settings
+
+        assert captured["max_results"] == get_settings().web_fallback_max_urls
 
     async def test_falls_back_to_question_when_no_query(
         self, monkeypatch: pytest.MonkeyPatch
@@ -352,3 +358,37 @@ class TestGenerateCaveat:
 
         out = await agent_nodes.generate({"question": "q", "reranked": reranked, "grade": "correct"})
         assert out["answer"] == "Full answer [1]."
+
+    async def test_weak_grade_after_failed_fallback_appends_caveat(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        chunk = Chunk(doc_id="d", text="t", raw_text="body", position=0, chunk_id="c1")
+        reranked = [RetrievedChunk(chunk=chunk, score=0.4, source="reranked")]
+        fake_llm = AsyncMock()
+        fake_llm.ainvoke.return_value = MagicMock(content="Best-effort answer [1].")
+        monkeypatch.setattr(agent_nodes, "get_chat_model", lambda **_: fake_llm)
+
+        out = await agent_nodes.generate(
+            {
+                "question": "q",
+                "reranked": reranked,
+                "grade": "incorrect",
+                "declined": False,
+                "fallback_used": True,
+            }
+        )
+        assert "Best-effort answer [1]." in out["answer"]
+        assert "did not improve coverage" in out["answer"]
+
+
+# ---------------------------------------------------------------------------
+# web_search — URL-less-hit filter
+# ---------------------------------------------------------------------------
+class TestWebSearchUrlFilter:
+    async def test_drops_hits_without_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def fake_search(query: str, max_results: int = 5) -> list[dict[str, str]]:
+            return [{"title": "no url", "content": "snip"}, {"url": "https://ok", "title": "ok"}]
+
+        monkeypatch.setattr(agent_nodes, "search", fake_search)
+        out = await agent_nodes.web_search({"question": "q", "search_query": "x"})
+        assert [c["url"] for c in out["candidate_urls"]] == ["https://ok"]
