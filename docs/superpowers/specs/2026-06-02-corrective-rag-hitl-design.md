@@ -202,7 +202,7 @@ New shared primitives to port from `crag/components/crag-primitives.jsx`: `Grade
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `enable_corrective_rag` | `True` | master toggle; off → today's linear graph |
+| `enable_corrective_rag` | `False` | master toggle; off → today's linear graph. **Ships off** (the graph `interrupt()`s on weak grades, so it must not be live in prod before the API/SSE can drive the resume). Plan 2 flips the default on once `/ask` is interrupt-aware. Consistent with §12's "keep prod linear until the loop is proven." |
 | `crag_correct_threshold` | `0.70` | ≥ → Correct (skip LLM) |
 | `crag_incorrect_threshold` | `0.30` | ≤ → Incorrect (skip LLM); between → LLM grader |
 | `crag_max_corrections` | `1` | corrective rounds before forcing generate |

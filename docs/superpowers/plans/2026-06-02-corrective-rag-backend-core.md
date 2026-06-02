@@ -51,7 +51,7 @@ from sovereign_rag.config import Settings
 
 def test_crag_defaults() -> None:
     s = Settings(_env_file=None)  # ignore the local .env; assert code defaults
-    assert s.enable_corrective_rag is True
+    assert s.enable_corrective_rag is False
     assert s.crag_correct_threshold == 0.70
     assert s.crag_incorrect_threshold == 0.30
     assert s.crag_max_corrections == 1
@@ -80,7 +80,9 @@ In `src/sovereign_rag/config.py`, immediately after the `adaptive_rerank: bool =
     # is built (no grade/correction nodes). This is a build-time structural flag:
     # changing it requires recompiling the graph (process restart), so it is NOT
     # part of the per-request AskOverrides.
-    enable_corrective_rag: bool = True
+    # Ships OFF: the graph interrupts on weak grades, and the API/SSE that drive
+    # the resume land in Plan 2 — keep prod on the linear graph until then.
+    enable_corrective_rag: bool = False
     # The grade band over the sigmoid-normalized top-1 reranker score (0..1):
     #   score >= correct   → Correct   (answer now, no LLM)
     #   score <= incorrect → Incorrect (correct via web, no LLM)
@@ -1339,3 +1341,7 @@ git commit -m "test(crag): disabled flag preserves the linear topology"
 ## Execution handoff
 
 After this plan is approved, the remaining four plans should be written (each its own spec-derived plan) and executed in spec rollout order: **Plan 2** API+SSE+runs, **Plan 3** eval, **Plan 4** frontend, **Plan 5** docs. Plan 2's `/ask/stream` work must also decide whether to migrate the existing `astream_events(version="v2")` loop to the newer `stream_events(version="v3")` typed-projection API (cleaner `stream.interrupted`/`stream.interrupts` handling) or detect interrupts on v2 via `result["__interrupt__"]` / `aget_state` — capture that decision in Plan 2.
+
+**Carried into Plan 2 from Plan 1's final review:**
+- **C1 — flip the default on.** Plan 1 ships `enable_corrective_rag=False` so merging to the auto-deploying `main` keeps prod on the linear graph. Plan 2 owns flipping it to default-on (or per-deploy enabling it) **only after** `/ask` returns `status:"interrupted"`, `/ask/resume` is live, and `/ask/stream` handles the `grade`/`interrupt`/`crawl_progress` events — otherwise the running app silently swallows interrupts (returns `answer:null`) and parks them in prod Postgres.
+- **M1 — checkpoint serialization.** Heavy `RetrievedChunk`/`Citation` dataclasses in `RAGState` already emit a msgpack "Deserializing unregistered type … will be blocked in a future version" warning on `main`. It becomes load-bearing once interrupt state persists across a human pause (the `candidates`/`reranked` lists sit in prod Postgres for the duration of the pause). Plan 2 should register a `SerializerProtocol`/allowed-modules for these types, or keep heavy retrieval objects out of checkpointed state.
