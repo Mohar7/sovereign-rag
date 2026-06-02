@@ -72,6 +72,7 @@ def _config() -> dict[str, Any]:
 async def test_weak_grade_interrupts_with_candidate_urls(stub_graph: Any) -> None:
     result = await stub_graph.ainvoke({"question": "q"}, _config())
     assert "__interrupt__" in result
+    # Interrupt.value is the stable public API for non-streaming clients (LangGraph >=0.2.24).
     payload = result["__interrupt__"][0].value
     assert payload["reason"] == "approve_urls"
     assert payload["candidate_urls"][0]["url"] == "https://example.com/a"
@@ -89,6 +90,7 @@ async def test_approve_loops_then_answers(stub_graph: Any) -> None:
     assert final["fallback_used"] is True
     assert final["correction_attempts"] == 1
     assert final["answer"]  # generate ran
+    assert "web sources did not improve coverage" in final["answer"]
 
 
 async def test_decline_answers_from_local(stub_graph: Any) -> None:
@@ -102,16 +104,30 @@ async def test_decline_answers_from_local(stub_graph: Any) -> None:
     assert final.get("correction_attempts", 0) == 0
 
 
-async def test_loop_guard_stops_after_max_corrections(stub_graph: Any) -> None:
-    # grade is always 'ambiguous'; after one approved correction the guard
-    # (crag_max_corrections=1) must route to generate, not interrupt again.
+async def test_loop_guard_stops_after_max_corrections(
+    stub_graph: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # grade is always 'ambiguous'; with max_corrections=2 the graph may interrupt
+    # twice, but the third grade (attempts==2) must route to generate, not pause again.
+    from sovereign_rag.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "crag_max_corrections", 2)
     cfg = _config()
-    await stub_graph.ainvoke({"question": "q"}, cfg)
-    final = await stub_graph.ainvoke(
+
+    first = await stub_graph.ainvoke({"question": "q"}, cfg)
+    assert "__interrupt__" in first  # pass 1 → interrupt
+
+    second = await stub_graph.ainvoke(
         Command(resume={"approved_urls": ["https://example.com/a"]}), cfg
     )
-    assert "__interrupt__" not in final
-    assert final["answer"]
+    assert "__interrupt__" in second  # attempts==1 < 2 → interrupt again
+
+    third = await stub_graph.ainvoke(
+        Command(resume={"approved_urls": ["https://example.com/a"]}), cfg
+    )
+    assert "__interrupt__" not in third  # attempts==2 → guard stops the loop
+    assert third["correction_attempts"] == 2
+    assert third["answer"]
 
 
 def test_disabled_builds_linear_graph(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,6 +135,7 @@ def test_disabled_builds_linear_graph(monkeypatch: pytest.MonkeyPatch) -> None:
     retrieve→rerank→generate topology."""
     from sovereign_rag.config import get_settings
 
+    # patch the lru_cache Settings singleton directly; monkeypatch restores it on teardown.
     monkeypatch.setattr(get_settings(), "enable_corrective_rag", False)
     graph = _build_state_graph().compile()
     node_names = set(graph.get_graph().nodes)

@@ -98,7 +98,13 @@ async def grade(state: RAGState) -> dict[str, object]:
 
 def route_after_grade(state: RAGState) -> Literal["transform_query", "generate"]:
     """Conditional edge after grade. Weak + under the correction budget → correct
-    via the web; otherwise answer with what we have."""
+    via the web; otherwise answer with what we have.
+
+    Note: in the live graph this node is only wired as a conditional edge when
+    ``enable_corrective_rag=True`` (a build-time structural switch decided in
+    ``_build_state_graph``).  The ``if not s.enable_corrective_rag`` guard below
+    is defensive for direct/unit callers that invoke the function outside the graph.
+    """
     s = get_settings()
     if not s.enable_corrective_rag:
         return "generate"

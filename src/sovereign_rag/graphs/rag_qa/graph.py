@@ -1,8 +1,19 @@
 """RAG QA graph factory.
 
-Topology::
+The topology is flag-dependent — see ``_build_state_graph`` for the
+authoritative wired edges.  In brief:
 
-    START -> retrieve_local -> rerank -> generate -> END
+* ``enable_corrective_rag=False`` (linear)::
+
+      START → retrieve_local → rerank → generate → END
+
+* ``enable_corrective_rag=True`` (CRAG self-correcting loop)::
+
+      START → retrieve_local → rerank → grade
+        grade ─correct/exhausted──────────────────────────► generate → END
+        grade ─weak & under budget─► transform_query → web_search
+            → request_approval(interrupt) ─approve─► crawl_index → retrieve_local (loop)
+            request_approval ─decline─► generate → END
 
 Two exported factories:
 
@@ -99,9 +110,9 @@ def _build_state_graph() -> StateGraph[RAGState]:
 async def make_graph() -> Any:
     """Build and compile the RAG QA graph without a checkpointer.
 
-    Graph topology::
-
-        START -> retrieve_local -> rerank -> generate -> END
+    The actual topology is flag-dependent; see ``_build_state_graph`` for the
+    source of truth.  Linear when ``enable_corrective_rag=False``, the full
+    CRAG loop when ``True``.
     """
     setup_tracing()
     return _build_state_graph().compile()
