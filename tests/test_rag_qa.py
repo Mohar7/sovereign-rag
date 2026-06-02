@@ -188,3 +188,24 @@ class TestRouteAfterGrade:
             agent_nodes.route_after_grade({"grade": "incorrect", "correction_attempts": 0})
             == "generate"
         )
+
+
+# ---------------------------------------------------------------------------
+# transform_query
+# ---------------------------------------------------------------------------
+class TestTransformQuery:
+    async def test_rewrites_via_light_llm(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_llm = AsyncMock()
+        fake_llm.ainvoke.return_value = MagicMock(content="FERRET activation codeword provisioning")
+        captured: dict[str, Any] = {}
+
+        def fake_get(**kwargs: Any) -> Any:
+            captured.update(kwargs)
+            return fake_llm
+
+        monkeypatch.setattr(agent_nodes, "get_chat_model", fake_get)
+        out = await agent_nodes.transform_query(
+            {"question": "how is FERRET's activation codeword provisioned?"}
+        )
+        assert out["search_query"] == "FERRET activation codeword provisioning"
+        assert captured["model_tier"] == "light"

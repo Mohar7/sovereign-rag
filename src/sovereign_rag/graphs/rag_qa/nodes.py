@@ -107,6 +107,30 @@ def route_after_grade(state: RAGState) -> Literal["transform_query", "generate"]
 
 
 # ---------------------------------------------------------------------------
+# Node: transform_query  (CRAG)
+# ---------------------------------------------------------------------------
+_REWRITE_SYSTEM = (
+    "Rewrite the user's question as a concise web search query. "
+    "Return only the query — keywords, no punctuation, no explanation."
+)
+
+
+async def transform_query(state: RAGState) -> dict[str, object]:
+    """Light-tier rewrite of the question into a keyword web-search query."""
+    llm = get_chat_model(model_tier="light")
+    resp = await llm.ainvoke(
+        [
+            SystemMessage(content=_REWRITE_SYSTEM),
+            HumanMessage(content=state["question"]),
+        ]
+    )
+    text = resp.content if isinstance(resp.content, str) else str(resp.content)
+    query = text.strip() or state["question"]
+    logger.info("transform_query: %r", query)
+    return {"search_query": query}
+
+
+# ---------------------------------------------------------------------------
 # Node: generate
 # ---------------------------------------------------------------------------
 async def generate(state: RAGState) -> dict[str, object]:
