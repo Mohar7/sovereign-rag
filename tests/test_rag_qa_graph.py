@@ -112,3 +112,16 @@ async def test_loop_guard_stops_after_max_corrections(stub_graph: Any) -> None:
     )
     assert "__interrupt__" not in final
     assert final["answer"]
+
+
+def test_disabled_builds_linear_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    """enable_corrective_rag=False → no grade/correction nodes; the original
+    retrieve→rerank→generate topology."""
+    from sovereign_rag.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "enable_corrective_rag", False)
+    graph = _build_state_graph().compile()
+    node_names = set(graph.get_graph().nodes)
+    assert "grade" not in node_names
+    assert "request_approval" not in node_names
+    assert {"retrieve_local", "rerank", "generate"} <= node_names
