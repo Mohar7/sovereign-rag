@@ -14,6 +14,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from sovereign_rag.config import get_settings
 from sovereign_rag.documents import RetrievedChunk
+from sovereign_rag.ingestion.search import search
 from sovereign_rag.retrieval.grading import grade_candidates
 from sovereign_rag.graphs.rag_qa.state import RAGState
 from sovereign_rag.providers.reranker import rerank
@@ -128,6 +129,24 @@ async def transform_query(state: RAGState) -> dict[str, object]:
     query = text.strip() or state["question"]
     logger.info("transform_query: %r", query)
     return {"search_query": query}
+
+
+# ---------------------------------------------------------------------------
+# Node: web_search  (CRAG) — SearXNG only; the interrupt lives in request_approval
+# ---------------------------------------------------------------------------
+async def web_search(state: RAGState) -> dict[str, object]:
+    """Search the web for candidate URLs. No interrupt here, so resuming the
+    graph never re-runs this network call (the resumed node is request_approval)."""
+    s = get_settings()
+    query = state.get("search_query") or state["question"]
+    hits = await search(query, max_results=s.web_fallback_max_urls)
+    candidates = [
+        {"title": h.get("title", ""), "url": h["url"], "snippet": h.get("content", "")}
+        for h in hits
+        if h.get("url")
+    ]
+    logger.info("web_search: %d candidate urls for %r", len(candidates), query)
+    return {"candidate_urls": candidates}
 
 
 # ---------------------------------------------------------------------------

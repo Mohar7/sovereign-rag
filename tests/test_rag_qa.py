@@ -209,3 +209,38 @@ class TestTransformQuery:
         )
         assert out["search_query"] == "FERRET activation codeword provisioning"
         assert captured["model_tier"] == "light"
+
+
+# ---------------------------------------------------------------------------
+# web_search
+# ---------------------------------------------------------------------------
+class TestWebSearch:
+    async def test_searches_and_maps_candidates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+
+        async def fake_search(query: str, max_results: int = 5) -> list[dict[str, str]]:
+            captured.update(query=query, max_results=max_results)
+            return [
+                {"title": "Secret Key", "url": "https://1password.com/sk", "content": "snippet a"},
+                {"title": "Activation", "url": "https://anthropic.com/x", "content": "snippet b"},
+            ]
+
+        monkeypatch.setattr(agent_nodes, "search", fake_search)
+        out = await agent_nodes.web_search({"question": "q", "search_query": "ferret codeword"})
+        assert captured["query"] == "ferret codeword"
+        assert out["candidate_urls"][0] == {
+            "title": "Secret Key",
+            "url": "https://1password.com/sk",
+            "snippet": "snippet a",
+        }
+        assert len(out["candidate_urls"]) == 2
+
+    async def test_falls_back_to_question_when_no_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def fake_search(query: str, max_results: int = 5) -> list[dict[str, str]]:
+            return []
+
+        monkeypatch.setattr(agent_nodes, "search", fake_search)
+        out = await agent_nodes.web_search({"question": "the question"})
+        assert out["candidate_urls"] == []
