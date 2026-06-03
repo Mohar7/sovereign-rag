@@ -85,6 +85,24 @@ def stub_eval_graph(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(nodes, "get_chat_model", _get_chat_model)
 
+    # The graph-eval A/B (run_ab) also runs the ReAct agent arm, which calls
+    # agent.get_chat_model. Stub it too so the agent arm stays fully offline:
+    # the controller answers directly (no tool call) → finalize uses the reply,
+    # so no retrieval and no real LLM/httpx client is created (which otherwise
+    # errors with "Event loop is closed" during teardown in CI).
+    from langchain_core.messages import AIMessage
+
+    from sovereign_rag.graphs.rag_qa import agent as agent_mod
+
+    class _AgentFakeChat:
+        def bind_tools(self, _tools: object) -> _AgentFakeChat:
+            return self
+
+        async def ainvoke(self, _messages: object) -> AIMessage:
+            return AIMessage(content="agent arm answer")
+
+    monkeypatch.setattr(agent_mod, "get_chat_model", lambda **_kw: _AgentFakeChat())
+
 
 async def test_auto_approver_resumes_and_answers(stub_eval_graph: None) -> None:
     from eval.web_fixture import install, uninstall
