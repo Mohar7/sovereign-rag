@@ -109,37 +109,28 @@ def _build_state_graph() -> StateGraph[RAGState]:
 
 
 async def make_graph() -> Any:
-    """Build and compile the RAG QA graph without a checkpointer.
-
-    The actual topology is flag-dependent; see ``_build_state_graph`` for the
-    source of truth.  Linear when ``enable_corrective_rag=False``, the full
-    CRAG loop when ``True``.
-    """
+    """Compile the rag_qa graph (no checkpointer). Topology is flag-dependent:
+    ``enable_react_agent`` → the ReAct agent loop; else linear/CRAG (see
+    ``_build_state_graph``)."""
     setup_tracing()
+    if get_settings().enable_react_agent:
+        from sovereign_rag.graphs.rag_qa.agent import build_agent_graph
+
+        return build_agent_graph().compile()
     return _build_state_graph().compile()
 
 
 def build_graph(checkpointer: BaseCheckpointSaver[Any] | None = None) -> Any:
-    """Compile the graph with a (production) checkpointer.
-
-    FastAPI's lifespan passes an ``AsyncPostgresSaver`` here so QA threads
-    persist across restarts. Tests can pass ``None`` to get an in-memory
-    runtime.
-
-    When a checkpointer is provided we attach the retrieval-dataclass
-    allowlist (see ``shared/checkpoint_serde.py``) so that ``Chunk``,
-    ``RetrievedChunk``, and ``Citation`` are silently allowed on
-    deserialization instead of emitting an "unregistered type" warning on
-    every resume.  The checkpointer's ``serde`` attribute is replaced with a
-    ``JsonPlusSerializer`` constructed with an explicit
-    ``allowed_msgpack_modules`` list for those three types; LangGraph's
-    built-in safe types (messages, datetimes, UUID, Send/Interrupt/Command,
-    etc.) remain allowed automatically via ``SAFE_MSGPACK_TYPES`` and are not
-    stripped by this replacement.
-    """
+    """Compile with a (production) checkpointer. ``enable_react_agent`` selects
+    the ReAct agent loop; otherwise the linear/CRAG graph. The retrieval-dataclass
+    serde allowlist is attached either way."""
     setup_tracing()
     if checkpointer is not None:
         checkpointer.serde = make_serde()
+    if get_settings().enable_react_agent:
+        from sovereign_rag.graphs.rag_qa.agent import build_agent_graph
+
+        return build_agent_graph().compile(checkpointer=checkpointer)
     return _build_state_graph().compile(checkpointer=checkpointer)
 
 

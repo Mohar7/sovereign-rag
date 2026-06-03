@@ -50,6 +50,7 @@ export type StreamEvent =
       candidate_urls: CandidateUrl[]
     }
   | { type: "crawl_progress"; url: string; status: "crawling" | "indexed" | "failed"; chunks?: number }
+  | { type: "agent_step"; tool: string; args?: Record<string, unknown> }
 
 export interface UseAskStreamOptions {
   onOpen?: (threadId: string) => void
@@ -61,6 +62,7 @@ export interface UseAskStreamOptions {
   onGrade?: (label: GradeLabel, confidence: number, reason: string) => void
   onInterrupt?: (payload: Extract<StreamEvent, { type: "interrupt" }>) => void
   onCrawlProgress?: (ev: Extract<StreamEvent, { type: "crawl_progress" }>) => void
+  onAgentStep?: (ev: Extract<StreamEvent, { type: "agent_step" }>) => void
 }
 
 interface UseAskStreamReturn {
@@ -196,6 +198,9 @@ function dispatch(event: StreamEvent, opts: UseAskStreamOptions) {
       return
     case "crawl_progress":
       opts.onCrawlProgress?.(event)
+      return
+    case "agent_step":
+      opts.onAgentStep?.(event)
       return
   }
 }

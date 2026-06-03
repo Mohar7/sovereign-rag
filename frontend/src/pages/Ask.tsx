@@ -28,6 +28,7 @@ import {
   DeclinedChip,
   type CrawlProgressItem,
 } from "@/components/ask/approval-card"
+import { AgentTrace } from "@/components/ask/agent-trace"
 import { ProvenanceBadge } from "@/components/crag/provenance-badge"
 import { TurnInspectorSheet, type InspectableTurn } from "@/components/ask/turn-inspector-sheet"
 import { SourceDrawer } from "@/components/library/source-drawer"
@@ -68,6 +69,8 @@ interface Turn {
   fallbackUsed?: boolean
   /** True when the user declined the web fallback. */
   declined?: boolean
+  /** Ordered agent tool steps for this turn (ReAct mode). */
+  agentSteps?: { tool: string }[]
 }
 
 /** Tag a stage name as known; everything else is a no-op. */
@@ -302,6 +305,17 @@ export function AskPage() {
               : [...existing, { url: ev.url, status: ev.status, chunks: ev.chunks }]
           return { ...t, status: "crawling", crawlProgress: updated }
         }),
+      )
+    },
+    onAgentStep: (ev) => {
+      const id = currentTurnId.current
+      if (id == null) return
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? { ...t, agentSteps: [...(t.agentSteps ?? []), { tool: ev.tool }] }
+            : t,
+        ),
       )
     },
   })
@@ -664,6 +678,7 @@ function ConversationTurn({
             </>
           }
         >
+          {turn.agentSteps && turn.agentSteps.length > 0 && <AgentTrace steps={turn.agentSteps} />}
           {turn.stages && (
             <div className="mb-3">
               <PipelineStrip
@@ -708,6 +723,7 @@ function ConversationTurn({
             </>
           }
         >
+          {turn.agentSteps && turn.agentSteps.length > 0 && <AgentTrace steps={turn.agentSteps} />}
           {turn.stages && (
             <div className="mb-3">
               <PipelineStrip
@@ -739,6 +755,7 @@ function ConversationTurn({
             </>
           }
         >
+          {turn.agentSteps && turn.agentSteps.length > 0 && <AgentTrace steps={turn.agentSteps} />}
           {turn.stages && (
             <div className="mb-3">
               <PipelineStrip
@@ -801,6 +818,7 @@ function ConversationTurn({
               <DeclinedChip />
             </div>
           )}
+          {turn.agentSteps && turn.agentSteps.length > 0 && <AgentTrace steps={turn.agentSteps} />}
           {turn.stages && (
             <div className="mb-3">
               <PipelineStrip

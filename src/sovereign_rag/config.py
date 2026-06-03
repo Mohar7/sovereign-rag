@@ -136,6 +136,16 @@ class Settings(BaseSettings):
     # doc stays retrievable for the immediate re-retrieval; set False to fully
     # enrich web docs (much slower, not recommended for the interactive loop).
     crag_fast_web_index: bool = True
+    # ---- ReAct agent (agentic RAG controller) ----
+    # Build-time structural flag (process restart to change), like
+    # enable_corrective_rag: on → the rag_qa graph is built as a ReAct agent
+    # loop; off → today's linear/CRAG graph. Lets the eval harness A/B them.
+    enable_react_agent: bool = False
+    # Hard cap on agent loop iterations before a forced finalize (bounds cost).
+    react_max_steps: int = 4
+    # How many (question, answer) turns of conversation history the agent keeps
+    # as short-term memory (rolling window).
+    react_history_turns: int = 3
     # Model tier for the middle-band grader (mirrors llm_factory tiers).
     crag_grader_tier: Literal["default", "light", "nano"] = "light"
     # Candidate URLs surfaced to the human for approval per correction.

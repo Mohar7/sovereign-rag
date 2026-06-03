@@ -382,6 +382,14 @@ def _print_table(report: dict[str, Any]) -> None:
             f"    grades         {dist['correct']}✓ / {dist['ambiguous']}~ / {dist['incorrect']}✗"
         )
         print(f"    fallback fired {crag['fallback_fired']} / {crag['n_questions']} questions")
+        if crag.get("aggregate_agent"):
+            print("  REACT AGENT (arm):")
+            for metric, agent_val in crag["aggregate_agent"].items():
+                print(f"    {metric:<14} {agent_val:.3f}")
+            print(f"    mean steps     {crag['agent_mean_steps']:.2f}")
+            print(
+                f"    fallback fired {crag['agent_fallback_fired']} / {crag['n_questions']} questions"
+            )
     print("=" * 72)
 
 

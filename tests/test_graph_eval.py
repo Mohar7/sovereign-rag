@@ -206,3 +206,211 @@ class TestReport:
         assert "CORRECTIVE RAG" in out.upper()
         assert "fallback" in out.lower()
         assert "0.15" in out  # the lift
+
+    def test_print_table_renders_agent_block(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from eval.evaluate import _print_table
+
+        report = {
+            "mode": "graph",
+            "k": 5,
+            "retrieval": {"per_question": [], "aggregate": {"precision@5": 0.86}},
+            "ragas": {"available": False, "scores": {}, "reason": "graph mode"},
+            "crag": {
+                "k": 5,
+                "aggregate_off": {"precision@5": 0.71},
+                "aggregate_on": {"precision@5": 0.86},
+                "lift_on_corrected": {"precision@5": 0.15},
+                "grade_distribution": {"correct": 9, "ambiguous": 3, "incorrect": 2},
+                "fallback_fired": 3,
+                "n_questions": 14,
+                "n_requires_web": 2,
+                "aggregate_agent": {"precision@5": 0.92},
+                "agent_mean_steps": 1.5,
+                "agent_fallback_fired": 1,
+            },
+        }
+        _print_table(report)
+        out = capsys.readouterr().out
+        assert "agent" in out.lower()
+        assert "1.5" in out  # agent_mean_steps
+        assert "0.92" in out  # agent precision
+
+
+# ── Task 1: agent arm of run_graph_eval ────────────────────────────────────
+
+
+class _FakeChat:
+    """Scripted fake chat model — same pattern as tests/test_agent_loop.py."""
+
+    def __init__(self, scripted: list[Any]) -> None:
+        self._scripted = scripted
+        self.calls = 0
+
+    def bind_tools(self, tools: Any) -> _FakeChat:
+        return self
+
+    async def ainvoke(self, messages: Any) -> Any:
+
+        msg = self._scripted[min(self.calls, len(self._scripted) - 1)]
+        self.calls += 1
+        return msg
+
+
+@pytest.fixture
+def stub_agent_eval(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the agent controller + corpus retrieval so the agent arm runs
+    offline with deterministic IR metrics.
+
+    Script: one SearchCorpus tool call → one final answer message.
+    The stubbed corpus returns a chunk whose text contains the question's
+    relevant_substrings so precision@k is non-trivial.
+    """
+    from langchain_core.messages import AIMessage
+
+    import sovereign_rag.graphs.rag_qa.agent as agent_mod
+    import sovereign_rag.graphs.rag_qa.tools as tools_mod
+
+    # --- pipeline stub (same shape as stub_eval_graph) ---
+    pipe = MagicMock()
+    pipe._milvus = MagicMock()
+    pipe._milvus.hybrid_search = AsyncMock(
+        return_value=[_rc("short-lived activation pass; combined with the account secret", 0.9)]
+    )
+    pipe._graph = None
+    pipe.aclose = AsyncMock()
+
+    async def _index_doc(doc: Any, **_kw: Any) -> int:
+        return 3
+
+    pipe.index_document = _index_doc
+    monkeypatch.setattr("sovereign_rag.graphs.rag_qa.nodes.get_pipeline", lambda: pipe)
+    monkeypatch.setattr(graph_eval, "_make_pipeline", lambda: pipe)
+
+    # --- stub run_search_corpus so retrieval returns the matching chunk ---
+    matching_chunk = _rc("short-lived activation pass; combined with the account secret", 0.9)
+    matching_chunk = RetrievedChunk(
+        chunk=Chunk(
+            doc_id="d",
+            text="short-lived activation pass; combined with the account secret",
+            raw_text="short-lived activation pass; combined with the account secret",
+            position=0,
+            chunk_id="c1",
+        ),
+        score=0.9,
+        source="reranked",
+    )
+
+    async def fake_run_search_corpus(query: str, doc_id: str | None) -> tuple[str, dict[str, Any]]:
+        import json
+
+        pool = {"c1": matching_chunk}
+        obs = json.dumps(
+            {"results": [{"id": "c1", "score": 0.9, "snippet": "..."}], "top_score": 0.9}
+        )
+        return obs, {"retrieved_pool": pool, "retrieved": 1}
+
+    monkeypatch.setattr(tools_mod, "run_search_corpus", fake_run_search_corpus)
+
+    # --- scripted controller: one SearchCorpus call then a final answer ---
+    scripted = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "SearchCorpus", "args": {"query": "ferret activation"}, "id": "tc1"}
+            ],
+        ),
+        AIMessage(content="The activation pass is short-lived."),
+        # finalize may call ainvoke again for grounding — supply an extra answer
+        AIMessage(content="Grounded answer about activation pass [1]."),
+    ]
+    fake_chat = _FakeChat(scripted)
+    monkeypatch.setattr(agent_mod, "get_chat_model", lambda **_kw: fake_chat)
+
+
+async def test_agent_arm_returns_rows_with_ir_metrics(stub_agent_eval: None) -> None:
+    """run_graph_eval(enable_agent=True) returns rows with IR metrics + steps."""
+    qa = [
+        {
+            "question": "How is FERRET's activation codeword provisioned?",
+            "ground_truth": "...",
+            "relevant_substrings": ["short-lived activation pass"],
+            "requires_web": False,
+        }
+    ]
+    rows = await graph_eval.run_graph_eval(qa, corpus={}, k=5, enable_agent=True)
+    assert len(rows) == 1
+    row = rows[0]
+    assert "precision@5" in row
+    assert "mrr" in row
+    assert "steps" in row
+    # the matching chunk contains the relevant substring → precision > 0
+    assert row["precision@5"] > 0
+    assert row["steps"] >= 1  # at least one agent step was taken
+
+
+# ── Task 2: three-way A/B ──────────────────────────────────────────────────
+
+
+class TestThreeWayAB:
+    def test_summarize_ab_with_agent_rows(self) -> None:
+        off = [
+            {
+                "question": "q1",
+                "precision@5": 0.0,
+                "recall@5": 0.0,
+                "mrr": 0.0,
+                "ndcg@5": 0.0,
+                "grade": None,
+                "fallback_used": False,
+                "requires_web": True,
+                "steps": 0,
+            },
+        ]
+        on = [
+            {
+                "question": "q1",
+                "precision@5": 0.8,
+                "recall@5": 0.8,
+                "mrr": 0.8,
+                "ndcg@5": 0.8,
+                "grade": "correct",
+                "fallback_used": True,
+                "requires_web": True,
+                "steps": 0,
+            },
+        ]
+        agent_rows = [
+            {
+                "question": "q1",
+                "precision@5": 1.0,
+                "recall@5": 1.0,
+                "mrr": 1.0,
+                "ndcg@5": 1.0,
+                "grade": None,
+                "fallback_used": False,
+                "requires_web": True,
+                "steps": 2,
+            },
+        ]
+        summary = graph_eval.summarize_ab(off, on, k=5, agent_rows=agent_rows)
+        assert "aggregate_agent" in summary
+        assert summary["aggregate_agent"]["precision@5"] == pytest.approx(1.0)
+        assert summary["agent_mean_steps"] == pytest.approx(2.0)
+        assert summary["agent_fallback_fired"] == 0
+
+    async def test_run_ab_returns_per_question_agent(
+        self, stub_eval_graph: None, stub_agent_eval: None
+    ) -> None:
+        qa = [
+            {
+                "question": "How is FERRET's activation codeword provisioned?",
+                "ground_truth": "...",
+                "relevant_substrings": ["short-lived activation pass"],
+                "requires_web": False,
+            }
+        ]
+        result = await graph_eval.run_ab(qa, corpus={}, k=5)
+        assert "per_question_agent" in result
+        assert len(result["per_question_agent"]) == 1
+        assert "aggregate_agent" in result["summary"]
+        assert "agent_mean_steps" in result["summary"]

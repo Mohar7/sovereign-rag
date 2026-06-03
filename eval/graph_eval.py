@@ -47,12 +47,15 @@ async def run_graph_eval(
     corpus: dict[str, str],
     k: int,
     *,
-    enable_crag: bool,
+    enable_crag: bool = False,
+    enable_agent: bool = False,
 ) -> list[dict[str, Any]]:
     """Index the corpus, compile the graph, and evaluate each question through it.
 
-    ``enable_crag`` is set on Settings before the graph is built (it is a
-    build-time structural flag). Returns one row per question with IR metrics +
+    ``enable_crag`` and ``enable_agent`` are set on Settings before the graph is
+    built (they are build-time structural flags). ``enable_agent`` takes
+    precedence: when True, ``enable_corrective_rag`` is forced off so the agent
+    graph is built instead.  Returns one row per question with IR metrics +
     grade + fallback flags.
     """
     from langgraph.checkpoint.memory import InMemorySaver
@@ -64,7 +67,9 @@ async def run_graph_eval(
 
     settings = get_settings()
     orig_crag = settings.enable_corrective_rag
-    settings.enable_corrective_rag = enable_crag
+    orig_agent = settings.enable_react_agent
+    settings.enable_corrective_rag = enable_crag and not enable_agent
+    settings.enable_react_agent = enable_agent
 
     pipeline = _make_pipeline()
     set_pipeline(pipeline)
@@ -97,15 +102,22 @@ async def run_graph_eval(
                 state = await graph.ainvoke(Command(resume={"approved_urls": approved}), config=cfg)
                 guard += 1
 
-            reranked = state.get("reranked") or []
-            row = _row(item["question"], reranked, item.get("relevant_substrings", []), k, state)
+            if enable_agent:
+                from sovereign_rag.graphs.rag_qa.tools import select_grounding
+
+                ranked = select_grounding(state.get("retrieved_pool") or {}, k)
+            else:
+                ranked = state.get("reranked") or []
+            row = _row(item["question"], ranked, item.get("relevant_substrings", []), k, state)
             row["requires_web"] = bool(item.get("requires_web", False))
+            row["steps"] = int(state.get("steps", 0))
             rows.append(row)
     finally:
         close = getattr(pipeline, "aclose", None)
         if close is not None:
             await close()
         settings.enable_corrective_rag = orig_crag
+        settings.enable_react_agent = orig_agent
 
     return rows
 
@@ -116,13 +128,18 @@ def _mean(rows: list[dict[str, Any]], key: str) -> float:
 
 
 def summarize_ab(
-    off_rows: list[dict[str, Any]], on_rows: list[dict[str, Any]], k: int
+    off_rows: list[dict[str, Any]],
+    on_rows: list[dict[str, Any]],
+    k: int,
+    agent_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compare CRAG-off vs CRAG-on rows (same question order).
 
     Reports the overall mean per IR metric for each arm, the lift on the
     ``requires_web`` slice (where correction should help), the grade
     distribution (CRAG-on), and how many questions fired the fallback.
+    When ``agent_rows`` is provided, adds ``aggregate_agent``,
+    ``agent_mean_steps``, and ``agent_fallback_fired`` to the summary.
     """
     metric_keys = [f"precision@{k}", f"recall@{k}", "mrr", f"ndcg@{k}"]
     aggregate_off = {m: _mean(off_rows, m) for m in metric_keys}
@@ -138,7 +155,7 @@ def summarize_ab(
         if g in dist:
             dist[g] += 1
 
-    return {
+    result: dict[str, Any] = {
         "k": k,
         "aggregate_off": aggregate_off,
         "aggregate_on": aggregate_on,
@@ -149,15 +166,24 @@ def summarize_ab(
         "n_requires_web": len(web_on),
     }
 
+    if agent_rows is not None:
+        result["aggregate_agent"] = {m: _mean(agent_rows, m) for m in metric_keys}
+        result["agent_mean_steps"] = round(_mean(agent_rows, "steps"), 2)
+        result["agent_fallback_fired"] = sum(1 for r in agent_rows if r.get("fallback_used"))
+
+    return result
+
 
 async def run_ab(qa_pairs: list[dict[str, Any]], corpus: dict[str, str], k: int) -> dict[str, Any]:
-    """Run the graph eval CRAG-off then CRAG-on and summarize the A/B."""
+    """Run the graph eval CRAG-off, CRAG-on, and agent arms; summarize the A/B."""
     off_rows = await run_graph_eval(qa_pairs, corpus, k, enable_crag=False)
     on_rows = await run_graph_eval(qa_pairs, corpus, k, enable_crag=True)
+    agent_rows = await run_graph_eval(qa_pairs, corpus, k, enable_agent=True)
     return {
-        "summary": summarize_ab(off_rows, on_rows, k),
+        "summary": summarize_ab(off_rows, on_rows, k, agent_rows=agent_rows),
         "per_question_off": off_rows,
         "per_question_on": on_rows,
+        "per_question_agent": agent_rows,
     }
 
 

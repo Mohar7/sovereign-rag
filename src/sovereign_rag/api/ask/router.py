@@ -359,6 +359,11 @@ async def _stream_generator(
                         },
                     )
 
+                elif kind == "on_custom_event" and name == "agent_step":
+                    data = event.get("data") or {}
+                    if isinstance(data, dict):
+                        yield _sse({**data, "type": "agent_step"})
+
                 elif kind == "on_custom_event" and name == "crawl_progress":
                     data = event.get("data") or {}
                     if isinstance(data, dict):
