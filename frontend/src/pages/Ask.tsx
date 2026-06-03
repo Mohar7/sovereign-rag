@@ -21,7 +21,8 @@ import {
 } from "@/components/ask/sources-rail"
 import { AskEmptyHeader } from "@/components/ask/states"
 import { AssistantTurn, UserTurn } from "@/components/ask/turns"
-import { CitationChip, MonoTag } from "@/components/ask/citation-chip"
+import { CitationChip } from "@/components/ask/citation-chip"
+import { MarkdownAnswer } from "@/components/ask/markdown-answer"
 import {
   ApprovalCard,
   DeclinedChip,
@@ -32,15 +33,14 @@ import { TurnInspectorSheet, type InspectableTurn } from "@/components/ask/turn-
 import { SourceDrawer } from "@/components/library/source-drawer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useCorpusStats } from "@/hooks/use-ask"
 import { useAskStream } from "@/hooks/use-ask-stream"
 import { useThreadMessages } from "@/hooks/use-threads"
+import { pickKind } from "@/lib/citation-kind"
 import { formatCount } from "@/lib/format"
 import i18n from "@/lib/i18n"
 import type { AskOverrides, CitationModel, CandidateUrl, DocumentSummary, GradeModel } from "@/lib/api"
-import type { CitationKind } from "@/components/ask/citation-chip"
 
 interface Turn {
   id: number
@@ -91,16 +91,6 @@ function buildOverrides(cfg: ComposerConfig): AskOverrides | null {
   if (cfg.rerankTopK != null) o.rerank_top_k = cfg.rerankTopK
   if (cfg.graphEnabled != null) o.enable_graph_retrieval = cfg.graphEnabled
   return Object.keys(o).length > 0 ? o : null
-}
-
-/**
- * Infer the citation kind from the source_uri. Citations from the web fallback
- * crawl have an http(s) URI (e.g. "https://example.com/…"). Local corpus
- * citations use internal identifiers like "doc_<id> · chunk_<n>".
- */
-function pickKind(c: CitationModel): CitationKind {
-  if (c.source_uri && /^https?:\/\//i.test(c.source_uri)) return "web"
-  return "hybrid"
 }
 
 function citationToSource(c: CitationModel, i: number): SourceItem {
@@ -684,7 +674,7 @@ function ConversationTurn({
             </div>
           )}
           {turn.answer && turn.answer.length > 0 ? (
-            <AnswerWithCitations
+            <MarkdownAnswer
               answer={turn.answer + "▍"}
               citations={turn.citations ?? []}
               onOpenSource={onOpenSource}
@@ -820,7 +810,7 @@ function ConversationTurn({
               />
             </div>
           )}
-          <AnswerWithCitations
+          <MarkdownAnswer
             answer={turn.answer ?? ""}
             citations={turn.citations ?? []}
             onOpenSource={onOpenSource}
@@ -864,52 +854,6 @@ function CitationLegend({ citations }: { citations: CitationModel[] }) {
   )
 }
 
-function EmptyAnswerFallback({ citations }: { citations: CitationModel[] }) {
-  const { t } = useTranslation()
-  if (citations.length === 0) {
-    return (
-      <Card className="bg-muted/50">
-        <CardContent className="p-4 text-sm text-muted-foreground">
-          {t("pages.ask.noAnswerNoSources")}
-        </CardContent>
-      </Card>
-    )
-  }
-  return (
-    <div className="space-y-3">
-      <p className="text-sm italic text-muted-foreground">
-        {t("pages.ask.emptyAnswerFallback", { count: citations.length })}
-      </p>
-      <ol className="space-y-2.5">
-        {citations.map((c, i) => (
-          <li
-            key={c.chunk_id}
-            className="rounded-lg border border-border bg-card p-3"
-          >
-            <div className="flex items-baseline gap-2 text-[12px] text-muted-foreground">
-              <span className="font-mono font-semibold text-primary">
-                [{i + 1}]
-              </span>
-              <span className="truncate font-medium text-foreground">
-                {c.title || t("common.untitled")}
-              </span>
-              {c.page !== null && c.page !== undefined && (
-                <span className="font-mono tabular-nums">p.{c.page}</span>
-              )}
-              <span className="ml-auto font-mono tabular-nums">
-                {c.score.toFixed(2)}
-              </span>
-            </div>
-            <p className="mt-1.5 line-clamp-4 text-[13.5px] leading-[1.55] text-muted-foreground">
-              {c.snippet}
-            </p>
-          </li>
-        ))}
-      </ol>
-    </div>
-  )
-}
-
 function ErrorBanner({ message }: { message: string }) {
   const { t } = useTranslation()
   return (
@@ -939,70 +883,3 @@ function ErrorBanner({ message }: { message: string }) {
   )
 }
 
-function AnswerWithCitations({
-  answer,
-  citations,
-  onOpenSource,
-}: {
-  answer: string
-  citations: CitationModel[]
-  onOpenSource?: (cite: CitationModel) => void
-}) {
-  if (!answer) {
-    return <EmptyAnswerFallback citations={citations} />
-  }
-
-  const parts: React.ReactNode[] = []
-  const re = /\[(\d+)\]/g
-  let lastIdx = 0
-  let match: RegExpExecArray | null
-  let key = 0
-  while ((match = re.exec(answer)) !== null) {
-    if (match.index > lastIdx) parts.push(answer.slice(lastIdx, match.index))
-    const n = parseInt(match[1], 10)
-    const cite = citations[n - 1]
-    parts.push(
-      cite ? (
-        <CitationChip
-          key={`c-${key++}`}
-          n={n}
-          kind={pickKind(cite)}
-          doc={cite.title}
-          page={cite.page ?? undefined}
-          snippet={cite.snippet}
-          onOpen={onOpenSource ? () => onOpenSource(cite) : undefined}
-        />
-      ) : (
-        <MonoTag key={`m-${key++}`}>[{n}]</MonoTag>
-      ),
-    )
-    lastIdx = re.lastIndex
-  }
-  if (lastIdx < answer.length) parts.push(answer.slice(lastIdx))
-
-  const paragraphs = parts.reduce<React.ReactNode[][]>(
-    (acc, node) => {
-      if (typeof node === "string") {
-        const segs = node.split(/\n{2,}/)
-        segs.forEach((seg, i) => {
-          if (i > 0) acc.push([])
-          if (seg) acc[acc.length - 1].push(seg)
-        })
-      } else {
-        acc[acc.length - 1].push(node)
-      }
-      return acc
-    },
-    [[]],
-  )
-
-  return (
-    <>
-      {paragraphs.map((p, i) => (
-        <p key={i} className={i === 0 ? "" : "mt-4"}>
-          {p}
-        </p>
-      ))}
-    </>
-  )
-}

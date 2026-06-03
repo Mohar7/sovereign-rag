@@ -48,19 +48,19 @@ export function CitationChip({
         <button
           type="button"
           className={cn(
-            "inline-flex items-baseline gap-1 align-baseline",
-            "px-1.5 py-0.5 mx-0.5 rounded-[2px]",
-            "text-[11px] font-mono leading-none tabular-nums",
-            "bg-primary/10 text-primary",
-            "border border-primary/20",
+            // Flat bracket marker [n] — restrained + technical, no icon.
+            "inline-flex items-baseline align-baseline",
+            "px-1 mx-0.5 rounded-sm",
+            "text-[12px] font-mono leading-none tabular-nums",
+            "bg-primary/8 text-primary",
+            "border border-primary/15",
             "transition-colors duration-[120ms]",
             "hover:bg-primary/15 hover:border-primary/30",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             className,
           )}
         >
-          <Icon className="size-3 self-center text-primary" strokeWidth={2} />
-          <span className="font-semibold">{n}</span>
+          [{n}]
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={8} className="w-80 p-3">

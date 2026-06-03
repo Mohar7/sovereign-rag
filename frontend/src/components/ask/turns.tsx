@@ -11,10 +11,10 @@ export function UserTurn({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex justify-end">
       <div className="flex max-w-[85%] items-start gap-3">
-        <div className="rounded-2xl bg-secondary px-4 py-3 text-[15px] leading-[1.55] text-secondary-foreground">
+        <div className="rounded-md bg-secondary px-3.5 py-2.5 text-[14px] leading-[1.55] text-secondary-foreground">
           {children}
         </div>
-        <Avatar className="mt-0.5 size-7 bg-[var(--indigo-100)] text-[color:var(--indigo-700)]">
+        <Avatar className="mt-0.5 size-7 rounded-md bg-[var(--indigo-100)] text-[color:var(--indigo-700)]">
           <AvatarFallback className="bg-transparent text-[11px] font-medium">
             MK
           </AvatarFallback>
@@ -57,7 +57,7 @@ export function AssistantTurn({
 
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+      <div className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
         <BrandMark size={16} />
       </div>
       <div className="min-w-0 flex-1">
@@ -66,7 +66,7 @@ export function AssistantTurn({
             {meta}
           </div>
         )}
-        <div className="text-[15px] leading-[1.65] text-foreground">{children}</div>
+        <div className="text-[14px] leading-[1.55] text-foreground">{children}</div>
         {!compact && showActions && (
           <div className="mt-3.5 flex items-center gap-1">
             <Button
