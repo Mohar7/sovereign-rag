@@ -7,6 +7,7 @@ them out via monkeypatch).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Literal
 
@@ -51,8 +52,6 @@ async def _retrieve_deduped(
     Mirrors ``RAGPipeline.retrieve`` up to the rerank step. Kept here so the
     agent node owns dedup independently of the synchronous pipeline path.
     """
-    import asyncio
-
     milvus = pipe._milvus  # type: ignore[attr-defined]
     graph = pipe._graph  # type: ignore[attr-defined]
 
@@ -208,28 +207,68 @@ async def request_approval(state: RAGState) -> Command[Literal["crawl_index", "g
 # ---------------------------------------------------------------------------
 # Node: crawl_index  (CRAG) — crawl approved URLs, index, increment the guard
 # ---------------------------------------------------------------------------
+# Extra wall-clock budget (seconds) added on top of ``crawl_timeout_s`` to form
+# the *hard* per-URL ceiling. Crawl4AI's page_timeout bounds page navigation but
+# NOT browser launch/teardown, so a hostile site (LinkedIn was the live repro)
+# can wedge ``crawl_url`` indefinitely. ``asyncio.wait_for`` at this ceiling
+# guarantees the node always returns — without it, one bad URL hangs the whole
+# /ask stream forever (no ``done`` event ever fires).
+_CRAWL_HARD_TIMEOUT_MARGIN_S = 15.0
+
+
+async def _crawl_and_index_one(pipe: object, url: str, hard_timeout_s: float) -> int:
+    """Crawl + index one URL under a hard timeout, emitting progress events.
+
+    Returns the chunk count indexed (0 on timeout/failure). Never raises: a
+    single bad URL must neither sink the batch nor wedge the graph node."""
+    await adispatch_custom_event("crawl_progress", {"url": url, "status": "crawling"})
+
+    async def _do() -> int:
+        doc = await crawl_url(url)
+        n = await pipe.index_document(doc)  # type: ignore[attr-defined]
+        return int(n)
+
+    try:
+        n = await asyncio.wait_for(_do(), timeout=hard_timeout_s)
+    except TimeoutError:
+        # The hostile-site case: the browser never came back within the ceiling.
+        logger.warning("crawl_index: URL exceeded %.0fs ceiling, skipping: %s", hard_timeout_s, url)
+        await adispatch_custom_event("crawl_progress", {"url": url, "status": "failed"})
+        return 0
+    except Exception:  # one bad URL must not sink the batch
+        logger.warning("crawl_index: skipping URL that failed: %s", url, exc_info=True)
+        await adispatch_custom_event("crawl_progress", {"url": url, "status": "failed"})
+        return 0
+    await adispatch_custom_event("crawl_progress", {"url": url, "status": "indexed", "chunks": n})
+    return n
+
+
 async def crawl_index(state: RAGState) -> dict[str, object]:
-    """Crawl each approved URL and index it via the pipeline, then bump the
+    """Crawl the approved URLs **concurrently** and index each, then bump the
     correction counter. Emits a ``crawl_progress`` custom event per URL
-    (``crawling`` → ``indexed``/``failed``) so the SSE layer can render
-    per-URL progress. A single bad URL is logged + skipped, never fatal.
-    Always loops back to retrieve_local (the guard stops a second round)."""
+    (``crawling`` → ``indexed``/``failed``) so the SSE layer can render per-URL
+    progress.
+
+    Robustness (prod-hardened): each URL runs under a hard wall-clock timeout
+    (``crawl_timeout_s`` + margin) so a site that wedges Crawl4AI past its
+    internal page_timeout degrades to ``failed`` instead of hanging the stream.
+    Crawls fan out up to ``crawl_concurrency`` at a time so a 3-URL approval
+    doesn't serialize three full browser launches. A single bad URL is logged +
+    skipped, never fatal. Always loops back to retrieve_local (the guard stops a
+    second round)."""
+    s = get_settings()
     pipe = get_pipeline()
     urls = state.get("approved_urls") or []
     attempts = state.get("correction_attempts", 0)
-    total = 0
-    for url in urls:
-        await adispatch_custom_event("crawl_progress", {"url": url, "status": "crawling"})
-        try:
-            doc = await crawl_url(url)
-            n = await pipe.index_document(doc)
-            total += n
-            await adispatch_custom_event(
-                "crawl_progress", {"url": url, "status": "indexed", "chunks": n}
-            )
-        except Exception:  # one bad URL must not sink the batch
-            logger.warning("crawl_index: skipping URL that failed: %s", url, exc_info=True)
-            await adispatch_custom_event("crawl_progress", {"url": url, "status": "failed"})
+    hard_timeout_s = s.crawl_timeout_s + _CRAWL_HARD_TIMEOUT_MARGIN_S
+    sem = asyncio.Semaphore(max(1, s.crawl_concurrency))
+
+    async def _guarded(url: str) -> int:
+        async with sem:
+            return await _crawl_and_index_one(pipe, url, hard_timeout_s)
+
+    counts = await asyncio.gather(*(_guarded(u) for u in urls))
+    total = sum(counts)
     logger.info("crawl_index: indexed %d chunks from %d urls", total, len(urls))
     return {
         "web_ingested": total,

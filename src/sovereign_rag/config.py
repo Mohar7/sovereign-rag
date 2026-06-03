@@ -69,7 +69,15 @@ class Settings(BaseSettings):
 
     # ---- Web ingestion ----
     searxng_url: str = "http://localhost:8080"
+    # Crawl4AI page_timeout (seconds). NOTE: this bounds page *navigation*, not
+    # the browser launch/teardown — a hostile site (e.g. LinkedIn) can still
+    # wedge past it, so the CRAG crawl_index node wraps each URL in an
+    # additional hard wall-clock ceiling on top of this.
     crawl_timeout_s: float = 30.0
+    # How many approved URLs the CRAG crawl_index node crawls concurrently.
+    # Each crawl launches its own headless browser, so this caps parallel
+    # browser instances; one slow/hostile URL can't serialize the rest.
+    crawl_concurrency: int = 3
 
     # ---- LangGraph orchestration ----
     # Postgres URI for the AsyncPostgresSaver checkpoint store. Default

@@ -7,6 +7,7 @@ with an InMemorySaver so interrupt()/Command(resume=...) work.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -150,6 +151,94 @@ async def test_loop_guard_stops_after_max_corrections(
     assert "__interrupt__" not in third  # attempts==2 → guard stops the loop
     assert third["correction_attempts"] == 2
     assert third["answer"]
+
+
+# ---------------------------------------------------------------------------
+# crawl_index robustness: a hostile URL (e.g. LinkedIn) can wedge Crawl4AI's
+# browser past its internal page_timeout. The node must bound each URL with a
+# hard wall-clock timeout (degrade to "failed") and crawl URLs in parallel, so
+# one bad URL never hangs the whole /ask stream (the prod symptom).
+# ---------------------------------------------------------------------------
+async def test_crawl_index_hung_url_times_out_and_continues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sovereign_rag.config import get_settings
+
+    # Tiny ceiling so the test is fast: hard timeout = crawl_timeout_s + margin.
+    monkeypatch.setattr(get_settings(), "crawl_timeout_s", 0.05)
+    monkeypatch.setattr(agent_nodes, "_CRAWL_HARD_TIMEOUT_MARGIN_S", 0.05)
+
+    pipe = MagicMock()
+    pipe.index_document = AsyncMock(return_value=7)
+    monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+
+    async def fake_crawl(url: str) -> Any:
+        if "hang" in url:
+            await asyncio.sleep(30)  # never resolves within the hard timeout
+        return MagicMock()
+
+    monkeypatch.setattr(agent_nodes, "crawl_url", fake_crawl)
+
+    events: list[tuple[str | None, str | None]] = []
+
+    async def capture(name: str, data: dict[str, Any]) -> None:
+        events.append((data.get("url"), data.get("status")))
+
+    monkeypatch.setattr(agent_nodes, "adispatch_custom_event", capture)
+
+    state = {
+        "question": "q",
+        "approved_urls": ["https://good/a", "https://hang/b"],
+        "correction_attempts": 0,
+    }
+    # The node itself must return quickly; if it wedges, this wait_for trips.
+    out = await asyncio.wait_for(agent_nodes.crawl_index(state), timeout=5)  # type: ignore[arg-type]
+
+    assert out["correction_attempts"] == 1
+    assert out["web_ingested"] == 7  # only the good URL indexed
+    assert out["fallback_used"] is True
+    assert ("https://good/a", "indexed") in events
+    assert ("https://hang/b", "failed") in events  # timed out → failed, not fatal
+
+
+async def test_crawl_index_runs_urls_in_parallel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sovereign_rag.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "crawl_concurrency", 3)
+
+    pipe = MagicMock()
+    pipe.index_document = AsyncMock(return_value=1)
+    monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+
+    inflight = 0
+    peak = 0
+
+    async def fake_crawl(url: str) -> Any:
+        nonlocal inflight, peak
+        inflight += 1
+        peak = max(peak, inflight)
+        await asyncio.sleep(0.05)
+        inflight -= 1
+        return MagicMock()
+
+    monkeypatch.setattr(agent_nodes, "crawl_url", fake_crawl)
+
+    async def capture(name: str, data: dict[str, Any]) -> None:
+        return None
+
+    monkeypatch.setattr(agent_nodes, "adispatch_custom_event", capture)
+
+    state = {
+        "question": "q",
+        "approved_urls": ["https://a", "https://b", "https://c"],
+        "correction_attempts": 0,
+    }
+    out = await agent_nodes.crawl_index(state)  # type: ignore[arg-type]
+
+    assert out["web_ingested"] == 3
+    assert peak >= 2  # at least two URLs crawled concurrently (serial → peak==1)
 
 
 def test_disabled_builds_linear_graph(monkeypatch: pytest.MonkeyPatch) -> None:

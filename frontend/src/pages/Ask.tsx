@@ -397,7 +397,17 @@ export function AskPage() {
   // is a valid anchor for the context manager.
   const activeThreadId = turns[0]?.threadId ?? restoredThreadId ?? null
 
-  const isRestoring = restoredThreadId !== null && turns.length === 0
+  // Show the restoring spinner only while the history fetch is genuinely in
+  // flight, or while rows have arrived but the build effect above hasn't
+  // populated `turns` yet (one render tick). Once the query settles — success
+  // (incl. an empty/paused thread with no answered turns) or error — stop
+  // spinning and fall through to the composer. Without the query-state guard a
+  // paused/answerless thread (read_thread_messages returns []) spins forever.
+  const hasHistoryRows = (history.data?.length ?? 0) > 0
+  const isRestoring =
+    restoredThreadId !== null &&
+    turns.length === 0 &&
+    (history.isLoading || hasHistoryRows)
   const isEmpty = turns.length === 0 && !isRestoring
   const latestTurn = turns[turns.length - 1]
   const latestCitations = latestTurn?.citations ?? []
