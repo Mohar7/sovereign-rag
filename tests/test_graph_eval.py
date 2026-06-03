@@ -50,7 +50,9 @@ def stub_eval_graph(monkeypatch: pytest.MonkeyPatch) -> None:
     # crawl_index calls at runtime (module-global lookup → the patch is seen).
     state_box = {"crawled": False}
 
-    async def _index_doc(doc: Any) -> int:
+    async def _index_doc(doc: Any, **_kw: Any) -> int:
+        # **_kw absorbs the fast-path flags (with_context / with_graph) the real
+        # crawl_index now passes for the Milvus-only web-fallback index.
         state_box["crawled"] = True
         return 3
 

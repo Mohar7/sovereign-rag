@@ -241,6 +241,38 @@ async def test_crawl_index_runs_urls_in_parallel(
     assert peak >= 2  # at least two URLs crawled concurrently (serial → peak==1)
 
 
+async def test_crawl_index_uses_fast_web_index_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Web fallback must index the fast Milvus-only way (no per-chunk LLM passes)
+    so a long page indexes in seconds instead of blowing the crawl ceiling."""
+    from sovereign_rag.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "crag_fast_web_index", True)
+
+    pipe = MagicMock()
+    pipe.index_document = AsyncMock(return_value=3)
+    monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+
+    async def fake_crawl(url: str) -> Any:
+        return MagicMock()
+
+    monkeypatch.setattr(agent_nodes, "crawl_url", fake_crawl)
+
+    async def capture(name: str, data: dict[str, Any]) -> None:
+        return None
+
+    monkeypatch.setattr(agent_nodes, "adispatch_custom_event", capture)
+
+    out = await agent_nodes.crawl_index(  # type: ignore[arg-type]
+        {"question": "q", "approved_urls": ["https://a"], "correction_attempts": 0}
+    )
+    assert out["web_ingested"] == 3
+    _, kwargs = pipe.index_document.call_args
+    assert kwargs.get("with_context") is False  # contextual-retrieval skipped
+    assert kwargs.get("with_graph") is False  # graph entity-extraction skipped
+
+
 def test_disabled_builds_linear_graph(monkeypatch: pytest.MonkeyPatch) -> None:
     """enable_corrective_rag=False → no grade/correction nodes; the original
     retrieve→rerank→generate topology."""

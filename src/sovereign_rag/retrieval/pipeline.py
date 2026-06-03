@@ -90,29 +90,38 @@ class RAGPipeline:
 
     # ---------- indexing ----------
 
-    async def index_document(self, doc: SourceDocument) -> int:
-        """Chunk, optionally contextualize, then index into Milvus (+ graph)."""
+    async def index_document(
+        self, doc: SourceDocument, *, with_context: bool = True, with_graph: bool = True
+    ) -> int:
+        """Chunk, optionally contextualize, then index into Milvus (+ graph).
+
+        ``with_context`` / ``with_graph`` let latency-sensitive callers (the CRAG
+        web-fallback) skip the two per-chunk LLM passes — contextual-retrieval
+        prefixing and graph entity/relation extraction — and index Milvus-only.
+        The doc stays dense + BM25 retrievable; full enrichment is just deferred.
+        """
         chunks = chunk_document(doc)
         if not chunks:
             return 0
-        if self._s.enable_contextual_retrieval:
+        if with_context and self._s.enable_contextual_retrieval:
             chunks = await contextualize(doc, chunks)
-        return await self.index_chunks(chunks)
+        return await self.index_chunks(chunks, with_graph=with_graph)
 
-    async def index_chunks(self, chunks: list[Chunk]) -> int:
+    async def index_chunks(self, chunks: list[Chunk], *, with_graph: bool = True) -> int:
         """Index a list of already-chunked ``Chunk``s into Milvus (+ graph).
 
         Callers that want fine-grained control over chunking (e.g. the
         structured PRODUCT.md ingester which routes by section type) build
         their own chunks and skip ``index_document``'s recursive splitter
         and LLM-based contextualization — the section path is already in
-        each chunk's ``text``.
+        each chunk's ``text``. ``with_graph=False`` additionally skips the
+        graph entity/relation extraction pass (its per-chunk LLM calls).
         """
         if not chunks:
             return 0
         await self._milvus.ensure_collection()
         tasks: list[Any] = [self._milvus.add_chunks(chunks)]
-        if self._graph is not None:
+        if with_graph and self._graph is not None:
             await self._graph.ensure_schema()
             tasks.append(self._graph.add_chunks(chunks))
         await asyncio.gather(*tasks)

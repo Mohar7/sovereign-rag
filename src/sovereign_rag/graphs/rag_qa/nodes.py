@@ -216,8 +216,15 @@ async def request_approval(state: RAGState) -> Command[Literal["crawl_index", "g
 _CRAWL_HARD_TIMEOUT_MARGIN_S = 15.0
 
 
-async def _crawl_and_index_one(pipe: object, url: str, hard_timeout_s: float) -> int:
+async def _crawl_and_index_one(
+    pipe: object, url: str, hard_timeout_s: float, *, enrich: bool
+) -> int:
     """Crawl + index one URL under a hard timeout, emitting progress events.
+
+    ``enrich=False`` indexes the crawled doc Milvus-only (skips contextual
+    retrieval + graph entity extraction) — those run one LLM call per chunk, so
+    a long page would blow the crawl ceiling and index nothing. The doc stays
+    dense + BM25 retrievable for the immediate re-retrieval.
 
     Returns the chunk count indexed (0 on timeout/failure). Never raises: a
     single bad URL must neither sink the batch nor wedge the graph node."""
@@ -225,7 +232,9 @@ async def _crawl_and_index_one(pipe: object, url: str, hard_timeout_s: float) ->
 
     async def _do() -> int:
         doc = await crawl_url(url)
-        n = await pipe.index_document(doc)  # type: ignore[attr-defined]
+        n = await pipe.index_document(  # type: ignore[attr-defined]
+            doc, with_context=enrich, with_graph=enrich
+        )
         return int(n)
 
     try:
@@ -261,11 +270,14 @@ async def crawl_index(state: RAGState) -> dict[str, object]:
     urls = state.get("approved_urls") or []
     attempts = state.get("correction_attempts", 0)
     hard_timeout_s = s.crawl_timeout_s + _CRAWL_HARD_TIMEOUT_MARGIN_S
+    # Web fallback indexes the fast (Milvus-only) way unless explicitly told to
+    # fully enrich — the per-chunk LLM passes are what blew the timeout in prod.
+    enrich = not s.crag_fast_web_index
     sem = asyncio.Semaphore(max(1, s.crawl_concurrency))
 
     async def _guarded(url: str) -> int:
         async with sem:
-            return await _crawl_and_index_one(pipe, url, hard_timeout_s)
+            return await _crawl_and_index_one(pipe, url, hard_timeout_s, enrich=enrich)
 
     counts = await asyncio.gather(*(_guarded(u) for u in urls))
     total = sum(counts)

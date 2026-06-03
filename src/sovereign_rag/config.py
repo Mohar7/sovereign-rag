@@ -129,6 +129,13 @@ class Settings(BaseSettings):
     crag_incorrect_threshold: float = 0.30
     # How many corrective web rounds before the graph answers with what it has.
     crag_max_corrections: int = 1
+    # Index web-fallback docs the *fast* way: Milvus-only (dense + BM25), skipping
+    # contextual-retrieval prefixing AND graph entity/relation extraction. Both of
+    # those run one LLM call per chunk, so a long page takes minutes — far past the
+    # crawl ceiling — which left the corrective loop indexing 0 chunks. The crawled
+    # doc stays retrievable for the immediate re-retrieval; set False to fully
+    # enrich web docs (much slower, not recommended for the interactive loop).
+    crag_fast_web_index: bool = True
     # Model tier for the middle-band grader (mirrors llm_factory tiers).
     crag_grader_tier: Literal["default", "light", "nano"] = "light"
     # Candidate URLs surfaced to the human for approval per correction.
