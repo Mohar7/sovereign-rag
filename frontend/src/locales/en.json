@@ -121,6 +121,7 @@
       "attach": "attach",
       "openContextManagerTitle": "Open context manager (pins + exclusions)",
       "attachTitle": "Attach",
+      "usedSources": "Used {{count}} sources",
       "suggestions": {
         "summarizeRrf": {
           "title": "Summarize the latest RRF fusion paper in the corpus.",
