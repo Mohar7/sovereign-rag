@@ -143,27 +143,6 @@
           "sub": "evals · last 30 days"
         }
       },
-      "pipeline": {
-        "retrieve": "retrieve",
-        "rerank": "rerank",
-        "generate": "generate",
-        "progress": "retrieval pipeline progress",
-        "grade": "grade",
-        "transformQuery": "rewrite query",
-        "webSearch": "web search",
-        "crawlIndex": "crawl + index",
-        "corpusSufficient": "corpus sufficient",
-        "selfCorrected": "self-corrected",
-        "stages": "stages",
-        "passes": "passes",
-        "pass1": "pass 1 · local corpus",
-        "correction": "correction · web fallback",
-        "pass2": "pass 2 · re-retrieve",
-        "sourcesAmbiguous": "sources ambiguous — correcting",
-        "reRetrieveWithCrawled": "re-retrieve with crawled pages",
-        "humanDecision": "human decision",
-        "approved": "approved"
-      },
       "context": {
         "title": "Context manager",
         "threadLabel": "thread {{id}}",
@@ -203,21 +182,7 @@
         "overridesUsed": "Overrides used",
         "citationsLabel": "Citations ({{count}})",
         "noCitations": "No citations attached to this turn.",
-        "serverDefaults": "Server defaults (no per-question overrides).",
-        "stages": {
-          "retrieve": {
-            "label": "Retrieve",
-            "description": "Milvus hybrid (dense + BM25) + Neo4j graph local search, fused via RRF."
-          },
-          "rerank": {
-            "label": "Rerank",
-            "description": "Cross-encoder reranks the candidate pool down to k_rerank."
-          },
-          "generate": {
-            "label": "Generate",
-            "description": "LLM synthesises a cited answer from the reranked context."
-          }
-        }
+        "serverDefaults": "Server defaults (no per-question overrides)."
       },
       "copiedToast": "Copied.",
       "copyFailedToast": "Couldn't copy — clipboard permission?"
@@ -696,19 +661,6 @@
       "partialFailSubtitle": "The corpus gained {{chunks}} chunks from the page that succeeded.",
       "chunksIndexed": "{{n}} chunks indexed"
     },
-    "crawling": {
-      "crawling": "crawling",
-      "indexing": "indexing",
-      "reRetrieving": "re-retrieving",
-      "answering": "answering"
-    },
-    "declinedChip": "Declined web search · answered from local corpus.",
-    "needsApproval": "needs your approval",
-    "composerLocked": "Resume the pending approval to continue",
-    "citationLegend": {
-      "title": "citations",
-      "webCrawled": "web — crawled this turn",
-      "localCorpus": "local corpus"
-    }
+    "declinedChip": "Declined web search · answered from local corpus."
   }
 }
