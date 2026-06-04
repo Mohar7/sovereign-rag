@@ -1,4 +1,5 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
+import { Copy } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Card, CardContent } from "@/components/ui/card"
@@ -52,9 +53,18 @@ function renderInline(
     const key = `${keyPrefix}-${i++}`
     if (m[1]) {
       out.push(
+        /* design C: 0.86em mono, muted bg, 70% border, radius 4 */
         <code
           key={key}
-          className="rounded-sm bg-muted px-1 py-0.5 font-mono text-[12.5px] text-foreground"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.86em",
+            padding: "1px 5px",
+            borderRadius: 4,
+            background: "var(--muted)",
+            color: "var(--foreground)",
+            border: "1px solid color-mix(in oklab, var(--border) 70%, transparent)",
+          }}
         >
           {tok.slice(1, -1)}
         </code>,
@@ -90,6 +100,8 @@ function renderInline(
             doc={cite.title}
             page={cite.page ?? undefined}
             snippet={cite.snippet}
+            uri={cite.source_uri}
+            score={cite.score}
             onOpen={onOpenSource ? () => onOpenSource(cite) : undefined}
           />
         ) : (
@@ -188,6 +200,72 @@ function parseBlocks(src: string): Block[] {
   return blocks
 }
 
+function CodeFenceBlock({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false)
+  // Detect optional lang from first line (```lang)
+  const lang = ""
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    /* design CodeBlock: radius 8, border, muted bg, header with lang MonoTag + copy icon */
+    <div
+      style={{
+        margin: "14px 0 2px",
+        borderRadius: 8,
+        border: "1px solid var(--border)",
+        background: "var(--muted)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "7px 12px",
+          borderBottom: "1px solid color-mix(in oklab, var(--border) 60%, transparent)",
+        }}
+      >
+        {lang && <MonoTag style={{ fontSize: 10.5 }}>{lang}</MonoTag>}
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          onClick={handleCopy}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            color: copied ? "var(--primary)" : "var(--muted-foreground)",
+          }}
+        >
+          <Copy size={12} />
+        </button>
+      </div>
+      <pre style={{ margin: 0, padding: "12px 14px", overflow: "auto" }}>
+        <code
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 12.5,
+            lineHeight: 1.65,
+            color: "var(--foreground)",
+            whiteSpace: "pre",
+          }}
+        >
+          {code}
+        </code>
+      </pre>
+    </div>
+  )
+}
+
 function renderBlock(
   b: Block,
   key: string,
@@ -196,17 +274,44 @@ function renderBlock(
 ): ReactNode {
   switch (b.type) {
     case "p":
+      /* design AnsP: 14px / 1.62 */
       return (
-        <p key={key} className="leading-[1.55]">
+        <p key={key} style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.62, color: "var(--foreground)" }}>
           {renderInline(b.text, citations, onOpenSource, key)}
         </p>
       )
     case "ul":
+      /* design AnsList: no list-disc; primary dot, gap 7, 14px / 1.55 */
       return (
-        <ul key={key} className="list-disc space-y-1 pl-5 marker:text-muted-foreground">
+        <ul
+          key={key}
+          style={{
+            margin: "10px 0 0",
+            padding: 0,
+            listStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 7,
+          }}
+        >
           {b.items.map((it, j) => (
-            <li key={j} className="leading-[1.55]">
-              {renderInline(it, citations, onOpenSource, `${key}-${j}`)}
+            <li
+              key={j}
+              style={{ display: "flex", gap: 10, fontSize: 14, lineHeight: 1.55, color: "var(--foreground)" }}
+            >
+              <span
+                style={{
+                  flexShrink: 0,
+                  width: 5,
+                  height: 5,
+                  borderRadius: 999,
+                  background: "var(--primary)",
+                  marginTop: 8,
+                }}
+              />
+              <span style={{ flex: 1 }}>
+                {renderInline(it, citations, onOpenSource, `${key}-${j}`)}
+              </span>
             </li>
           ))}
         </ul>
@@ -216,31 +321,34 @@ function renderBlock(
         <ol
           key={key}
           className="list-decimal space-y-1 pl-5 marker:font-mono marker:text-muted-foreground"
+          style={{ fontSize: 14, lineHeight: 1.55 }}
         >
           {b.items.map((it, j) => (
-            <li key={j} className="leading-[1.55]">
+            <li key={j}>
               {renderInline(it, citations, onOpenSource, `${key}-${j}`)}
             </li>
           ))}
         </ol>
       )
-    case "h": {
-      const size = b.level <= 2 ? "text-[15px]" : "text-[14px]"
+    case "h":
+      /* design AnsH: 14.5px / 600, margin 22px top 8px bottom */
       return (
-        <h3 key={key} className={`${size} font-semibold tracking-tight text-foreground`}>
-          {renderInline(b.text, citations, onOpenSource, key)}
-        </h3>
-      )
-    }
-    case "code":
-      return (
-        <pre
+        <div
           key={key}
-          className="overflow-x-auto rounded-sm border border-border bg-muted/60 p-3"
+          style={{
+            fontSize: 14.5,
+            fontWeight: 600,
+            letterSpacing: "-0.005em",
+            color: "var(--foreground)",
+            margin: "22px 0 8px",
+          }}
         >
-          <code className="font-mono text-[12.5px] leading-[1.5] text-foreground">{b.code}</code>
-        </pre>
+          {renderInline(b.text, citations, onOpenSource, key)}
+        </div>
       )
+    case "code":
+      return <CodeFenceBlock key={key} code={b.code} />
+
   }
 }
 
@@ -250,7 +358,11 @@ export function MarkdownAnswer({ answer, citations, onOpenSource }: MarkdownAnsw
   }
   const blocks = parseBlocks(answer)
   return (
-    <div className="space-y-3 text-[14px] leading-[1.55] text-foreground">
+    /* design AnsP baseline: 14px / 1.62; first-child margin reset */
+    <div
+      style={{ fontSize: 14, lineHeight: 1.62, color: "var(--foreground)" }}
+      className="[&>p:first-child]:mt-0"
+    >
       {blocks.map((b, i) => renderBlock(b, `b-${i}`, citations, onOpenSource))}
     </div>
   )

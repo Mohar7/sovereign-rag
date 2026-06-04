@@ -1,15 +1,22 @@
 import { useState } from "react"
-import { ChevronRight, Globe } from "lucide-react"
+import { Box, ChevronDown, ChevronRight, Globe, Share2, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import type { CitationModel } from "@/lib/api"
 import { pickKind } from "@/lib/citation-kind"
-import { cn } from "@/lib/utils"
 import i18n from "@/lib/i18n"
+import { MonoTag } from "./citation-chip"
+
+const KIND_ICON = {
+  hybrid: Sparkles,
+  graph: Share2,
+  vector: Box,
+  web: Globe,
+} as const
 
 /**
  * Inline "Used N sources" disclosure beneath an answer. Collapsed by default;
- * expands to a compact citation list. Replaces the persistent SourcesRail.
+ * expands to a compact bordered citation list. Replaces the persistent SourcesRail.
  */
 export function SourcesDisclosure({
   citations,
@@ -21,41 +28,157 @@ export function SourcesDisclosure({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   if (citations.length === 0) return null
+
   return (
-    <div className="mt-3 text-[12px]">
+    // design: marginTop 16
+    <div style={{ marginTop: 16 }}>
+      {/* Trigger — muted "Used N sources" with chevron + MonoTag */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 font-mono text-muted-foreground hover:text-foreground"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          padding: "3px 8px 3px 6px",
+          borderRadius: 6,
+          cursor: "pointer",
+          color: "var(--muted-foreground)",
+          background: "transparent",
+          border: "none",
+        }}
+        className="hover:[color:var(--foreground)]"
       >
-        <ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} strokeWidth={2} />
-        {t("pages.ask.usedSources", { count: citations.length })}
+        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <MonoTag style={{ fontSize: 11.5 }}>
+          {open ? t("pages.ask.sourcesTitle") : t("pages.ask.usedSources", { count: citations.length })}
+        </MonoTag>
       </button>
+
+      {/* Expanded bordered list */}
       {open && (
-        <ol className="mt-2 flex flex-col gap-1.5">
+        <div
+          style={{
+            marginTop: 6,
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            overflow: "hidden",
+          }}
+        >
           {citations.map((c, i) => {
-            const web = pickKind(c) === "web"
+            const kind = pickKind(c)
+            const KIcon = KIND_ICON[kind] ?? Sparkles
+            const web = kind === "web"
             return (
-              <li key={c.chunk_id}>
-                <button
-                  type="button"
-                  onClick={() => onOpenSource?.(c)}
-                  disabled={!onOpenSource}
-                  className="flex w-full items-baseline gap-2 rounded-sm px-1.5 py-1 text-left hover:bg-muted disabled:hover:bg-transparent"
+              <button
+                key={c.chunk_id}
+                type="button"
+                onClick={() => onOpenSource?.(c)}
+                disabled={!onOpenSource}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 11,
+                  padding: "9px 12px",
+                  width: "100%",
+                  textAlign: "left",
+                  background: "transparent",
+                  border: "none",
+                  cursor: onOpenSource ? "pointer" : "default",
+                  borderBottom:
+                    i < citations.length - 1
+                      ? "1px solid color-mix(in oklab, var(--border) 55%, transparent)"
+                      : "none",
+                }}
+                className="hover:[background:var(--muted)] disabled:hover:[background:transparent]"
+              >
+                {/* Rank chip [n] */}
+                <span
+                  style={{
+                    minWidth: 18,
+                    height: 17,
+                    padding: "0 5px",
+                    borderRadius: 3,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "color-mix(in oklab, var(--primary) 11%, transparent)",
+                    color: "var(--primary)",
+                    border: "1px solid color-mix(in oklab, var(--primary) 28%, transparent)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    flexShrink: 0,
+                  }}
                 >
-                  <span className="font-mono font-semibold text-primary">[{i + 1}]</span>
-                  {web && <Globe className="size-3 shrink-0 self-center text-muted-foreground" strokeWidth={2} />}
-                  <span className="truncate font-medium text-foreground">
-                    {c.title || i18n.t("common.untitled")}
+                  {i + 1}
+                </span>
+
+                {/* Kind icon */}
+                <KIcon
+                  size={13}
+                  style={{ color: "var(--muted-foreground)", flexShrink: 0 }}
+                  strokeWidth={2}
+                />
+
+                {/* Title (truncate) */}
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "var(--foreground)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {c.title || i18n.t("common.untitled")}
+                </span>
+
+                {/* URI mono row with globe if web */}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--muted-foreground)",
+                    overflow: "hidden",
+                    minWidth: 0,
+                    maxWidth: 160,
+                    flexShrink: 1,
+                  }}
+                >
+                  {web && <Globe size={11} style={{ flexShrink: 0 }} strokeWidth={2} />}
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {c.source_uri}
                   </span>
-                  <span className="ml-auto shrink-0 font-mono tabular-nums text-muted-foreground">
-                    {c.score.toFixed(2)}
-                  </span>
-                </button>
-              </li>
+                </span>
+
+                {/* Score */}
+                <MonoTag
+                  style={{
+                    fontSize: 11.5,
+                    color: "var(--foreground)",
+                    flexShrink: 0,
+                    marginLeft: "auto",
+                  }}
+                >
+                  {c.score.toFixed(2)}
+                </MonoTag>
+              </button>
             )
           })}
-        </ol>
+        </div>
       )}
     </div>
   )

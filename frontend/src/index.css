@@ -417,6 +417,41 @@
   50%, 100% { opacity: 0; }
 }
 
+/* Agent-native chat animations (from answer-kit.jsx design spec) */
+
+/* Streaming answer cursor blink */
+@keyframes sr-caret {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.sr-caret {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--primary);
+  animation: sr-caret 1.05s steps(1) infinite;
+}
+
+/* Running step dot pulse */
+@keyframes sr-dotpulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(0.55); opacity: 0.55; }
+}
+.sr-dot-pulse {
+  animation: sr-dotpulse 1s ease-in-out infinite;
+}
+
+/* Spinner for in-flight steps */
+@keyframes sr-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.sr-spin {
+  animation: sr-spin 1s linear infinite;
+}
+
 /* Skeleton shimmer — 1.5s linear sweep, restrained (mirrors the design-system reference) */
 @keyframes sr-skel {
   0%   { background-position: 200% 0; }
