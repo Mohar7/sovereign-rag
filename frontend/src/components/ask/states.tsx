@@ -159,17 +159,7 @@ export function AskHero() {
         scores in hybrid retrieval?
       </UserTurn>
 
-      <AssistantTurn
-        meta={
-          <>
-            <span>sovereign-rag</span>
-            <span aria-hidden>·</span>
-            <span>qwen2.5:7b</span>
-            <span aria-hidden>·</span>
-            <span className="tabular-nums">1.2s · 5 chunks</span>
-          </>
-        }
-      >
+      <AssistantTurn>
         <p>
           RRF fusion is rank-based rather than score-based, which makes it
           robust to differences in score calibration between retrievers{" "}
@@ -317,24 +307,6 @@ export function AskMidStream() {
 
       <AssistantTurn
         showActions={false}
-        meta={
-          <>
-            <span
-              aria-hidden
-              className="size-1.5 rounded-full bg-primary"
-              style={{
-                boxShadow:
-                  "0 0 0 3px color-mix(in oklab, var(--primary) 22%, transparent)",
-                animation: "sr-pulse 1.4s ease-in-out infinite",
-              }}
-            />
-            <span className="text-primary">streaming</span>
-            <span aria-hidden>·</span>
-            <span>qwen2.5:7b</span>
-            <span aria-hidden>·</span>
-            <span className="tabular-nums">47 tok/s</span>
-          </>
-        }
       >
         <p>
           In this corpus we evaluated three strategies: a fixed 512-token
@@ -538,13 +510,6 @@ export function AskError() {
 
       <AssistantTurn
         showActions
-        meta={
-          <>
-            <span>answer without rerank</span>
-            <span aria-hidden>·</span>
-            <span>qwen2.5:7b</span>
-          </>
-        }
       >
         <p>
           The run history lists three candidates:{" "}

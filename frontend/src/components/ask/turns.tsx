@@ -26,7 +26,6 @@ export function UserTurn({ children }: { children: React.ReactNode }) {
 
 export interface AssistantTurnProps {
   children: React.ReactNode
-  meta?: React.ReactNode
   compact?: boolean
   showActions?: boolean
   /** Text to copy when the Copy button is clicked. Falls back to children rendering. */
@@ -39,7 +38,6 @@ export interface AssistantTurnProps {
 
 export function AssistantTurn({
   children,
-  meta,
   compact = false,
   showActions = true,
   copyText,
@@ -61,11 +59,6 @@ export function AssistantTurn({
         <BrandMark size={16} />
       </div>
       <div className="min-w-0 flex-1">
-        {!compact && meta && (
-          <div className="mb-2 flex items-center gap-2.5 font-mono text-[11px] text-muted-foreground">
-            {meta}
-          </div>
-        )}
         <div className="text-[14px] leading-[1.55] text-foreground">{children}</div>
         {!compact && showActions && (
           <div className="mt-3.5 flex items-center gap-1">

@@ -68,23 +68,20 @@ export function ConversationTurn({
       <UserTurn>{turn.question}</UserTurn>
 
       {turn.status === "pending" && (
-        <AssistantTurn
-          showActions={false}
-          meta={
-            <>
-              <span
-                aria-hidden
-                className="size-1.5 rounded-full bg-primary"
-                style={{
-                  boxShadow:
-                    "0 0 0 3px color-mix(in oklab, var(--primary) 22%, transparent)",
-                  animation: "sr-pulse 1.4s ease-in-out infinite",
-                }}
-              />
-              <span className="text-primary">{t("status.streaming")}</span>
-            </>
-          }
-        >
+        <AssistantTurn showActions={false}>
+          {/* Streaming status indicator */}
+          <div className="mb-2 flex items-center gap-2.5 font-mono text-[11px] text-muted-foreground">
+            <span
+              aria-hidden
+              className="size-1.5 rounded-full bg-primary"
+              style={{
+                boxShadow:
+                  "0 0 0 3px color-mix(in oklab, var(--primary) 22%, transparent)",
+                animation: "sr-pulse 1.4s ease-in-out infinite",
+              }}
+            />
+            <span className="text-primary">{t("status.streaming")}</span>
+          </div>
           <ProcessBlock
             steps={turn.agentSteps ?? []}
             status={turn.status}
