@@ -2,11 +2,9 @@ import { useEffect, useState } from "react"
 import {
   ArrowUp,
   ChevronDown,
-  CircuitBoard,
   Loader2,
   Paperclip,
-  Settings2,
-  Sparkles,
+  Settings,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -74,103 +72,8 @@ function ChipButton({ icon, children, active }: ChipButtonProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ModelPickerPopover — queries /api/models for the active provider
+// Internal helpers — model list + dot indicator
 // ─────────────────────────────────────────────────────────────────
-
-function ModelPickerPopover({
-  selected,
-  onSelect,
-}: {
-  selected: string | null
-  onSelect: (next: string | null) => void
-}) {
-  const { t } = useTranslation()
-  const settings = useSettings()
-  const provider = settings.data?.llm_provider ?? "ollama"
-  const models = useModels(provider)
-  const serverDefault =
-    provider === "openai"
-      ? settings.data?.openai_chat_model || settings.data?.llm_model || ""
-      : settings.data?.llm_model || ""
-  const displayed = selected ?? serverDefault ?? "default"
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button type="button" aria-label={t("pages.ask.pickModel")}>
-          <ChipButton icon={<Sparkles strokeWidth={2} />} active={selected !== null}>
-            {displayed || t("pages.ask.modelChip")}
-          </ChipButton>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={10} className="w-80 p-1.5">
-        <div className="flex items-center justify-between px-2.5 pb-1.5 pt-1">
-          <span className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-            {t("pages.ask.modelThisQuestion")}
-          </span>
-          <Badge variant="outline" className="font-mono text-[10px]">
-            {provider}
-          </Badge>
-        </div>
-        <button
-          type="button"
-          onClick={() => onSelect(null)}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left",
-            "hover:bg-accent",
-            selected === null && "bg-accent/50",
-          )}
-        >
-          <Dot selected={selected === null} />
-          <span className="flex flex-1 flex-col">
-            <span className="text-[13px] font-medium">{t("pages.ask.serverDefault")}</span>
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {serverDefault || t("pages.ask.unset")}
-            </span>
-          </span>
-        </button>
-        <div className="my-1 border-t border-border/40" />
-        {models.isLoading && (
-          <div className="flex items-center gap-2 px-2.5 py-2 text-[12px] text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" /> {t("pages.ask.loadingModels")}
-          </div>
-        )}
-        {models.error && (
-          <div className="rounded-md px-2.5 py-2 text-[12px] text-destructive">
-            {models.error.message}
-          </div>
-        )}
-        <div className="max-h-72 overflow-y-auto">
-          {(models.data ?? []).map((m) => {
-            const isSelected = selected === m.id
-            return (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => onSelect(m.id)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left",
-                  "hover:bg-accent",
-                  isSelected && "bg-accent/50",
-                )}
-              >
-                <Dot selected={isSelected} />
-                <span className="flex flex-1 flex-col">
-                  <span className="font-mono text-[12.5px]">{m.label}</span>
-                  {(m.size || m.note) && (
-                    <span className="font-mono text-[10.5px] text-muted-foreground">
-                      {[m.size, m.note].filter(Boolean).join(" · ")}
-                    </span>
-                  )}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
 
 function Dot({ selected }: { selected: boolean }) {
   return (
@@ -183,80 +86,6 @@ function Dot({ selected }: { selected: boolean }) {
     >
       {selected && <span className="size-1.5 rounded-full bg-primary" />}
     </span>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────
-// RetrievalKnobsPopover — k_retrieve / k_rerank with server defaults
-// ─────────────────────────────────────────────────────────────────
-
-function RetrievalKnobsPopover({
-  kRetrieve,
-  kRerank,
-  onChange,
-}: {
-  kRetrieve: number | null
-  kRerank: number | null
-  onChange: (next: { kRetrieve: number | null; kRerank: number | null }) => void
-}) {
-  const { t } = useTranslation()
-  const settings = useSettings()
-  const serverRetrieve = settings.data?.retrieve_top_k ?? 50
-  const serverRerank = settings.data?.rerank_top_k ?? 5
-  const effRetrieve = kRetrieve ?? serverRetrieve
-  const effRerank = kRerank ?? serverRerank
-  const dirty = kRetrieve !== null || kRerank !== null
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button type="button" aria-label={t("pages.ask.retrievalKnobs")}>
-          <ChipButton icon={<Settings2 strokeWidth={2} />} active={dirty}>
-            {t("pages.ask.retrieveRerankChip", {
-              retrieve: effRetrieve,
-              rerank: effRerank,
-            })}
-          </ChipButton>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={10} className="w-80 p-4">
-        <div className="text-[10.5px] font-mono uppercase tracking-wide text-muted-foreground">
-          {t("pages.ask.retrievalThisQuestion")}
-        </div>
-        <div className="mt-3 space-y-4">
-          <SliderRow
-            label="k_retrieve"
-            value={effRetrieve}
-            min={1}
-            max={200}
-            onChange={(v) => onChange({ kRetrieve: v, kRerank })}
-          />
-          <SliderRow
-            label="k_rerank"
-            value={effRerank}
-            min={1}
-            max={50}
-            onChange={(v) => onChange({ kRetrieve, kRerank: v })}
-          />
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3 text-[11px]">
-            <span className="font-mono text-muted-foreground">
-              {t("pages.ask.serverDefaultKnobs", {
-                retrieve: serverRetrieve,
-                rerank: serverRerank,
-              })}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2.5 text-[12px]"
-              onClick={() => onChange({ kRetrieve: null, kRerank: null })}
-              disabled={!dirty}
-            >
-              {t("actions.reset")}
-            </Button>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
   )
 }
 
@@ -291,58 +120,188 @@ function SliderRow({
 }
 
 // ─────────────────────────────────────────────────────────────────
-// GraphTogglePopover
+// SettingsPopover — single gear that stacks model + knobs + graph
 // ─────────────────────────────────────────────────────────────────
 
-function GraphTogglePopover({
-  graphEnabled,
-  onChange,
+function SettingsPopover({
+  cfg,
+  setCfg,
 }: {
-  graphEnabled: boolean | null
-  onChange: (next: boolean | null) => void
+  cfg: ComposerConfig
+  setCfg: (next: ComposerConfig) => void
 }) {
   const { t } = useTranslation()
   const settings = useSettings()
-  const serverDefault = settings.data?.enable_graph_retrieval ?? true
-  const effective = graphEnabled ?? serverDefault
-  const dirty = graphEnabled !== null && graphEnabled !== serverDefault
+  const provider = settings.data?.llm_provider ?? "ollama"
+  const models = useModels(provider)
+
+  const serverDefault =
+    provider === "openai"
+      ? settings.data?.openai_chat_model || settings.data?.llm_model || ""
+      : settings.data?.llm_model || ""
+
+  const serverRetrieve = settings.data?.retrieve_top_k ?? 50
+  const serverRerank = settings.data?.rerank_top_k ?? 5
+  const effRetrieve = cfg.retrieveTopK ?? serverRetrieve
+  const effRerank = cfg.rerankTopK ?? serverRerank
+
+  const serverDefaultGraph = settings.data?.enable_graph_retrieval ?? true
+  const effectiveGraph = cfg.graphEnabled ?? serverDefaultGraph
+
+  const anyActive =
+    cfg.model !== null ||
+    cfg.retrieveTopK !== null ||
+    cfg.rerankTopK !== null ||
+    (cfg.graphEnabled !== null && cfg.graphEnabled !== serverDefaultGraph)
+
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" aria-label={t("pages.ask.graphToggle")}>
-          <ChipButton icon={<CircuitBoard strokeWidth={2} />} active={dirty}>
-            {t("pages.ask.graphChip", {
-              state: effective ? t("pages.ask.on") : t("pages.ask.off"),
-            })}
+        <button type="button" aria-label={t("pages.ask.settings")}>
+          <ChipButton icon={<Settings strokeWidth={2} />} active={anyActive}>
+            {t("pages.ask.settings")}
           </ChipButton>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={10} className="w-72 p-4">
-        <div className="text-[10.5px] font-mono uppercase tracking-wide text-muted-foreground">
-          {t("pages.ask.knowledgeGraphThisQuestion")}
-        </div>
-        <div className="mt-3 flex items-center justify-between">
-          <Label className="text-[13px] font-medium">{t("pages.ask.useGraphRetriever")}</Label>
-          <Switch checked={effective} onCheckedChange={(v) => onChange(v)} />
-        </div>
-        <p className="mt-2 text-[12px] leading-[1.55] text-muted-foreground">
-          {t("pages.ask.graphRetrieverHint")}
-        </p>
-        <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-[11px]">
-          <span className="font-mono text-muted-foreground">
-            {t("pages.ask.serverDefaultState", {
-              state: serverDefault ? t("pages.ask.on") : t("pages.ask.off"),
-            })}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2.5 text-[12px]"
-            onClick={() => onChange(null)}
-            disabled={graphEnabled === null}
+      <PopoverContent align="start" sideOffset={10} className="w-80 p-0">
+        {/* ── Model section ── */}
+        <div className="p-3 pb-2">
+          <div className="flex items-center justify-between pb-1.5">
+            <span className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
+              {t("pages.ask.modelThisQuestion")}
+            </span>
+            <Badge variant="outline" className="font-mono text-[10px]">
+              {provider}
+            </Badge>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCfg({ ...cfg, model: null })}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left",
+              "hover:bg-accent",
+              cfg.model === null && "bg-accent/50",
+            )}
           >
-            {t("actions.reset")}
-          </Button>
+            <Dot selected={cfg.model === null} />
+            <span className="flex flex-1 flex-col">
+              <span className="text-[13px] font-medium">{t("pages.ask.serverDefault")}</span>
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {serverDefault || t("pages.ask.unset")}
+              </span>
+            </span>
+          </button>
+          <div className="my-1 border-t border-border/40" />
+          {models.isLoading && (
+            <div className="flex items-center gap-2 px-2.5 py-2 text-[12px] text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" /> {t("pages.ask.loadingModels")}
+            </div>
+          )}
+          {models.error && (
+            <div className="rounded-md px-2.5 py-2 text-[12px] text-destructive">
+              {models.error.message}
+            </div>
+          )}
+          <div className="max-h-40 overflow-y-auto">
+            {(models.data ?? []).map((m) => {
+              const isSelected = cfg.model === m.id
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setCfg({ ...cfg, model: m.id })}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left",
+                    "hover:bg-accent",
+                    isSelected && "bg-accent/50",
+                  )}
+                >
+                  <Dot selected={isSelected} />
+                  <span className="flex flex-1 flex-col">
+                    <span className="font-mono text-[12.5px]">{m.label}</span>
+                    {(m.size || m.note) && (
+                      <span className="font-mono text-[10.5px] text-muted-foreground">
+                        {[m.size, m.note].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* ── Retrieval knobs section ── */}
+        <div className="border-t border-border/60 p-3 pb-2">
+          <div className="mb-2 font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
+            {t("pages.ask.retrievalThisQuestion")}
+          </div>
+          <div className="space-y-4">
+            <SliderRow
+              label="k_retrieve"
+              value={effRetrieve}
+              min={1}
+              max={200}
+              onChange={(v) => setCfg({ ...cfg, retrieveTopK: v })}
+            />
+            <SliderRow
+              label="k_rerank"
+              value={effRerank}
+              min={1}
+              max={50}
+              onChange={(v) => setCfg({ ...cfg, rerankTopK: v })}
+            />
+            <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2 text-[11px]">
+              <span className="font-mono text-muted-foreground">
+                {t("pages.ask.serverDefaultKnobs", {
+                  retrieve: serverRetrieve,
+                  rerank: serverRerank,
+                })}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2.5 text-[12px]"
+                onClick={() => setCfg({ ...cfg, retrieveTopK: null, rerankTopK: null })}
+                disabled={cfg.retrieveTopK === null && cfg.rerankTopK === null}
+              >
+                {t("actions.reset")}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Graph toggle section ── */}
+        <div className="border-t border-border/60 p-3">
+          <div className="mb-2 font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
+            {t("pages.ask.knowledgeGraphThisQuestion")}
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="text-[13px] font-medium">{t("pages.ask.useGraphRetriever")}</Label>
+            <Switch
+              checked={effectiveGraph}
+              onCheckedChange={(v) => setCfg({ ...cfg, graphEnabled: v })}
+            />
+          </div>
+          <p className="mt-2 text-[12px] leading-[1.55] text-muted-foreground">
+            {t("pages.ask.graphRetrieverHint")}
+          </p>
+          <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2 text-[11px]">
+            <span className="font-mono text-muted-foreground">
+              {t("pages.ask.serverDefaultState", {
+                state: serverDefaultGraph ? t("pages.ask.on") : t("pages.ask.off"),
+              })}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2.5 text-[12px]"
+              onClick={() => setCfg({ ...cfg, graphEnabled: null })}
+              disabled={cfg.graphEnabled === null}
+            >
+              {t("actions.reset")}
+            </Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
@@ -449,31 +408,18 @@ export function Composer({
         </Button>
       </div>
       <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          aria-label={onAttach ? t("pages.ask.openContextManager") : t("pages.ask.attach")}
-          className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors duration-[120ms] hover:bg-muted hover:text-foreground disabled:opacity-40"
-          onClick={onAttach}
-          disabled={!onAttach}
-          title={onAttach ? t("pages.ask.openContextManagerTitle") : t("pages.ask.attachTitle")}
-        >
-          <Paperclip className="size-3.5" strokeWidth={2} />
-        </button>
-        <ModelPickerPopover
-          selected={cfg.model}
-          onSelect={(next) => setCfg({ ...cfg, model: next })}
-        />
-        <RetrievalKnobsPopover
-          kRetrieve={cfg.retrieveTopK}
-          kRerank={cfg.rerankTopK}
-          onChange={({ kRetrieve, kRerank }) =>
-            setCfg({ ...cfg, retrieveTopK: kRetrieve, rerankTopK: kRerank })
-          }
-        />
-        <GraphTogglePopover
-          graphEnabled={cfg.graphEnabled}
-          onChange={(next) => setCfg({ ...cfg, graphEnabled: next })}
-        />
+        {onAttach && (
+          <button
+            type="button"
+            aria-label={t("pages.ask.openContextManager")}
+            className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors duration-[120ms] hover:bg-muted hover:text-foreground"
+            onClick={onAttach}
+            title={t("pages.ask.openContextManagerTitle")}
+          >
+            <Paperclip className="size-3.5" strokeWidth={2} />
+          </button>
+        )}
+        <SettingsPopover cfg={cfg} setCfg={setCfg} />
         {streaming && (
           <span className="ml-auto inline-flex items-center gap-1.5 font-mono text-[11px] text-primary">
             <span

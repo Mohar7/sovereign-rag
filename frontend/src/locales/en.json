@@ -117,6 +117,7 @@
       "useGraphRetriever": "Use graph retriever",
       "graphRetrieverHint": "Neo4j 1-hop traversal joined into RRF fusion. Off when you only want dense + sparse.",
       "serverDefaultState": "server default · {{state}}",
+      "settings": "Settings",
       "openContextManager": "open context manager",
       "attach": "attach",
       "openContextManagerTitle": "Open context manager (pins + exclusions)",
