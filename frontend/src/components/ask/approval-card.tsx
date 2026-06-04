@@ -1,15 +1,14 @@
 import { useState } from "react"
 import {
+  AlertTriangle,
   Check,
+  CircleCheck,
   Database,
   Globe,
   Loader2,
-  X,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { FavTile } from "@/components/crag/fav-tile"
 import { cn } from "@/lib/utils"
 import type { CandidateUrl, GradeModel } from "@/lib/api"
@@ -65,28 +64,6 @@ export function ApprovalCard(props: ApprovalCardProps) {
   return <ReceiptCard {...(props as ApprovalCardReceiptProps)} />
 }
 
-// ── Card shell ────────────────────────────────────────────────────
-
-function CardShell({
-  children,
-  className,
-}: {
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-xl border border-border bg-card",
-        "crag-approval-slide",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  )
-}
-
 // ── Deciding card ─────────────────────────────────────────────────
 
 function DecidingCard({
@@ -101,17 +78,6 @@ function DecidingCard({
   const [checked, setChecked] = useState<Set<string>>(
     () => new Set(candidates.filter((c) => c.verified !== false).map((c) => c.url)),
   )
-
-  const allChecked = checked.size === candidates.length
-  const noneChecked = checked.size === 0
-
-  const toggleAll = () => {
-    if (allChecked) {
-      setChecked(new Set())
-    } else {
-      setChecked(new Set(candidates.map((c) => c.url)))
-    }
-  }
 
   const toggleOne = (url: string) => {
     setChecked((prev) => {
@@ -130,123 +96,228 @@ function DecidingCard({
   const whyReason = grade?.reason ?? null
 
   return (
-    <CardShell>
-      {/* Heading */}
-      <div className="border-b border-border px-4 py-3.5">
-        <div className="text-[14px] font-semibold leading-[1.3] text-foreground">
-          {t("crag.approval.heading")}
-        </div>
-        {whyReason && (
-          <div className="mt-1 text-[12.5px] leading-[1.55] text-muted-foreground line-clamp-1">
-            <span className="mr-1 font-medium text-foreground">{t("crag.approval.why")}:</span>
-            {whyReason}
-          </div>
-        )}
-      </div>
-
-      {/* Select-all row */}
+    <div
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: 10,
+        background: "var(--card)",
+        overflow: "hidden",
+      }}
+    >
+      {/* Globe tile + heading + paused badge */}
       <div
-        className="flex items-center gap-3 border-b px-4 py-2.5"
-        style={{ borderColor: "color-mix(in oklab, var(--border) 60%, transparent)" }}
+        style={{
+          padding: "14px 16px 12px",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 11,
+        }}
       >
-        <Checkbox
-          checked={allChecked ? true : noneChecked ? false : "indeterminate"}
-          onCheckedChange={toggleAll}
-          aria-label={t("crag.approval.selectAll")}
-        />
-        <span className="text-[12.5px] font-medium">
-          {t("crag.approval.selectAll")}
+        <span
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            flexShrink: 0,
+            background: "color-mix(in oklab, var(--primary) 12%, transparent)",
+            color: "var(--primary)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Globe size={16} />
         </span>
-        <span className="rounded-[2px] border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11.5px] text-foreground">
-          {t("crag.approval.candidatesInfo", {
-            count: candidates.length,
-            top: checked.size,
-          })}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "var(--foreground)",
+              lineHeight: 1.4,
+            }}
+          >
+            {t("crag.approval.heading")}
+          </div>
+          {whyReason && (
+            <div
+              style={{
+                fontSize: 12.5,
+                color: "var(--muted-foreground)",
+                lineHeight: 1.5,
+                marginTop: 3,
+              }}
+            >
+              {whyReason}
+            </div>
+          )}
+        </div>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            height: 21,
+            padding: "0 7px",
+            borderRadius: 6,
+            flexShrink: 0,
+            background: "color-mix(in oklab, var(--warning) 13%, transparent)",
+            color: "var(--warning)",
+            border: "1px solid color-mix(in oklab, var(--warning) 32%, transparent)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 10.5,
+            fontWeight: 600,
+          }}
+        >
+          {t("crag.approval.paused")}
         </span>
       </div>
 
       {/* Candidate rows */}
-      {candidates.map((c, i) => {
-        const isChecked = checked.has(c.url)
-        const isLast = i === candidates.length - 1
-        return (
-          <div
-            key={c.url}
-            className={cn(
-              "flex items-start gap-3 px-4 py-3",
-              !isLast && "border-b",
-              isChecked && "bg-primary/[0.05]",
-            )}
-            style={
-              !isLast
-                ? { borderColor: "color-mix(in oklab, var(--border) 60%, transparent)" }
-                : undefined
-            }
-          >
-            <div className="pt-0.5">
-              <Checkbox
-                checked={isChecked}
-                onCheckedChange={() => toggleOne(c.url)}
-                aria-label={c.title}
-              />
-            </div>
-            <FavTile domain={extractDomain(c.url)} size={20} className="mt-0.5" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[13.5px] font-semibold text-foreground">
-                  {extractDomain(c.url)}
-                </span>
-                <Globe className="size-3 shrink-0 text-muted-foreground" />
-                {c.verified === false && (
-                  <span className="rounded-[2px] border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    {t("crag.approval.unverified")}
-                  </span>
-                )}
-              </div>
-              {c.title && (
-                <div className="mt-0.5 text-[12.5px] leading-[1.55] text-muted-foreground line-clamp-1">
-                  {c.title}
-                </div>
-              )}
-              <div className="mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-muted-foreground">
-                {c.url}
-              </div>
-            </div>
-          </div>
-        )
-      })}
-
-      {/* Approve / Decline actions */}
       <div
-        className="flex flex-wrap items-center gap-2.5 border-t border-border p-4"
-        style={{ background: "var(--muted)" }}
+        style={{
+          borderTop: "1px solid color-mix(in oklab, var(--border) 60%, transparent)",
+        }}
       >
-        <span className="shrink-0 rounded-[2px] border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11.5px] text-foreground">
-          {checked.size} / {candidates.length}
-        </span>
-        <span className="flex-1" />
-        <div className="flex flex-1 basis-auto gap-2.5 sm:flex-none">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1 gap-1.5 font-semibold sm:flex-none"
-            onClick={onDecline}
-          >
-            <Database className="size-3.5" />
-            {t("actions.decline")}
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            className="flex-1 gap-1.5 font-semibold sm:flex-none"
-            onClick={handleApprove}
-            disabled={checked.size === 0}
-          >
-            {t("actions.approve")}
-          </Button>
-        </div>
+        {candidates.map((c, i) => {
+          const isChecked = checked.has(c.url)
+          const domain = extractDomain(c.url)
+          return (
+            <div
+              key={c.url}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 11,
+                padding: "9px 16px",
+                borderBottom:
+                  i < candidates.length - 1
+                    ? "1px solid color-mix(in oklab, var(--border) 45%, transparent)"
+                    : "none",
+                cursor: "pointer",
+              }}
+              onClick={() => toggleOne(c.url)}
+            >
+              {/* Checkbox */}
+              <span
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 4,
+                  flexShrink: 0,
+                  border: `1.5px solid ${isChecked ? "var(--primary)" : "var(--border)"}`,
+                  background: isChecked ? "var(--primary)" : "transparent",
+                  color: "#fff",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {isChecked && <Check size={11} />}
+              </span>
+              <FavTile domain={domain} size={18} />
+              <span
+                style={{ fontSize: 13, fontWeight: 500, color: "var(--foreground)" }}
+              >
+                {domain}
+              </span>
+              <span
+                style={{
+                  fontSize: 12.5,
+                  color: "var(--muted-foreground)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  flex: 1,
+                }}
+              >
+                {c.title}
+              </span>
+              {c.verified === false && (
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--muted-foreground)",
+                  }}
+                >
+                  {t("crag.approval.unverified")}
+                </span>
+              )}
+            </div>
+          )
+        })}
       </div>
-    </CardShell>
+
+      {/* Footer */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "12px 16px",
+          borderTop: "1px solid color-mix(in oklab, var(--border) 60%, transparent)",
+          background: "var(--muted)",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 11.5,
+            color: "var(--muted-foreground)",
+          }}
+        >
+          {t("crag.approval.selectedCount", {
+            selected: checked.size,
+            total: candidates.length,
+          })}
+        </span>
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          onClick={onDecline}
+          style={{
+            height: 32,
+            padding: "0 14px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "var(--card)",
+            color: "var(--foreground)",
+            cursor: "pointer",
+            fontFamily: "var(--font-sans)",
+            fontSize: 13,
+            fontWeight: 500,
+            boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          {t("actions.decline")}
+        </button>
+        <button
+          type="button"
+          onClick={handleApprove}
+          disabled={checked.size === 0}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 7,
+            height: 32,
+            padding: "0 14px",
+            borderRadius: 6,
+            border: "none",
+            background: "var(--primary)",
+            color: "var(--primary-foreground)",
+            cursor: checked.size === 0 ? "default" : "pointer",
+            opacity: checked.size === 0 ? 0.5 : 1,
+            fontFamily: "var(--font-sans)",
+            fontSize: 13,
+            fontWeight: 500,
+          }}
+        >
+          <Check size={14} />
+          {t("actions.approve")}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -257,110 +328,178 @@ function CrawlingCard({ progress = [] }: ApprovalCardCrawlingProps) {
 
   const total = progress.length
   const done = progress.filter((p) => p.status === "indexed").length
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
   return (
-    <CardShell>
+    <div
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: 10,
+        background: "var(--card)",
+        overflow: "hidden",
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-border p-4 pb-[14px]">
-        <div
-          className="inline-flex size-9 shrink-0 items-center justify-center rounded-full"
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          padding: "12px 16px",
+          borderBottom: "1px solid color-mix(in oklab, var(--border) 60%, transparent)",
+        }}
+      >
+        <Loader2
+          size={14}
+          className="animate-spin"
+          style={{ color: "var(--primary)" }}
+        />
+        <span
+          style={{ fontSize: 13.5, fontWeight: 600, color: "var(--foreground)" }}
+        >
+          {t("crag.approval.crawlingHeader")}
+        </span>
+        <span style={{ flex: 1 }} />
+        <span
           style={{
-            background: "color-mix(in oklab, var(--primary) 12%, transparent)",
-            color: "var(--primary)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 11.5,
+            color: "var(--muted-foreground)",
           }}
         >
-          <Loader2 className="size-[18px] animate-spin" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-[15.5px] font-semibold">
-            {t("crag.approval.crawlingTitle", {
-              n: total,
-              total: total,
-            })}
-          </div>
-          <div className="mt-0.5 text-[12.5px] text-muted-foreground">
-            {t("crag.approval.crawlingSubtitle")}
-          </div>
-        </div>
+          {t("crag.approval.crawlingIndexed", { done, total })}
+        </span>
       </div>
 
-      {/* Progress body */}
-      <div className="p-4">
-        {/* Progress bar + pct */}
-        <div className="mb-2 flex justify-between font-mono text-[11.5px] text-muted-foreground">
-          <span>
-            {done} / {total}
-          </span>
-          <span className="font-semibold text-primary">{pct}%</span>
-        </div>
-        <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-muted">
+      {/* Per-URL rows */}
+      {progress.map((item, i) => {
+        const domain = extractDomain(item.url)
+        const isDone = item.status === "indexed"
+        const isCrawling = item.status === "crawling"
+        const isFailed = item.status === "failed"
+        // pct: done=100, crawling=indeterminate shown as 50, failed=100, queued=0
+        const pct = isDone ? 100 : isFailed ? 100 : isCrawling ? 55 : 0
+        return (
           <div
-            className="h-full rounded-full bg-primary transition-all duration-300"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-
-        {/* Per-URL status list */}
-        {progress.length > 0 && (
-          <div className="flex flex-col gap-0.5">
-            {progress.map((item) => {
-              const domain = extractDomain(item.url)
-              return (
-                <div
-                  key={item.url}
-                  className="flex items-center gap-2.5 py-1.5 text-[12.5px]"
+            key={item.url}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 11,
+              padding: "10px 16px",
+              borderBottom:
+                i < progress.length - 1
+                  ? "1px solid color-mix(in oklab, var(--border) 45%, transparent)"
+                  : "none",
+            }}
+          >
+            <FavTile domain={domain} size={18} />
+            <span
+              style={{ fontSize: 13, fontWeight: 500, color: "var(--foreground)" }}
+            >
+              {domain}
+            </span>
+            <span style={{ flex: 1, minWidth: 20 }}>
+              <span
+                style={{
+                  display: "block",
+                  height: 3,
+                  borderRadius: 999,
+                  background: "var(--muted)",
+                  overflow: "hidden",
+                }}
+              >
+                <span
+                  style={{
+                    display: "block",
+                    height: "100%",
+                    width: `${pct}%`,
+                    background: isFailed ? "var(--destructive)" : "var(--primary)",
+                    borderRadius: 999,
+                    transition: "width 300ms",
+                  }}
+                />
+              </span>
+            </span>
+            {isDone && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  color: "var(--success)",
+                }}
+              >
+                <CircleCheck size={13} />
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--success)",
+                  }}
                 >
-                  <FavTile domain={domain} size={18} />
-                  <span
-                    className={cn(
-                      "flex-1 font-mono",
-                      item.status === "crawling" || item.status === "indexed"
-                        ? "text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {domain || item.url}
-                  </span>
-                  {item.status === "indexed" && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium"
-                      style={{
-                        borderColor: "color-mix(in oklab, var(--success) 35%, transparent)",
-                        background: "color-mix(in oklab, var(--success) 10%, transparent)",
-                        color: "var(--success)",
-                      }}
-                    >
-                      <Check className="size-[10px]" />
-                      {t("crag.approval.crawlDone")}
-                    </span>
-                  )}
-                  {item.status === "crawling" && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium"
-                      style={{
-                        borderColor: "color-mix(in oklab, var(--primary) 35%, transparent)",
-                        background: "color-mix(in oklab, var(--primary) 10%, transparent)",
-                        color: "var(--primary)",
-                      }}
-                    >
-                      <Loader2 className="size-[10px] animate-spin" />
-                      {t("crag.approval.crawlRunning")}
-                    </span>
-                  )}
-                  {item.status === "failed" && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-destructive/35 bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
-                      <X className="size-[10px]" />
-                      {t("crag.approval.crawlFailed")}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
+                  {item.chunks != null
+                    ? t("crag.approval.chunksIndexed", { n: item.chunks })
+                    : t("crag.approval.crawlDone")}
+                </span>
+              </span>
+            )}
+            {isCrawling && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  color: "var(--primary)",
+                }}
+              >
+                <Loader2 size={12} className="animate-spin" />
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--primary)",
+                  }}
+                >
+                  {t("crag.approval.crawlRunning")}
+                </span>
+              </span>
+            )}
+            {isFailed && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  color: "var(--destructive)",
+                }}
+              >
+                <AlertTriangle size={12} />
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--destructive)",
+                  }}
+                >
+                  {t("crag.approval.crawlFailed")}
+                </span>
+              </span>
+            )}
+            {!isDone && !isCrawling && !isFailed && (
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                {t("crag.approval.crawlQueued")}
+              </span>
+            )}
           </div>
-        )}
-      </div>
-    </CardShell>
+        )
+      })}
+    </div>
   )
 }
 
@@ -368,27 +507,90 @@ function CrawlingCard({ progress = [] }: ApprovalCardCrawlingProps) {
 
 function ReceiptCard({ progress = [] }: ApprovalCardReceiptProps) {
   const { t } = useTranslation()
-  const indexed = progress.filter((p) => p.status === "indexed").length
-  const failed = progress.filter((p) => p.status === "failed").length
-  const totalChunks = progress.reduce((sum, p) => sum + (p.chunks ?? 0), 0)
+
+  if (progress.length === 0) return null
 
   return (
     <div
-      className={cn(
-        "inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5",
-        "text-[12.5px] text-muted-foreground",
-      )}
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: 10,
+        background: "var(--card)",
+        overflow: "hidden",
+      }}
     >
-      <Check className="size-[13px] shrink-0 text-success" />
-      <span>
-        {indexed > 0
-          ? t("crag.approval.chunksIndexed", { n: totalChunks })
-          : null}
-        {failed > 0 && indexed > 0 ? " · " : null}
-        {failed > 0
-          ? t("crag.approval.crawlFailed")
-          : null}
-      </span>
+      {progress.map((item, i) => {
+        const domain = extractDomain(item.url)
+        const isDone = item.status === "indexed"
+        const isFailed = item.status === "failed"
+        return (
+          <div
+            key={item.url}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 11,
+              padding: "9px 16px",
+              borderBottom:
+                i < progress.length - 1
+                  ? "1px solid color-mix(in oklab, var(--border) 45%, transparent)"
+                  : "none",
+            }}
+          >
+            <FavTile domain={domain} size={18} />
+            <span
+              style={{ fontSize: 13, fontWeight: 500, color: "var(--foreground)" }}
+            >
+              {domain}
+            </span>
+            <span style={{ flex: 1 }} />
+            {isDone && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  color: "var(--success)",
+                }}
+              >
+                <CircleCheck size={13} />
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--success)",
+                  }}
+                >
+                  {item.chunks != null
+                    ? t("crag.approval.chunksIndexed", { n: item.chunks })
+                    : t("crag.approval.crawlDone")}
+                </span>
+              </span>
+            )}
+            {isFailed && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  color: "var(--destructive)",
+                }}
+              >
+                <AlertTriangle size={13} />
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--destructive)",
+                  }}
+                >
+                  {t("crag.approval.crawlFailed")}
+                </span>
+              </span>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

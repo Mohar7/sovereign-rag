@@ -1,24 +1,26 @@
-import { Copy, Eye, RefreshCw } from "lucide-react"
+import { Copy, Eye, Globe, RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { BrandMark } from "@/components/brand-mark"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 
 export function UserTurn({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex justify-end">
-      <div className="flex max-w-[85%] items-start gap-3">
-        <div className="rounded-md bg-secondary px-3.5 py-2.5 text-[14px] leading-[1.55] text-secondary-foreground">
-          {children}
-        </div>
-        <Avatar className="mt-0.5 size-7 rounded-md bg-[var(--indigo-100)] text-[color:var(--indigo-700)]">
-          <AvatarFallback className="bg-transparent text-[11px] font-medium">
-            MK
-          </AvatarFallback>
-        </Avatar>
+    <div className="flex justify-end" style={{ marginBottom: 22 }}>
+      <div
+        style={{
+          maxWidth: "76%",
+          background: "var(--secondary)",
+          color: "var(--secondary-foreground)",
+          padding: "9px 13px",
+          borderRadius: 8,
+          fontSize: 13.5,
+          lineHeight: 1.5,
+          border: "1px solid color-mix(in oklab, var(--border) 70%, transparent)",
+        }}
+      >
+        {children}
       </div>
     </div>
   )
@@ -34,6 +36,10 @@ export interface AssistantTurnProps {
   onRegenerate?: () => void
   /** Open the per-turn inspector. */
   onOpenInspector?: () => void
+  /** Show the "corrected via web" provenance chip in the actions row. */
+  showProvenance?: boolean
+  /** Show the "declined web search" chip in the actions row. */
+  showDeclined?: boolean
 }
 
 export function AssistantTurn({
@@ -43,6 +49,8 @@ export function AssistantTurn({
   copyText,
   onRegenerate,
   onOpenInspector,
+  showProvenance = false,
+  showDeclined = false,
 }: AssistantTurnProps) {
   const { t } = useTranslation()
   const handleCopy = () => {
@@ -61,44 +69,132 @@ export function AssistantTurn({
       <div className="min-w-0 flex-1">
         <div className="text-[14px] leading-[1.55] text-foreground">{children}</div>
         {!compact && showActions && (
-          <div className="mt-3.5 flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              aria-label="copy"
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              marginTop: 14,
+              color: "var(--muted-foreground)",
+            }}
+          >
+            <ActionBtn
+              icon={Copy}
+              label={t("actions.copy")}
               onClick={handleCopy}
               disabled={!copyText}
-              title="Copy answer text"
-            >
-              <Copy className="size-3.5" strokeWidth={2} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              aria-label="regenerate"
+            />
+            <ActionBtn
+              icon={RefreshCw}
+              label={t("actions.regenerate")}
               onClick={onRegenerate}
               disabled={!onRegenerate}
-              title="Re-run this question"
-            >
-              <RefreshCw className="size-3.5" strokeWidth={2} />
-            </Button>
-            <Separator orientation="vertical" className="mx-1 h-4" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-[12px]"
+            />
+            <Separator orientation="vertical" style={{ width: 1, height: 14, margin: "0 6px" }} />
+            <ActionBtn
+              icon={Eye}
+              label={t("pages.ask.viewTrace")}
               onClick={onOpenInspector}
               disabled={!onOpenInspector}
-            >
-              <Eye className="size-3.5" strokeWidth={2} />
-              {t("pages.ask.viewTrace")}
-            </Button>
+            />
+            {showProvenance && (
+              <>
+                <span
+                  aria-hidden
+                  style={{ width: 1, height: 14, background: "var(--border)", margin: "0 6px" }}
+                />
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 22,
+                    padding: "0 8px",
+                    borderRadius: 6,
+                    background:
+                      "color-mix(in oklab, var(--primary) 9%, transparent)",
+                    color: "var(--primary)",
+                    border:
+                      "1px solid color-mix(in oklab, var(--primary) 26%, transparent)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    fontWeight: 500,
+                  }}
+                >
+                  <Globe size={11} />
+                  {t("crag.correctedViaWeb")}
+                </span>
+              </>
+            )}
+            {showDeclined && (
+              <>
+                <span
+                  aria-hidden
+                  style={{ width: 1, height: 14, background: "var(--border)", margin: "0 6px" }}
+                />
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 22,
+                    padding: "0 8px",
+                    borderRadius: 6,
+                    background: "var(--muted)",
+                    color: "var(--muted-foreground)",
+                    border: "1px solid var(--border)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    fontWeight: 500,
+                  }}
+                >
+                  {t("crag.declinedChip")}
+                </span>
+              </>
+            )}
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+// ── ActionBtn — low-key action button matching the design spec ────
+
+interface ActionBtnProps {
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>
+  label: string
+  onClick?: () => void
+  disabled?: boolean
+}
+
+export function ActionBtn({ icon: Icon, label, onClick, disabled }: ActionBtnProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="sr-action"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        height: 28,
+        padding: "0 9px",
+        borderRadius: 6,
+        border: "1px solid transparent",
+        background: "transparent",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+        color: "var(--muted-foreground)",
+        fontFamily: "var(--font-sans)",
+        fontSize: 12,
+        fontWeight: 500,
+      }}
+    >
+      <Icon size={13} strokeWidth={2} />
+      {label}
+    </button>
   )
 }
 

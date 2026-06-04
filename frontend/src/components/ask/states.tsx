@@ -1,18 +1,16 @@
 import {
   AlertTriangle,
   ArrowRight,
-  BookOpen,
   Check,
   CheckCircle2,
   ChevronRight,
   ExternalLink,
-  GitBranch,
   Globe,
   Layers,
   Loader2,
-  Network,
   Search,
   Sparkles,
+  Share2,
   X,
   type LucideIcon,
 } from "lucide-react"
@@ -36,13 +34,15 @@ interface Suggestion {
   icon: LucideIcon
   /** i18n key suffix under pages.ask.suggestions.<key> with .title / .sub. */
   key: string
+  /** The retrieval kind MonoTag shown at the end of the row. */
+  kind: string
 }
 
 const SUGGESTIONS: Suggestion[] = [
-  { icon: BookOpen, key: "summarizeRrf" },
-  { icon: Network, key: "mapEntities" },
-  { icon: Search, key: "compareChunking" },
-  { icon: GitBranch, key: "evalDelta" },
+  { icon: Sparkles, key: "summarizeRrf", kind: "hybrid" },
+  { icon: Share2, key: "mapEntities", kind: "graph" },
+  { icon: Search, key: "compareChunking", kind: "vector" },
+  { icon: Globe, key: "evalDelta", kind: "web" },
 ]
 
 const CORPUS_STATS: Array<[string, string]> = [
@@ -62,40 +62,101 @@ export function AskEmptyHeader({ onPickSuggestion }: AskEmptyProps = {}) {
   const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-7">
-      <div className="text-center">
-        <div className="inline-flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <BrandMark size={28} />
+      {/* Logo + headline + subtitle */}
+      <div className="flex flex-col items-center text-center">
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 34,
+            height: 34,
+            color: "var(--primary)",
+          }}
+        >
+          <BrandMark size={34} />
         </div>
-        <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground">
+        <h1
+          style={{
+            fontSize: 26,
+            fontWeight: 600,
+            letterSpacing: "-0.02em",
+            color: "var(--foreground)",
+            margin: "16px 0 7px",
+          }}
+        >
           {t("pages.ask.title")}
         </h1>
-        <p className="mx-auto mt-2 max-w-xl text-[15px] leading-[1.6] text-muted-foreground">
-          {t("pages.ask.heroSubtitle")}
+        <p
+          style={{
+            fontSize: 13.5,
+            lineHeight: 1.55,
+            color: "var(--muted-foreground)",
+            margin: 0,
+            maxWidth: 440,
+          }}
+        >
+          {t("pages.ask.subtitle")}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* 4 single-column example-prompt buttons */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {SUGGESTIONS.map((s, i) => {
           const Icon = s.icon
           const title = t(`pages.ask.suggestions.${s.key}.title`)
-          const sub = t(`pages.ask.suggestions.${s.key}.sub`)
           return (
             <button
               key={i}
               type="button"
               onClick={() => onPickSuggestion?.(title)}
-              className="group flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 11,
+                width: "100%",
+                textAlign: "left",
+                padding: "10px 12px",
+                borderRadius: 8,
+                cursor: "pointer",
+                background: "transparent",
+                border: "1px solid var(--border)",
+                fontFamily: "inherit",
+              }}
             >
-              <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Icon className="size-4" strokeWidth={2} />
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 26,
+                  height: 26,
+                  borderRadius: 6,
+                  flexShrink: 0,
+                  background: "color-mix(in oklab, var(--primary) 9%, transparent)",
+                  color: "var(--primary)",
+                }}
+              >
+                <Icon size={14} strokeWidth={2} />
               </span>
-              <span className="min-w-0">
-                <span className="block text-[13.5px] font-medium leading-[1.4] text-foreground">
-                  {title}
-                </span>
-                <span className="mt-1 block font-mono text-[11.5px] text-muted-foreground">
-                  {sub}
-                </span>
+              <span
+                style={{
+                  flex: 1,
+                  fontSize: 13,
+                  color: "var(--foreground)",
+                  fontWeight: 500,
+                }}
+              >
+                {title}
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10.5,
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                {s.kind}
               </span>
             </button>
           )

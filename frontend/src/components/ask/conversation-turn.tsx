@@ -1,12 +1,11 @@
 import { AlertTriangle, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { ApprovalCard, DeclinedChip, type CrawlProgressItem } from "@/components/ask/approval-card"
+import { ApprovalCard, type CrawlProgressItem } from "@/components/ask/approval-card"
 import { MarkdownAnswer } from "@/components/ask/markdown-answer"
 import { ProcessBlock } from "@/components/ask/process-block"
 import { SourcesDisclosure } from "@/components/ask/sources-disclosure"
 import { AssistantTurn, UserTurn } from "@/components/ask/turns"
-import { ProvenanceBadge } from "@/components/crag/provenance-badge"
 import { Button } from "@/components/ui/button"
 import type { AskOverrides, CandidateUrl, CitationModel } from "@/lib/api"
 
@@ -156,6 +155,8 @@ export function ConversationTurn({
           copyText={turn.answer ?? ""}
           onRegenerate={onRegenerate}
           onOpenInspector={onOpenInspector}
+          showProvenance={!!turn.fallbackUsed}
+          showDeclined={!!turn.declined}
         >
           <ProcessBlock
             steps={turn.agentSteps ?? []}
@@ -164,16 +165,6 @@ export function ConversationTurn({
             fallbackUsed={turn.fallbackUsed}
             declined={turn.declined}
           />
-          {turn.declined && (
-            <div className="mb-3">
-              <DeclinedChip />
-            </div>
-          )}
-          {turn.fallbackUsed && (
-            <div className="mb-2">
-              <ProvenanceBadge />
-            </div>
-          )}
           <MarkdownAnswer
             answer={turn.answer ?? ""}
             citations={turn.citations ?? []}
@@ -202,25 +193,44 @@ function ErrorBanner({ message, onDismiss }: { message: string; onDismiss?: () =
   const { t } = useTranslation()
   return (
     <div
-      className="flex items-start gap-3 rounded-xl border p-4"
       style={{
-        background: "color-mix(in oklab, var(--destructive) 6%, transparent)",
-        borderColor: "color-mix(in oklab, var(--destructive) 35%, transparent)",
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 11,
+        padding: "12px 14px",
+        borderRadius: 8,
+        border: "1px solid color-mix(in oklab, var(--warning) 32%, transparent)",
+        background: "color-mix(in oklab, var(--warning) 7%, transparent)",
+        marginBottom: 22,
       }}
     >
       <AlertTriangle
-        className="mt-0.5 size-[18px] shrink-0 text-[color:var(--destructive)]"
+        size={16}
         strokeWidth={2}
+        style={{ color: "var(--warning)", flexShrink: 0, marginTop: 1 }}
       />
-      <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold text-foreground">
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)", marginBottom: 2 }}>
           {t("pages.ask.askCallFailed")}
         </div>
-        <div className="mt-1 break-words font-mono text-[12px] leading-[1.55] text-muted-foreground">
+        <div
+          style={{
+            fontSize: 12.5,
+            color: "var(--muted-foreground)",
+            lineHeight: 1.55,
+            wordBreak: "break-word",
+          }}
+        >
           {message}
         </div>
       </div>
-      <Button variant="ghost" size="icon" className="size-8" aria-label={t("pages.ask.dismiss")} onClick={onDismiss}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 shrink-0"
+        aria-label={t("pages.ask.dismiss")}
+        onClick={onDismiss}
+      >
         <X className="size-3.5" strokeWidth={2} />
       </Button>
     </div>

@@ -372,15 +372,20 @@ export function Composer({
 
   return (
     <div
-      className={cn(
-        "relative flex flex-col gap-2 rounded-full border bg-card p-3 pl-4 shadow-sm",
-        "transition-colors duration-[120ms]",
-        focused
-          ? "border-primary/40 ring-2 ring-ring/30 ring-offset-2 ring-offset-background"
-          : "border-border",
-      )}
+      style={{
+        position: "relative",
+        background: "var(--card)",
+        border: focused
+          ? "1px solid var(--primary)"
+          : "1px solid var(--border)",
+        borderRadius: 12,
+        boxShadow: focused
+          ? "var(--shadow-md), 0 0 0 3px color-mix(in oklab, var(--primary) 20%, transparent)"
+          : "var(--shadow-md)",
+        transition: "border-color 120ms, box-shadow 120ms",
+      }}
     >
-      <div className="flex items-start gap-3">
+      <div style={{ display: "flex", alignItems: "flex-start", padding: "12px 12px 0 16px" }}>
         <textarea
           rows={1}
           value={text}
@@ -393,35 +398,28 @@ export function Composer({
           }}
           placeholder={effectivePlaceholder}
           className={cn(
-            "min-h-7 flex-1 resize-none bg-transparent text-[15px] leading-[1.55] text-foreground",
-            "placeholder:text-muted-foreground outline-none",
+            "min-h-7 flex-1 resize-none bg-transparent text-[14.5px] leading-[1.5] text-foreground",
+            "placeholder:text-muted-foreground outline-none pt-[1px]",
           )}
         />
-        <Button
-          size="icon"
-          disabled={streaming || !text.trim()}
-          aria-label={t("actions.send")}
-          className="size-9 rounded-full"
-          onClick={submit}
-        >
-          <ArrowUp className="size-4" strokeWidth={2.25} />
-        </Button>
       </div>
-      <div className="flex items-center gap-1.5">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px 10px 12px" }}>
+        <div style={{ position: "relative" }}>
+          <SettingsPopover cfg={cfg} setCfg={setCfg} />
+        </div>
         {onAttach && (
           <button
             type="button"
             aria-label={t("pages.ask.openContextManager")}
-            className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors duration-[120ms] hover:bg-muted hover:text-foreground"
+            className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-[120ms] hover:bg-muted hover:text-foreground"
             onClick={onAttach}
             title={t("pages.ask.openContextManagerTitle")}
           >
             <Paperclip className="size-3.5" strokeWidth={2} />
           </button>
         )}
-        <SettingsPopover cfg={cfg} setCfg={setCfg} />
         {streaming && (
-          <span className="ml-auto inline-flex items-center gap-1.5 font-mono text-[11px] text-primary">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-primary">
             <span
               className="size-1.5 rounded-full bg-primary"
               style={{
@@ -432,6 +430,33 @@ export function Composer({
             {t("status.streaming")}
           </span>
         )}
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          disabled={streaming || !text.trim()}
+          aria-label={t("actions.send")}
+          onClick={submit}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            border: "none",
+            background: "var(--primary)",
+            color: "var(--primary-foreground)",
+            cursor: streaming || !text.trim() ? "default" : "pointer",
+            opacity: streaming || !text.trim() ? 0.5 : 1,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "opacity 120ms",
+          }}
+        >
+          {streaming ? (
+            <ArrowUp className="size-[17px]" strokeWidth={2.25} style={{ opacity: 0.6 }} />
+          ) : (
+            <ArrowUp className="size-[17px]" strokeWidth={2.25} />
+          )}
+        </button>
       </div>
     </div>
   )
