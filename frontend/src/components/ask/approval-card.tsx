@@ -1,20 +1,15 @@
 import { useState } from "react"
 import {
-  AlertTriangle,
   Check,
   Database,
   Globe,
   Loader2,
-  RotateCcw,
-  Sparkles,
   X,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { GradeChip } from "@/components/crag/grade-chip"
 import { FavTile } from "@/components/crag/fav-tile"
 import { cn } from "@/lib/utils"
 import type { CandidateUrl, GradeModel } from "@/lib/api"
@@ -22,11 +17,10 @@ import type { CandidateUrl, GradeModel } from "@/lib/api"
 // ─────────────────────────────────────────────────────────────────
 // ApprovalCard
 //
-// Four-state card for the HITL web-fallback approval flow:
-//   deciding  — user picks which URLs to crawl, approves or declines
-//   crawling  — progress view while crawling is in flight
-//   partial   — non-blocking warning when some URLs failed
-//   declined  — compact chip shown above the answer
+// Three-state card for the HITL web-fallback approval flow:
+//   deciding  — user previews candidate URLs + approves or declines
+//   crawling  — per-URL progress while crawl is in flight
+//   receipt   — compact completion line (all indexed / some failed)
 // ─────────────────────────────────────────────────────────────────
 
 export interface CrawlProgressItem {
@@ -53,30 +47,22 @@ export interface ApprovalCardCrawlingProps {
   progress?: CrawlProgressItem[]
 }
 
-// ── (c) Partial failure ──────────────────────────────────────────
+// ── (c) Receipt ──────────────────────────────────────────────────
 
-export interface ApprovalCardPartialProps {
-  state: "partial"
+export interface ApprovalCardReceiptProps {
+  state: "receipt"
   progress?: CrawlProgressItem[]
-}
-
-// ── (d) Declined chip ───────────────────────────────────────────
-
-export interface ApprovalCardDeclinedProps {
-  state: "declined"
 }
 
 export type ApprovalCardProps =
   | ApprovalCardDecidingProps
   | ApprovalCardCrawlingProps
-  | ApprovalCardPartialProps
-  | ApprovalCardDeclinedProps
+  | ApprovalCardReceiptProps
 
 export function ApprovalCard(props: ApprovalCardProps) {
   if (props.state === "deciding") return <DecidingCard {...props} />
   if (props.state === "crawling") return <CrawlingCard {...props} />
-  if (props.state === "partial") return <PartialCard {...props} />
-  return <DeclinedChip />
+  return <ReceiptCard {...(props as ApprovalCardReceiptProps)} />
 }
 
 // ── Card shell ────────────────────────────────────────────────────
@@ -106,7 +92,6 @@ function CardShell({
 function DecidingCard({
   candidates,
   grade,
-  question,
   onApprove,
   onDecline,
 }: ApprovalCardDecidingProps) {
@@ -141,38 +126,22 @@ function DecidingCard({
     onApprove([...checked])
   }
 
+  // Extract a "why" reason from grade if present
+  const whyReason = grade?.reason ?? null
+
   return (
     <CardShell>
-      {/* Header */}
-      <div className="flex items-start gap-3 border-b border-border p-4 pb-[14px]">
-        <div
-          className="inline-flex size-9 shrink-0 items-center justify-center rounded-full"
-          style={{
-            background: "color-mix(in oklab, var(--warning) 14%, transparent)",
-            color: "var(--warning)",
-          }}
-        >
-          <Globe className="size-[18px]" />
+      {/* Heading */}
+      <div className="border-b border-border px-4 py-3.5">
+        <div className="text-[14px] font-semibold leading-[1.3] text-foreground">
+          {t("crag.approval.heading")}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-[16px] font-semibold leading-[1.3] text-foreground">
-            {t("crag.approval.title")}
+        {whyReason && (
+          <div className="mt-1 text-[12.5px] leading-[1.55] text-muted-foreground line-clamp-1">
+            <span className="mr-1 font-medium text-foreground">{t("crag.approval.why")}:</span>
+            {whyReason}
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground leading-[1.55]">
-            <span>{t("crag.approval.why")}</span>
-            {grade && (
-              <GradeChip label={grade.label} confidence={grade.confidence} size="sm" />
-            )}
-            <span>{t("crag.approval.on")}</span>
-            <span className="italic text-foreground">"{question}"</span>
-          </div>
-        </div>
-        <Badge
-          variant="outline"
-          className="shrink-0 border-warning/35 bg-warning/10 text-warning text-[11px]"
-        >
-          {t("crag.approval.yourCall")}
-        </Badge>
+        )}
       </div>
 
       {/* Select-all row */}
@@ -205,10 +174,8 @@ function DecidingCard({
             key={c.url}
             className={cn(
               "flex items-start gap-3 px-4 py-3",
-              !isLast &&
-                "border-b",
-              isChecked &&
-                "bg-primary/[0.05]",
+              !isLast && "border-b",
+              isChecked && "bg-primary/[0.05]",
             )}
             style={
               !isLast
@@ -227,7 +194,7 @@ function DecidingCard({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-[13.5px] font-semibold text-foreground">
-                  {c.title}
+                  {extractDomain(c.url)}
                 </span>
                 <Globe className="size-3 shrink-0 text-muted-foreground" />
                 {c.verified === false && (
@@ -236,10 +203,12 @@ function DecidingCard({
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 text-[12.5px] leading-[1.55] text-muted-foreground line-clamp-2">
-                {c.snippet}
-              </div>
-              <div className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+              {c.title && (
+                <div className="mt-0.5 text-[12.5px] leading-[1.55] text-muted-foreground line-clamp-1">
+                  {c.title}
+                </div>
+              )}
+              <div className="mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-muted-foreground">
                 {c.url}
               </div>
             </div>
@@ -247,7 +216,7 @@ function DecidingCard({
         )
       })}
 
-      {/* Co-equal footer actions */}
+      {/* Approve / Decline actions */}
       <div
         className="flex flex-wrap items-center gap-2.5 border-t border-border p-4"
         style={{ background: "var(--muted)" }}
@@ -264,7 +233,7 @@ function DecidingCard({
             onClick={onDecline}
           >
             <Database className="size-3.5" />
-            {t("crag.approval.declineLocal")}
+            {t("actions.decline")}
           </Button>
           <Button
             variant="default"
@@ -273,7 +242,7 @@ function DecidingCard({
             onClick={handleApprove}
             disabled={checked.size === 0}
           >
-            {t("crag.approval.crawlContinue", { n: checked.size })}
+            {t("actions.approve")}
           </Button>
         </div>
       </div>
@@ -289,18 +258,6 @@ function CrawlingCard({ progress = [] }: ApprovalCardCrawlingProps) {
   const total = progress.length
   const done = progress.filter((p) => p.status === "indexed").length
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
-
-  const phases = [
-    { key: "crawling", icon: Globe, label: t("crag.crawling.crawling") },
-    { key: "indexing", icon: Database, label: t("crag.crawling.indexing") },
-    { key: "reRetrieving", icon: RotateCcw, label: t("crag.crawling.reRetrieving") },
-    { key: "answering", icon: Sparkles, label: t("crag.crawling.answering") },
-  ]
-
-  // Determine current active phase from progress
-  const hasCrawling = progress.some((p) => p.status === "crawling")
-  const hasIndexed = progress.some((p) => p.status === "indexed")
-  const activePhaseIdx = hasCrawling ? 0 : hasIndexed ? 1 : 0
 
   return (
     <CardShell>
@@ -344,42 +301,9 @@ function CrawlingCard({ progress = [] }: ApprovalCardCrawlingProps) {
           />
         </div>
 
-        {/* Phase strip */}
-        <div className="flex gap-1.5">
-          {phases.map((phase, i) => {
-            const Icon = phase.icon
-            const isActive = i === activePhaseIdx
-            return (
-              <div key={phase.key} className="flex flex-1 flex-col gap-1.5">
-                <div
-                  className="h-1 rounded-full"
-                  style={{
-                    background: isActive
-                      ? "color-mix(in oklab, var(--primary) 45%, transparent)"
-                      : "var(--muted)",
-                  }}
-                />
-                <div
-                  className={cn(
-                    "flex items-center gap-1.5 font-mono text-[11.5px]",
-                    isActive ? "text-primary" : "text-muted-foreground",
-                  )}
-                >
-                  {isActive ? (
-                    <Loader2 className="size-[11px] animate-spin" />
-                  ) : (
-                    <Icon className="size-[11px]" />
-                  )}
-                  <span>{phase.label}</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
         {/* Per-URL status list */}
         {progress.length > 0 && (
-          <div className="mt-4 flex flex-col gap-0.5">
+          <div className="flex flex-col gap-0.5">
             {progress.map((item) => {
               const domain = extractDomain(item.url)
               return (
@@ -440,87 +364,36 @@ function CrawlingCard({ progress = [] }: ApprovalCardCrawlingProps) {
   )
 }
 
-// ── Partial failure card ──────────────────────────────────────────
+// ── Receipt card ──────────────────────────────────────────────────
 
-function PartialCard({ progress = [] }: ApprovalCardPartialProps) {
+function ReceiptCard({ progress = [] }: ApprovalCardReceiptProps) {
   const { t } = useTranslation()
-
-  const failed = progress.filter((p) => p.status === "failed")
-  const succeeded = progress.filter((p) => p.status === "indexed")
-  const totalChunks = succeeded.reduce((sum, p) => sum + (p.chunks ?? 0), 0)
+  const indexed = progress.filter((p) => p.status === "indexed").length
+  const failed = progress.filter((p) => p.status === "failed").length
+  const totalChunks = progress.reduce((sum, p) => sum + (p.chunks ?? 0), 0)
 
   return (
-    <CardShell
-      className="border-warning/30"
+    <div
+      className={cn(
+        "inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5",
+        "text-[12.5px] text-muted-foreground",
+      )}
     >
-      {/* Warning header */}
-      <div
-        className="flex items-start gap-3 border-b px-4 py-3.5"
-        style={{
-          background: "color-mix(in oklab, var(--warning) 7%, transparent)",
-          borderColor: "color-mix(in oklab, var(--warning) 25%, var(--border))",
-        }}
-      >
-        <AlertTriangle className="mt-0.5 size-[18px] shrink-0 text-warning" />
-        <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-semibold text-foreground">
-            {t("crag.approval.partialFailTitle", {
-              failed: failed.length,
-              total: progress.length,
-            })}
-          </div>
-          <div className="mt-1 text-[12.5px] leading-[1.55] text-muted-foreground">
-            {t("crag.approval.partialFailSubtitle", { chunks: totalChunks })}
-          </div>
-        </div>
-      </div>
-
-      {/* URL result list */}
-      <div className="flex flex-col gap-0.5 px-4 py-3">
-        {progress.map((item) => {
-          const domain = extractDomain(item.url)
-          return (
-            <div
-              key={item.url}
-              className="flex items-center gap-2.5 py-2 text-[12.5px]"
-            >
-              <FavTile domain={domain} size={18} />
-              <span className="flex-1 font-mono text-foreground">
-                {domain || item.url}
-              </span>
-              {item.chunks != null && item.chunks > 0 && (
-                <span className="rounded-[2px] border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-                  {t("crag.approval.chunksIndexed", { n: item.chunks })}
-                </span>
-              )}
-              {item.status === "indexed" && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] font-medium"
-                  style={{
-                    borderColor: "color-mix(in oklab, var(--success) 35%, transparent)",
-                    background: "color-mix(in oklab, var(--success) 10%, transparent)",
-                    color: "var(--success)",
-                  }}
-                >
-                  <Check className="size-[10px]" />
-                  {t("crag.approval.crawlDone")}
-                </span>
-              )}
-              {item.status === "failed" && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-destructive/35 bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
-                  <X className="size-[10px]" />
-                  {t("crag.approval.crawlFailed")}
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </CardShell>
+      <Check className="size-[13px] shrink-0 text-success" />
+      <span>
+        {indexed > 0
+          ? t("crag.approval.chunksIndexed", { n: totalChunks })
+          : null}
+        {failed > 0 && indexed > 0 ? " · " : null}
+        {failed > 0
+          ? t("crag.approval.crawlFailed")
+          : null}
+      </span>
+    </div>
   )
 }
 
-// ── Declined chip ────────────────────────────────────────────────
+// ── Declined chip (kept exported — Ask.tsx imports it directly) ──
 
 export function DeclinedChip({ className }: { className?: string }) {
   const { t } = useTranslation()

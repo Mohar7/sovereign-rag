@@ -53,6 +53,8 @@
     "clear": "Clear",
     "clearAll": "Clear all",
     "reset": "Reset",
+    "approve": "Approve",
+    "decline": "Decline",
     "send": "Send",
     "send_hint": "Enter to send · Shift+Enter for newline",
     "selected": "{{count}} selected",
@@ -674,8 +676,9 @@
       "highThreshold": "Correct threshold"
     },
     "approval": {
+      "heading": "The agent wants to read these pages to answer:",
       "title": "Need more sources?",
-      "why": "Local sources were",
+      "why": "Why",
       "on": "on",
       "selectAll": "Select all",
       "candidatesInfo": "{{count}} candidates · top {{top}} pre-checked",
