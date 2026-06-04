@@ -82,7 +82,7 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
             {turn && (
               <>
                 {/* Tool trace — shows agent steps + totalMs */}
-                {(turn.agentSteps && turn.agentSteps.length > 0 || turn.totalMs !== undefined) && (
+                {((turn.agentSteps && turn.agentSteps.length > 0) || turn.totalMs !== undefined) && (
                   <Section
                     icon={<Clock className="size-3.5" strokeWidth={2} />}
                     label={

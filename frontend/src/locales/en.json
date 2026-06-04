@@ -184,6 +184,7 @@
         "noCitations": "No citations attached to this turn.",
         "serverDefaults": "Server defaults (no per-question overrides)."
       },
+      "viewTrace": "Open inspector",
       "copiedToast": "Copied.",
       "copyFailedToast": "Couldn't copy — clipboard permission?"
     },

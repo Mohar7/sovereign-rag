@@ -321,15 +321,16 @@ export function AskPage() {
                     {t("pages.ask.restoring")}
                   </div>
                 )}
-                {turns.map((t) => (
+                {turns.map((turn) => (
                   <ConversationTurn
-                    key={t.id}
-                    turn={t}
-                    onRegenerate={() => handleRegenerate(t)}
-                    onOpenInspector={() => setInspectorTurnId(t.id)}
+                    key={turn.id}
+                    turn={turn}
+                    onRegenerate={() => handleRegenerate(turn)}
+                    onOpenInspector={() => setInspectorTurnId(turn.id)}
                     onOpenSource={setSourceCitation}
-                    onApprove={(urls) => handleApprove(t, urls)}
-                    onDecline={() => handleDecline(t)}
+                    onApprove={(urls) => handleApprove(turn, urls)}
+                    onDecline={() => handleDecline(turn)}
+                    onDismiss={() => setTurns((prev) => prev.filter((tt) => tt.id !== turn.id))}
                   />
                 ))}
               </div>

@@ -93,7 +93,7 @@ export function AssistantTurn({
               disabled={!onOpenInspector}
             >
               <Eye className="size-3.5" strokeWidth={2} />
-              Open inspector
+              {t("pages.ask.viewTrace")}
             </Button>
           </div>
         )}

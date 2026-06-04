@@ -53,6 +53,7 @@ export function ConversationTurn({
   onOpenSource,
   onApprove,
   onDecline,
+  onDismiss,
 }: {
   turn: Turn
   onRegenerate?: () => void
@@ -60,6 +61,7 @@ export function ConversationTurn({
   onOpenSource?: (cite: CitationModel) => void
   onApprove?: (urls: string[]) => void
   onDecline?: () => void
+  onDismiss?: () => void
 }) {
   const { t } = useTranslation()
 
@@ -146,7 +148,7 @@ export function ConversationTurn({
       )}
 
       {turn.status === "error" && (
-        <ErrorBanner message={turn.error ?? t("pages.ask.requestFailed")} />
+        <ErrorBanner message={turn.error ?? t("pages.ask.requestFailed")} onDismiss={onDismiss} />
       )}
 
       {turn.status === "ok" && (
@@ -177,6 +179,11 @@ export function ConversationTurn({
             citations={turn.citations ?? []}
             onOpenSource={onOpenSource}
           />
+          {turn.fallbackUsed && (turn.crawlProgress?.length ?? 0) > 0 && (
+            <div className="mt-3">
+              <ApprovalCard state="receipt" progress={turn.crawlProgress} />
+            </div>
+          )}
           <SourcesDisclosure
             citations={turn.citations ?? []}
             onOpenSource={onOpenSource}
@@ -191,7 +198,7 @@ export function ConversationTurn({
 // ErrorBanner
 // ─────────────────────────────────────────────────────────────────
 
-function ErrorBanner({ message }: { message: string }) {
+function ErrorBanner({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
   const { t } = useTranslation()
   return (
     <div
@@ -213,7 +220,7 @@ function ErrorBanner({ message }: { message: string }) {
           {message}
         </div>
       </div>
-      <Button variant="ghost" size="icon" className="size-8" aria-label={t("pages.ask.dismiss")}>
+      <Button variant="ghost" size="icon" className="size-8" aria-label={t("pages.ask.dismiss")} onClick={onDismiss}>
         <X className="size-3.5" strokeWidth={2} />
       </Button>
     </div>
