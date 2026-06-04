@@ -1,4 +1,4 @@
-import { Bot, Check, Clock, ExternalLink, FileText, Hash, Sparkles, User } from "lucide-react"
+import { Bot, Box, Clock, ExternalLink, FileText, Globe, Hash, Search, Sparkles, User } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -10,10 +10,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import type { StageName, StageState } from "@/components/ask/pipeline-strip"
 import { formatCount, formatDecimal } from "@/lib/format"
 import type { AskOverrides, CitationModel } from "@/lib/api"
-import { cn } from "@/lib/utils"
 
 export interface InspectableTurn {
   id: number
@@ -25,8 +23,8 @@ export interface InspectableTurn {
   threadId?: string
   /** The overrides that were in effect when this turn was sent. */
   overrides?: AskOverrides | null
-  /** Per-stage timing/phase data, populated by the SSE stream. */
-  stages?: Record<StageName, StageState>
+  /** Ordered agent tool steps (ReAct mode). */
+  agentSteps?: { tool: string }[]
   /** Total wall-clock ms for the request, populated on the final done event. */
   totalMs?: number
 }
@@ -83,7 +81,8 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
           <div className="p-5 space-y-5">
             {turn && (
               <>
-                {turn.stages && (
+                {/* Tool trace — shows agent steps + totalMs */}
+                {(turn.agentSteps && turn.agentSteps.length > 0 || turn.totalMs !== undefined) && (
                   <Section
                     icon={<Clock className="size-3.5" strokeWidth={2} />}
                     label={
@@ -94,10 +93,7 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
                         : t("pages.ask.inspector.pipeline")
                     }
                   >
-                    <PipelineTimeline
-                      stages={turn.stages}
-                      totalMs={turn.totalMs}
-                    />
+                    <AgentToolTrace steps={turn.agentSteps ?? []} />
                   </Section>
                 )}
 
@@ -210,108 +206,38 @@ function Section({
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Pipeline timeline — vertical list of nodes with duration + bar
-//
-// The bar width is proportional to the stage's share of total elapsed time,
-// making the slow leg visually obvious. When totalMs is unknown (e.g. for
-// turns rehydrated from the thread history that don't carry timings) we
-// fall back to the max single-stage value so the layout still works.
+// AgentToolTrace — compact ordered list of tool calls for the turn.
+// Replaces the old CRAG PipelineTimeline.
 // ─────────────────────────────────────────────────────────────────
 
-const STAGE_ROW_META: Record<StageName, { labelKey: string; descriptionKey: string }> = {
-  retrieve_local: {
-    labelKey: "pages.ask.inspector.stages.retrieve.label",
-    descriptionKey: "pages.ask.inspector.stages.retrieve.description",
-  },
-  rerank: {
-    labelKey: "pages.ask.inspector.stages.rerank.label",
-    descriptionKey: "pages.ask.inspector.stages.rerank.description",
-  },
-  generate: {
-    labelKey: "pages.ask.inspector.stages.generate.label",
-    descriptionKey: "pages.ask.inspector.stages.generate.description",
-  },
-  // CRAG stages — shown in the inspector when present
-  grade: {
-    labelKey: "pages.ask.pipeline.grade",
-    descriptionKey: "pages.ask.pipeline.grade",
-  },
-  transform_query: {
-    labelKey: "pages.ask.pipeline.transformQuery",
-    descriptionKey: "pages.ask.pipeline.transformQuery",
-  },
-  web_search: {
-    labelKey: "pages.ask.pipeline.webSearch",
-    descriptionKey: "pages.ask.pipeline.webSearch",
-  },
-  crawl_index: {
-    labelKey: "pages.ask.pipeline.crawlIndex",
-    descriptionKey: "pages.ask.pipeline.crawlIndex",
-  },
+const TOOL_ICON: Record<string, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
+  SearchCorpus: Search,
+  WebSearch: Globe,
+  CrawlAndIndex: Box,
 }
 
-function PipelineTimeline({
-  stages,
-  totalMs,
-}: {
-  stages: Record<StageName, StageState>
-  totalMs?: number
-}) {
-  const { t } = useTranslation()
-  const order: StageName[] = ["retrieve_local", "rerank", "generate"]
-  const known = order
-    .map((n) => stages[n]?.elapsedMs ?? 0)
-    .filter((v) => v > 0)
-  const max = Math.max(totalMs ?? 0, ...known, 1)
+function AgentToolTrace({ steps }: { steps: { tool: string }[] }) {
+  if (steps.length === 0) {
+    return (
+      <p className="text-[12.5px] italic text-muted-foreground">
+        No tool calls recorded for this turn.
+      </p>
+    )
+  }
   return (
     <ol className="space-y-1.5">
-      {order.map((name) => {
-        const stage = stages[name]
-        const meta = STAGE_ROW_META[name]
-        const elapsed = stage.elapsedMs
-        const widthPct =
-          typeof elapsed === "number" && max > 0
-            ? Math.max(1, Math.min(100, Math.round((elapsed / max) * 100)))
-            : 0
-        const isDone = stage.phase === "done"
-        const isRunning = stage.phase === "running"
+      {steps.map((s, i) => {
+        const Icon = TOOL_ICON[s.tool] ?? Search
         return (
           <li
-            key={name}
-            className="rounded-lg border border-border bg-card px-3 py-2"
+            key={i}
+            className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2 text-[12.5px]"
           >
-            <div className="flex items-baseline gap-2 text-[12.5px]">
-              <span
-                aria-hidden
-                className={cn(
-                  "inline-flex size-5 shrink-0 items-center justify-center rounded-full",
-                  isDone && "bg-primary/15 text-primary",
-                  isRunning && "bg-primary/15 text-primary",
-                  !isDone && !isRunning && "bg-muted text-muted-foreground",
-                )}
-              >
-                {isDone ? <Check className="size-3" /> : <Clock className="size-3" />}
-              </span>
-              <span className="font-medium text-foreground">{t(meta.labelKey)}</span>
-              <span className="ml-auto font-mono text-[11.5px] tabular-nums">
-                {typeof elapsed === "number" ? formatMs(elapsed) : "—"}
-              </span>
-            </div>
-            <p className="ml-7 mt-0.5 text-[11.5px] leading-[1.4] text-muted-foreground">
-              {t(meta.descriptionKey)}
-            </p>
-            <div
-              aria-hidden
-              className="ml-7 mt-2 h-1 overflow-hidden rounded-full bg-muted"
-            >
-              <div
-                className={cn(
-                  "h-full rounded-full transition-[width] duration-[180ms] ease-[cubic-bezier(0.2,0,0,1)]",
-                  isRunning ? "bg-primary/60" : "bg-primary",
-                )}
-                style={{ width: `${widthPct}%` }}
-              />
-            </div>
+            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 font-mono text-[10px] text-primary">
+              {i + 1}
+            </span>
+            <Icon className="size-3.5 shrink-0 text-primary" strokeWidth={2} />
+            <span className="font-mono text-foreground">{s.tool}</span>
           </li>
         )
       })}
