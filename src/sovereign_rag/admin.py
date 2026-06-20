@@ -10,7 +10,10 @@ Operations:
 * :func:`wipe_milvus` — drop the chunks collection (re-created lazily on
   the next ingest by ``MilvusHybridStore.ensure_collection``).
 * :func:`wipe_neo4j` — ``MATCH (n) DETACH DELETE n`` on the configured
-  database. Schema constraints/indexes remain (cheap to keep).
+  database, then ``DROP INDEX <vector index> IF EXISTS`` (it pins the
+  embedding dimension, so it must go on an embed-model/dim change;
+  ``ensure_schema`` recreates it on next ingest). The dimension-independent
+  uniqueness constraints are left in place.
 * :func:`wipe_threads_postgres` — TRUNCATE the LangGraph checkpoint
   tables in the configured ``langgraph_pg_uri`` database. Keeps the
   ``checkpoint_migrations`` row so the checkpointer doesn't re-migrate.
@@ -114,7 +117,22 @@ async def wipe_neo4j() -> tuple[bool, int, int]:
     try:
         # Single MATCH avoids loading the whole graph into memory.
         await driver.execute_query("MATCH (n) DETACH DELETE n", database_=s.neo4j_database)
-        logger.info("Wiped Neo4j: %d nodes, %d relationships removed", nodes_before, rels_before)
+        # Drop the dim-dependent vector index too — keeping it would pin the old
+        # embedding dimension and silently break graph retrieval after an
+        # embed-model/dim change. ensure_schema recreates it (at the current
+        # embed_dim) on the next ingest. Uniqueness constraints are dim-independent
+        # and stay in place.
+        from sovereign_rag.graph.neo4j_store import CHUNK_VECTOR_INDEX
+
+        await driver.execute_query(
+            f"DROP INDEX {CHUNK_VECTOR_INDEX} IF EXISTS", database_=s.neo4j_database
+        )
+        logger.info(
+            "Wiped Neo4j: %d nodes, %d relationships removed; dropped vector index %s",
+            nodes_before,
+            rels_before,
+            CHUNK_VECTOR_INDEX,
+        )
         return (True, nodes_before, rels_before)
     finally:
         await driver.close()

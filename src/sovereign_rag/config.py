@@ -51,15 +51,17 @@ class Settings(BaseSettings):
     openai_chat_model_nano: str = "gpt-5.4-nano"  # tier=nano
 
     # ---- Embeddings ----
-    # "openai" (default; text-embedding-3-large) or "ollama" (local bge-m3).
+    # "openai" (default; text-embedding-3-small) or "ollama" (local bge-m3).
     # Ollama Cloud has no embeddings API, so cloud-LLM + local-embeddings is valid.
     embed_provider: str = "openai"
     embed_model: str = "bge-m3"  # used when embed_provider == "ollama"
     openai_api_key: str = ""
-    openai_embed_model: str = "text-embedding-3-large"
-    # Dense vector width. The Milvus collection schema is built from this, so it
-    # MUST match the active embedder's output (bge-m3 → 1024; OpenAI 3-large → 3072).
-    embed_dim: int = 1024
+    openai_embed_model: str = "text-embedding-3-small"
+    # Dense vector width. The Milvus collection schema AND the Neo4j vector index
+    # are built from this, so it MUST match the active embedder's native output
+    # (text-embedding-3-small → 1536 full, text-embedding-3-large → 3072, bge-m3 → 1024).
+    # Changing it requires recreating both stores — see sovereign_rag.admin.wipe_*.
+    embed_dim: int = 1536
 
     # ---- Milvus ----
     milvus_uri: str = "http://localhost:19530"
