@@ -29,6 +29,11 @@ class RAGState(TypedDict, total=False):
     candidates: list[RetrievedChunk]
     reranked: list[RetrievedChunk]
 
+    # -- retrieval trace (inspector overlay; only when enable_retrieval_trace) --
+    trace_legs: dict[str, list[dict[str, object]]]  # {"dense"|"bm25"|"graph": [LegHit-as-dict]}
+    trace_pool_meta: dict[str, dict[str, str]]  # chunk_id -> {title, snippet, origin}
+    trace_rerank: list[dict[str, object]]  # [{chunkId, score}] full rerank ranking
+
     # -- CRAG: grade --
     grade: GradeLabel  # "correct" | "ambiguous" | "incorrect"
     grade_confidence: float  # normalized top-1 reranker score, 0..1

@@ -37,9 +37,25 @@ logger = logging.getLogger(__name__)
 # Node: retrieve_local
 # ---------------------------------------------------------------------------
 async def retrieve_local(state: RAGState) -> dict[str, object]:
-    """Hybrid Milvus + Neo4j graph local-search, deduped."""
+    """Hybrid Milvus + Neo4j graph local-search, deduped.
+
+    When ``enable_retrieval_trace`` is on, the same one-shot retrieval also keeps
+    the dense + BM25 legs (run as separate passes) so the inspector can show
+    per-leg ranks. The answer pool is still ``dedup(hybrid + graph)`` exactly as
+    in ``_retrieve_deduped`` — provenance is additive, never altering the pool.
+    """
     pipe = get_pipeline()
-    candidates = await _retrieve_deduped(pipe, state["question"], state.get("doc_id"))
+    s = get_settings()
+    question = state["question"]
+    doc_id = state.get("doc_id")
+    if s.enable_retrieval_trace:
+        try:
+            out = await _retrieve_with_trace(pipe, question, doc_id)
+            logger.info("retrieve_local: %d candidates (+trace)", len(out["candidates"]))  # type: ignore[arg-type]
+            return out
+        except Exception as exc:  # provenance must never break retrieval
+            logger.warning("retrieve_local trace path failed, falling back: %s", exc)
+    candidates = await _retrieve_deduped(pipe, question, doc_id)
     logger.info("retrieve_local: %d candidates", len(candidates))
     return {"candidates": candidates}
 
@@ -67,6 +83,60 @@ async def _retrieve_deduped(
             continue
         merged.extend(r)
     return _dedup_by_chunk(merged)
+
+
+def _leg(hits: list[RetrievedChunk]) -> list[dict[str, object]]:
+    """Serialize a retriever leg's hits to ranked dicts (return order == rank)."""
+    return [
+        {"chunkId": h.chunk.chunk_id, "rank": i, "score": float(h.score)}
+        for i, h in enumerate(hits, start=1)
+    ]
+
+
+async def _empty() -> list[RetrievedChunk]:
+    return []
+
+
+async def _retrieve_with_trace(
+    pipe: object, question: str, doc_id: str | None
+) -> dict[str, object]:
+    """One gather: hybrid+graph build the pool; dense+bm25 add leg provenance.
+
+    Reuses the single ``local_search`` for both the pool and the graph leg, so
+    only dense+BM25 are extra queries. Per-leg failures degrade to an empty leg
+    (``return_exceptions=True``); the pool tolerates a failed retriever exactly
+    as ``_retrieve_deduped`` does.
+    """
+    milvus = pipe._milvus  # type: ignore[attr-defined]
+    graph = pipe._graph  # type: ignore[attr-defined]
+    raw = await asyncio.gather(
+        milvus.hybrid_search(question, doc_id=doc_id),
+        milvus.dense_search(question, doc_id=doc_id),
+        milvus.bm25_search(question, doc_id=doc_id),
+        graph.local_search(question) if graph is not None else _empty(),
+        return_exceptions=True,
+    )
+    legs_hits: list[list[RetrievedChunk]] = [r if isinstance(r, list) else [] for r in raw]
+    hybrid_hits, dense_hits, bm25_hits, graph_hits = legs_hits
+    candidates = _dedup_by_chunk([*hybrid_hits, *graph_hits])
+    pool_meta: dict[str, dict[str, str]] = {}
+    for rc in candidates:
+        uri = str(rc.chunk.metadata.get("source_uri", ""))
+        origin = "web" if uri.lower().startswith(("http://", "https://")) else "local"
+        pool_meta[rc.chunk.chunk_id] = {
+            "title": str(rc.chunk.metadata.get("title", "")),
+            "snippet": rc.chunk.raw_text[:240],
+            "origin": origin,
+        }
+    return {
+        "candidates": candidates,
+        "trace_legs": {
+            "dense": _leg(dense_hits),
+            "bm25": _leg(bm25_hits),
+            "graph": _leg(graph_hits),
+        },
+        "trace_pool_meta": pool_meta,
+    }
 
 
 # ---------------------------------------------------------------------------

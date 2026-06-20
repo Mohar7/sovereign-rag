@@ -113,6 +113,7 @@ class TestRetrieveLocal:
         pipe._milvus = milvus
         pipe._graph = None  # graph disabled
         monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+        monkeypatch.setattr(get_settings(), "enable_retrieval_trace", False, raising=False)
 
         out = await agent_nodes.retrieve_local({"question": "q"})
 
@@ -132,6 +133,7 @@ class TestRetrieveLocal:
         pipe._milvus = milvus
         pipe._graph = graph
         monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+        monkeypatch.setattr(get_settings(), "enable_retrieval_trace", False, raising=False)
 
         out = await agent_nodes.retrieve_local({"question": "q", "doc_id": "d1"})
 
@@ -142,6 +144,35 @@ class TestRetrieveLocal:
         assert cands["c1"].score == 0.95
         # doc_id propagated to milvus call:
         milvus.hybrid_search.assert_awaited_once_with("q", doc_id="d1")
+
+
+class TestRetrieveLocalTrace:
+    async def test_captures_legs_when_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        milvus = MagicMock()
+        milvus.hybrid_search = AsyncMock(
+            return_value=[_rc("c1", 0.7, "milvus_hybrid"), _rc("c2", 0.6, "milvus_hybrid")]
+        )
+        milvus.dense_search = AsyncMock(
+            return_value=[_rc("c1", 0.9, "milvus_dense"), _rc("c3", 0.4, "milvus_dense")]
+        )
+        milvus.bm25_search = AsyncMock(return_value=[_rc("c2", 5.0, "milvus_bm25")])
+        graph = MagicMock()
+        graph.local_search = AsyncMock(return_value=[_rc("c3", 0.8, "graph")])
+        pipe = MagicMock()
+        pipe._milvus = milvus
+        pipe._graph = graph
+        monkeypatch.setattr(agent_nodes, "get_pipeline", lambda: pipe)
+        monkeypatch.setattr(get_settings(), "enable_retrieval_trace", True, raising=False)
+
+        out = await agent_nodes.retrieve_local({"question": "q"})
+
+        assert {rc.chunk.chunk_id for rc in out["candidates"]} == {"c1", "c2", "c3"}
+        legs = out["trace_legs"]
+        assert [h["chunkId"] for h in legs["dense"]] == ["c1", "c3"]
+        assert legs["dense"][0]["rank"] == 1
+        assert [h["chunkId"] for h in legs["bm25"]] == ["c2"]
+        assert [h["chunkId"] for h in legs["graph"]] == ["c3"]
+        assert "c1" in out["trace_pool_meta"]
 
 
 # ---------------------------------------------------------------------------
