@@ -4,6 +4,7 @@ import sovereign_rag.providers.reranker as reranker_mod
 from sovereign_rag.api.settings.schemas import SettingsPatch
 from sovereign_rag.config import Settings
 from sovereign_rag.documents import Chunk, RetrievedChunk
+from sovereign_rag.retrieval.trace import LegHit, build_trace, trace_to_dict
 
 
 def test_retrieval_trace_defaults_on() -> None:
@@ -50,3 +51,46 @@ def test_select_top_k_preserves_origin(monkeypatch) -> None:
     assert [c.chunk.chunk_id for c in top] == ["c9", "c3"]
     assert [c.origin_source for c in top] == ["milvus_dense", "graph"]
     assert all(c.source == "reranked" for c in top)
+
+
+def test_build_trace_joins_legs_rerank_and_cited() -> None:
+    legs = {
+        "dense": [LegHit("c9", 1, 0.9), LegHit("c3", 2, 0.4)],
+        "bm25": [LegHit("c1", 1, 5.0), LegHit("c9", 2, 3.0)],
+        "graph": [LegHit("c3", 1, 0.7)],
+    }
+    rerank_ranking = [("c9", 8.0), ("c3", 2.0), ("c1", 1.0)]
+    pool_meta = {
+        "c9": {"title": "Nine", "snippet": "nine", "origin": "local"},
+        "c3": {"title": "Three", "snippet": "three", "origin": "web"},
+        "c1": {"title": "One", "snippet": "one", "origin": "local"},
+    }
+    trace = build_trace(
+        legs=legs,
+        rerank_ranking=rerank_ranking,
+        top_k=2,
+        pool_meta=pool_meta,
+        cited_chunk_ids={"c9"},
+    )
+    by_id = {c.chunk_id: c for c in trace.chunks}
+    assert by_id["c9"].dense_rank == 1 and by_id["c9"].bm25_rank == 2
+    assert by_id["c9"].graph_rank is None
+    assert by_id["c9"].rerank_rank == 1 and by_id["c9"].in_top_k is True and by_id["c9"].cited is True
+    assert by_id["c3"].graph_rank == 1 and by_id["c3"].rerank_rank == 2 and by_id["c3"].in_top_k is True
+    assert by_id["c1"].in_top_k is False and by_id["c1"].cited is False
+    assert trace.pool_size == 3 and trace.top_k == 2
+
+
+def test_trace_to_dict_is_camel_case() -> None:
+    trace = build_trace(
+        legs={"dense": [LegHit("c1", 1, 0.5)], "bm25": [], "graph": []},
+        rerank_ranking=[("c1", 2.0)],
+        top_k=1,
+        pool_meta={"c1": {"title": "T", "snippet": "s", "origin": "local"}},
+        cited_chunk_ids=set(),
+    )
+    d = trace_to_dict(trace)
+    assert d["poolSize"] == 1 and d["topK"] == 1
+    assert d["legs"]["dense"][0] == {"chunkId": "c1", "rank": 1, "score": 0.5}
+    assert d["chunks"][0]["denseRank"] == 1 and d["chunks"][0]["rerankRank"] == 1
+    assert d["chunks"][0]["inTopK"] is True
