@@ -117,10 +117,10 @@ The CRAG loop is **default-OFF** — set `ENABLE_CORRECTIVE_RAG=true` to enable 
 ## Quick start
 
 ```bash
-# 1. Models (host Ollama)
-ollama serve &
-ollama pull qwen2.5:7b
-ollama pull bge-m3
+# 1. Models — default: OpenAI (set OPENAI_API_KEY in your environment)
+export OPENAI_API_KEY=sk-...   # chat = gpt-5.4 family, embeddings = text-embedding-3-large
+# Fully-local fallback instead: set llm_provider=ollama / embed_provider=ollama, then:
+#   ollama serve & ; ollama pull qwen2.5:7b ; ollama pull bge-m3
 
 # 2. Infra (Milvus + Neo4j + Postgres + SearXNG)
 cp .env.example .env          # set NEO4J_PASSWORD / POSTGRES_PASSWORD

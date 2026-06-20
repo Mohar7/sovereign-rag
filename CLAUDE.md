@@ -17,7 +17,7 @@ Do NOT read the wiki for general Python questions, LangChain syntax, or anything
 ## Project conventions
 - Python 3.12. `uv` for deps. `ruff` + `mypy --strict` + `pytest`.
 - Tests marked `@pytest.mark.integration` are skipped unless services are up (gated by `RUN_*_IT=1`).
-- Two-tier CI: GitHub-hosted runs unit tests; self-hosted Mac Mini runs integration + eval (uses Ollama Cloud + OpenAI embeddings — the only paid-API dependency).
+- Two-tier CI: GitHub-hosted runs unit tests; self-hosted Mac Mini runs integration + eval (uses OpenAI — chat `gpt-5.4` family + embeddings — as the default paid dependency; set `OPENAI_API_KEY` in the environment. Ollama remains selectable via `llm_provider`/`embed_provider=ollama`).
 - Data plane uses **raw** `pymilvus` and `neo4j-graphrag` — not LangChain wrappers, which hide Milvus native BM25 hybrid and Neo4j GraphRAG local-search.
 - LangGraph for control plane only. Compile with `AsyncPostgresSaver` in prod; CLI dev-server attaches in-memory checkpointer.
 - Every retrieval layer is env-toggleable so the eval harness can A/B each.

@@ -1,7 +1,9 @@
 """Runtime configuration. Everything is overridable via env / `.env`.
 
-The whole stack is local-by-default: Ollama on :11434, Milvus on :19530,
-Neo4j on :7687, SearXNG on :8080. No setting requires a paid API key.
+The control plane defaults to OpenAI (chat `gpt-5.4` family + `text-embedding-3-large`),
+which requires `OPENAI_API_KEY` in the environment. The data plane stays local:
+Milvus on :19530, Neo4j on :7687, SearXNG on :8080. Set `llm_provider=ollama` /
+`embed_provider=ollama` to run fully local against an Ollama daemon on :11434.
 """
 
 from __future__ import annotations
@@ -21,9 +23,10 @@ class Settings(BaseSettings):
     )
 
     # ---- LLM provider selection ----
-    # "ollama" (local daemon or Ollama Cloud) or "openai". All ``shared.llm_factory``
-    # callers and the legacy ``providers.ollama.get_llm`` route through this.
-    llm_provider: str = "ollama"
+    # "openai" (default) or "ollama" (local daemon or Ollama Cloud). All
+    # ``shared.llm_factory`` callers and the legacy ``providers.ollama.get_llm``
+    # route through this.
+    llm_provider: str = "openai"
 
     # ---- Ollama (LLM; optionally Ollama Cloud) ----
     ollama_base_url: str = "http://localhost:11434"
@@ -40,16 +43,17 @@ class Settings(BaseSettings):
     llm_num_ctx: int = 8192
 
     # ---- OpenAI chat models (used when llm_provider == "openai") ----
-    # The ``llm_model*`` envs above carry the model IDs across providers; these
-    # exist as explicit overrides when someone wants to set them separately. If
-    # blank, the factory falls back to the matching ``llm_model*`` setting.
-    openai_chat_model: str = ""  # tier=default
-    openai_chat_model_light: str = ""  # tier=light
-    openai_chat_model_nano: str = ""  # tier=nano
+    # Current gpt-5.4 family (2026 line). The deprecated gpt-5/-mini/-nano
+    # snapshots (shutdown 2026-12-11) must NOT be used. If blank, the factory
+    # falls back to the matching ``llm_model*`` (Ollama) setting.
+    openai_chat_model: str = "gpt-5.4"  # tier=default
+    openai_chat_model_light: str = "gpt-5.4-mini"  # tier=light
+    openai_chat_model_nano: str = "gpt-5.4-nano"  # tier=nano
 
     # ---- Embeddings ----
-    # "ollama" (local bge-m3) or "openai" (Ollama Cloud has no embeddings API).
-    embed_provider: str = "ollama"
+    # "openai" (default; text-embedding-3-large) or "ollama" (local bge-m3).
+    # Ollama Cloud has no embeddings API, so cloud-LLM + local-embeddings is valid.
+    embed_provider: str = "openai"
     embed_model: str = "bge-m3"  # used when embed_provider == "ollama"
     openai_api_key: str = ""
     openai_embed_model: str = "text-embedding-3-large"
