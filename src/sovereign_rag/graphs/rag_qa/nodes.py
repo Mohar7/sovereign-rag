@@ -20,7 +20,7 @@ from sovereign_rag.documents import RetrievedChunk
 from sovereign_rag.graphs.rag_qa.state import RAGState
 from sovereign_rag.ingestion.search import search
 from sovereign_rag.ingestion.web import crawl_url
-from sovereign_rag.providers.reranker import rerank
+from sovereign_rag.providers.reranker import rerank, rerank_scores, select_top_k
 from sovereign_rag.retrieval.grading import grade_candidates
 from sovereign_rag.retrieval.pipeline import (
     _ANSWER_SYSTEM,
@@ -143,10 +143,19 @@ async def _retrieve_with_trace(
 # Node: rerank
 # ---------------------------------------------------------------------------
 async def do_rerank(state: RAGState) -> dict[str, object]:
-    """Cross-encoder rerank → top_k."""
+    """Cross-encoder rerank → top_k. Captures the full ranking when tracing."""
     s = get_settings()
     candidates = state.get("candidates") or []
-    reranked = rerank(state["question"], candidates, top_k=s.rerank_top_k) if candidates else []
+    if not candidates:
+        return {"reranked": [], "retrieved": 0}
+    if s.enable_retrieval_trace:
+        scored = rerank_scores(state["question"], candidates)
+        reranked = select_top_k(scored, settings=s, top_k=s.rerank_top_k)
+        trace_rerank = [
+            {"chunkId": c.chunk.chunk_id, "score": float(score)} for c, score in scored
+        ]
+        return {"reranked": reranked, "retrieved": len(candidates), "trace_rerank": trace_rerank}
+    reranked = rerank(state["question"], candidates, top_k=s.rerank_top_k)
     return {"reranked": reranked, "retrieved": len(candidates)}
 
 

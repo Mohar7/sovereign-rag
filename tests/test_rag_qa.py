@@ -46,6 +46,7 @@ class TestDoRerank:
             return [_rc("top", score=0.99, source="reranked")]
 
         monkeypatch.setattr(agent_nodes, "rerank", fake_rerank)
+        monkeypatch.setattr(get_settings(), "enable_retrieval_trace", False, raising=False)
 
         out = await agent_nodes.do_rerank({"question": "q?", "candidates": [_rc("a")]})
 
@@ -59,6 +60,28 @@ class TestDoRerank:
         monkeypatch.setattr(agent_nodes, "rerank", sentinel)
         out = await agent_nodes.do_rerank({"question": "q", "candidates": []})
         assert out == {"reranked": [], "retrieved": 0}
+
+    async def test_captures_full_ranking_when_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cands = [
+            _rc("c1", source="graph"),
+            _rc("c2", source="milvus_dense"),
+            _rc("c3", source="milvus_bm25"),
+        ]
+        full = [(cands[1], 9.0), (cands[0], 3.0), (cands[2], 1.0)]
+        monkeypatch.setattr(agent_nodes, "rerank_scores", lambda q, c: full)
+        monkeypatch.setattr(get_settings(), "enable_retrieval_trace", True, raising=False)
+
+        out = await agent_nodes.do_rerank({"question": "q", "candidates": cands})
+
+        assert out["reranked"][0].chunk.chunk_id == "c2"
+        assert out["retrieved"] == 3
+        assert out["trace_rerank"] == [
+            {"chunkId": "c2", "score": 9.0},
+            {"chunkId": "c1", "score": 3.0},
+            {"chunkId": "c3", "score": 1.0},
+        ]
 
 
 # ---------------------------------------------------------------------------
