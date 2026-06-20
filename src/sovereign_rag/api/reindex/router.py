@@ -10,13 +10,17 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from sovereign_rag.embeddings_registry import EMBED_MODELS
-from sovereign_rag.reindex import get_reindex_state
 
 router = APIRouter(prefix="/api", tags=["reindex"])
 
 
 @router.get("/reindex/status")
 async def reindex_status() -> dict[str, object]:
+    # Lazy import: main.py imports this router at app construction, while
+    # sovereign_rag.reindex imports the settings service (which transitively
+    # pulls main) — a top-level import here would close that cycle.
+    from sovereign_rag.reindex import get_reindex_state
+
     s = get_reindex_state()
     return {"status": s.status, "total": s.total, "doneCount": s.done_count, "error": s.error}
 

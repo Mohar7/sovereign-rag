@@ -56,11 +56,17 @@ async def reembed_corpus() -> ReindexState:
         _STATE.status, _STATE.error, _STATE.done_count, _STATE.total = "running", None, 0, 0
         try:
             bust_embeddings_cache()
-            milvus = MilvusHybridStore()
-            chunks = await milvus.export_chunks()
+            exporter = MilvusHybridStore()
+            chunks = await exporter.export_chunks()
+            await exporter.close()
             _STATE.total = len(chunks)
-            # Milvus: drop + recreate at the new dim, then re-embed via add_chunks.
+            # Milvus: drop the old-dim collection, then recreate with a FRESH
+            # store. ``ensure_collection`` on ``exporter`` would be a no-op — it
+            # cached ``_ensured=True`` during export_chunks, before the drop —
+            # which would leave the collection deleted. A new instance re-creates
+            # it at the current embed_dim; add_chunks then re-embeds.
             await wipe_milvus()
+            milvus = MilvusHybridStore()
             await milvus.ensure_collection()
             if chunks:
                 await milvus.add_chunks(chunks)
