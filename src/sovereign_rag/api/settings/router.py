@@ -103,6 +103,7 @@ def _snapshot() -> SettingsResponse:
         crag_incorrect_threshold=s.crag_incorrect_threshold,
         crag_max_corrections=s.crag_max_corrections,
         web_fallback_max_urls=s.web_fallback_max_urls,
+        enable_retrieval_trace=s.enable_retrieval_trace,
     )
 
 

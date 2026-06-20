@@ -48,6 +48,8 @@ class SettingsResponse(BaseModel):
     crag_incorrect_threshold: float
     crag_max_corrections: int
     web_fallback_max_urls: int
+    # Retrieval trace (inspector overlay)
+    enable_retrieval_trace: bool
 
 
 class SettingsPatch(BaseModel):
@@ -83,6 +85,8 @@ class SettingsPatch(BaseModel):
     crag_incorrect_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     crag_max_corrections: int | None = Field(default=None, ge=0, le=10)
     web_fallback_max_urls: int | None = Field(default=None, ge=1, le=20)
+    # Retrieval trace (inspector overlay)
+    enable_retrieval_trace: bool | None = None
 
 
 class ModelChoice(BaseModel):

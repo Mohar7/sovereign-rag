@@ -111,6 +111,11 @@ class Settings(BaseSettings):
     # crosses ~0.85 (saves LLM context on easy queries).
     rerank_score_floor: float = 0.0
     adaptive_rerank: bool = False
+    # Retrieval-trace capture for the inspector overlay. When on, retrieve_local
+    # runs shadow dense+BM25 passes and do_rerank keeps the full rerank ranking
+    # so the UI can show per-leg provenance. Purely observational — the answer
+    # path is unchanged. Off → byte-identical to no-trace behavior.
+    enable_retrieval_trace: bool = True
     # ---- Corrective RAG (CRAG) ----
     # Master toggle. Off by default so merging to main keeps the live /ask on the
     # linear graph until a later plan makes the API interrupt-aware.
