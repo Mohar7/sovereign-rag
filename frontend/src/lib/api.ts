@@ -241,6 +241,34 @@ export interface CitationModel {
   page: number | null
   score: number
   snippet: string
+  kind?: "hybrid" | "graph" | "vector" | "web"
+}
+
+export interface LegHit {
+  chunkId: string
+  rank: number
+  score: number
+}
+
+export interface TraceChunk {
+  chunkId: string
+  title: string
+  snippet: string
+  origin: "local" | "web"
+  denseRank: number | null
+  bm25Rank: number | null
+  graphRank: number | null
+  rerankRank: number | null
+  rerankScore: number | null
+  inTopK: boolean
+  cited: boolean
+}
+
+export interface RetrievalTrace {
+  legs: { dense: LegHit[]; bm25: LegHit[]; graph: LegHit[] }
+  chunks: TraceChunk[]
+  poolSize: number
+  topK: number
 }
 
 export interface AskOverrides {

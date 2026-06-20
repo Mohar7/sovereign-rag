@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import type { AskRequest, CandidateUrl, CitationModel, GradeLabel } from "@/lib/api"
+import type {
+  AskRequest,
+  CandidateUrl,
+  CitationModel,
+  GradeLabel,
+  RetrievalTrace,
+} from "@/lib/api"
 
 // ─────────────────────────────────────────────────────────────────
 // Event schema — must mirror api/ask/router.py:_stream_generator
@@ -40,6 +46,7 @@ export type StreamEvent =
       timings?: StageTimings
       fallback_used?: boolean
       grade?: GradeLabel | null
+      retrieval?: RetrievalTrace
     }
   | { type: "error"; message: string }
   | { type: "grade"; label: GradeLabel; confidence: number; reason: string }
