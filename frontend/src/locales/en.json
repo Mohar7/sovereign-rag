@@ -182,7 +182,17 @@
         "overridesUsed": "Overrides used",
         "citationsLabel": "Citations ({{count}})",
         "noCitations": "No citations attached to this turn.",
-        "serverDefaults": "Server defaults (no per-question overrides)."
+        "serverDefaults": "Server defaults (no per-question overrides).",
+        "retrieval": {
+          "title": "Retrieval",
+          "poolToTop": "pool {{pool}} → top {{top}}",
+          "chunk": "Chunk",
+          "dense": "Dense",
+          "bm25": "BM25",
+          "graph": "Graph",
+          "score": "Score",
+          "cited": "cited"
+        }
       },
       "viewTrace": "Open inspector",
       "copiedToast": "Copied.",

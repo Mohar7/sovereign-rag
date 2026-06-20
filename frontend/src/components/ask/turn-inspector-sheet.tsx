@@ -10,8 +10,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { RetrievalSection } from "@/components/ask/retrieval-section"
 import { formatCount, formatDecimal } from "@/lib/format"
-import type { AskOverrides, CitationModel } from "@/lib/api"
+import type { AskOverrides, CitationModel, RetrievalTrace } from "@/lib/api"
 
 export interface InspectableTurn {
   id: number
@@ -27,6 +28,8 @@ export interface InspectableTurn {
   agentSteps?: { tool: string }[]
   /** Total wall-clock ms for the request, populated on the final done event. */
   totalMs?: number
+  /** Per-leg + rerank provenance for this turn (inspector overlay). */
+  retrieval?: RetrievalTrace
 }
 
 interface Props {
@@ -96,6 +99,8 @@ export function TurnInspectorSheet({ turn, open, onOpenChange }: Props) {
                     <AgentToolTrace steps={turn.agentSteps ?? []} />
                   </Section>
                 )}
+
+                {turn.retrieval && <RetrievalSection trace={turn.retrieval} />}
 
                 <Section
                   icon={<User className="size-3.5" strokeWidth={2} />}

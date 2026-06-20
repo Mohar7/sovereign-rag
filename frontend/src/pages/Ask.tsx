@@ -133,6 +133,7 @@ export function AskPage() {
             threadId: final.thread_id,
             totalMs: final.timings?.total,
             fallbackUsed: final.fallback_used ?? t.fallbackUsed,
+            retrieval: final.retrieval ?? t.retrieval,
           }
         }),
       )
@@ -265,6 +266,7 @@ export function AskPage() {
         overrides: inspectedTurnRaw.overrides,
         agentSteps: inspectedTurnRaw.agentSteps,
         totalMs: inspectedTurnRaw.totalMs,
+        retrieval: inspectedTurnRaw.retrieval,
       }
     : null
 

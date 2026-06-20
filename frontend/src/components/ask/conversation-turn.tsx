@@ -7,7 +7,7 @@ import { ProcessBlock } from "@/components/ask/process-block"
 import { SourcesDisclosure } from "@/components/ask/sources-disclosure"
 import { AssistantTurn, UserTurn } from "@/components/ask/turns"
 import { Button } from "@/components/ui/button"
-import type { AskOverrides, CandidateUrl, CitationModel } from "@/lib/api"
+import type { AskOverrides, CandidateUrl, CitationModel, RetrievalTrace } from "@/lib/api"
 
 // ─────────────────────────────────────────────────────────────────
 // Turn — the data shape for one user↔assistant exchange.
@@ -38,6 +38,8 @@ export interface Turn {
   declined?: boolean
   /** Ordered agent tool steps for this turn (ReAct mode). */
   agentSteps?: { tool: string }[]
+  /** Per-leg + rerank retrieval provenance for this turn (inspector overlay). */
+  retrieval?: RetrievalTrace
 }
 
 // ─────────────────────────────────────────────────────────────────
