@@ -151,9 +151,7 @@ async def do_rerank(state: RAGState) -> dict[str, object]:
     if s.enable_retrieval_trace:
         scored = rerank_scores(state["question"], candidates)
         reranked = select_top_k(scored, settings=s, top_k=s.rerank_top_k)
-        trace_rerank = [
-            {"chunkId": c.chunk.chunk_id, "score": float(score)} for c, score in scored
-        ]
+        trace_rerank = [{"chunkId": c.chunk.chunk_id, "score": float(score)} for c, score in scored]
         return {"reranked": reranked, "retrieved": len(candidates), "trace_rerank": trace_rerank}
     reranked = rerank(state["question"], candidates, top_k=s.rerank_top_k)
     return {"reranked": reranked, "retrieved": len(candidates)}

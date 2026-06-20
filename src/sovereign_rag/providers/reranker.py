@@ -74,9 +74,7 @@ def rerank_scores(
     # CrossEncoder.predict accepts a list of (str, str) pairs at runtime; its
     # stubbed signature describes the multimodal superset, hence the ignore.
     scores = _ranker().predict(pairs, show_progress_bar=False)  # type: ignore[arg-type]
-    return sorted(
-        zip(candidates, scores, strict=True), key=lambda p: float(p[1]), reverse=True
-    )
+    return sorted(zip(candidates, scores, strict=True), key=lambda p: float(p[1]), reverse=True)
 
 
 def select_top_k(

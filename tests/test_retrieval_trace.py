@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sovereign_rag.providers.reranker as reranker_mod
+from sovereign_rag.api.ask.router import assemble_retrieval_payload
 from sovereign_rag.api.settings.schemas import SettingsPatch
 from sovereign_rag.config import Settings
 from sovereign_rag.documents import Chunk, RetrievedChunk
@@ -76,8 +77,14 @@ def test_build_trace_joins_legs_rerank_and_cited() -> None:
     by_id = {c.chunk_id: c for c in trace.chunks}
     assert by_id["c9"].dense_rank == 1 and by_id["c9"].bm25_rank == 2
     assert by_id["c9"].graph_rank is None
-    assert by_id["c9"].rerank_rank == 1 and by_id["c9"].in_top_k is True and by_id["c9"].cited is True
-    assert by_id["c3"].graph_rank == 1 and by_id["c3"].rerank_rank == 2 and by_id["c3"].in_top_k is True
+    assert (
+        by_id["c9"].rerank_rank == 1 and by_id["c9"].in_top_k is True and by_id["c9"].cited is True
+    )
+    assert (
+        by_id["c3"].graph_rank == 1
+        and by_id["c3"].rerank_rank == 2
+        and by_id["c3"].in_top_k is True
+    )
     assert by_id["c1"].in_top_k is False and by_id["c1"].cited is False
     assert trace.pool_size == 3 and trace.top_k == 2
 
@@ -104,3 +111,25 @@ def test_citation_kind_mapping() -> None:
     assert citation_kind("milvus_hybrid", "doc_1") == "hybrid"
     assert citation_kind("milvus_bm25", "") == "hybrid"
     assert citation_kind("", "") == "hybrid"
+
+
+def test_assemble_retrieval_payload_from_state() -> None:
+    final_state = {
+        "trace_legs": {
+            "dense": [{"chunkId": "c1", "rank": 1, "score": 0.9}],
+            "bm25": [{"chunkId": "c1", "rank": 2, "score": 3.0}],
+            "graph": [],
+        },
+        "trace_pool_meta": {"c1": {"title": "T", "snippet": "s", "origin": "local"}},
+        "trace_rerank": [{"chunkId": "c1", "score": 5.0}],
+        "rerank_top_k": 5,
+    }
+    payload = assemble_retrieval_payload(final_state, [{"chunk_id": "c1"}])
+    assert payload is not None
+    assert payload["poolSize"] == 1
+    assert payload["chunks"][0]["cited"] is True
+    assert payload["legs"]["dense"][0]["chunkId"] == "c1"
+
+
+def test_assemble_retrieval_payload_absent_returns_none() -> None:
+    assert assemble_retrieval_payload({}, []) is None

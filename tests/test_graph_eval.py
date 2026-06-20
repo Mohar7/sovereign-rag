@@ -66,6 +66,9 @@ def stub_eval_graph(monkeypatch: pytest.MonkeyPatch) -> None:
         return [_rc("local async note", 0.4)]
 
     monkeypatch.setattr(nodes, "rerank", fake_rerank)
+    # do_rerank's trace path calls rerank_scores/select_top_k directly, bypassing
+    # the `rerank` stub above. Disable the trace so the stub drives the grade.
+    monkeypatch.setattr(nodes.get_settings(), "enable_retrieval_trace", False, raising=False)
 
     async def fake_grade(question, reranked, settings, **kw):  # type: ignore[no-untyped-def]
         top = reranked[0].score if reranked else 0.0

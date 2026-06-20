@@ -37,6 +37,7 @@ from sovereign_rag.api.ask.schemas import (
 from sovereign_rag.api.dependencies import GraphDep
 from sovereign_rag.api.runs import record_run
 from sovereign_rag.config import get_settings
+from sovereign_rag.retrieval.trace import LegHit, build_trace, trace_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -278,6 +279,38 @@ def _sse(payload: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(payload, default=str)}\n\n".encode()
 
 
+def assemble_retrieval_payload(
+    final_state: dict[str, Any], citations: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Build the serialized RetrievalTrace from graph final-state, or None.
+
+    Best-effort: returns None if trace fields are absent (flag off) or on any
+    assembly error — the caller then simply omits ``retrieval`` from ``done``.
+    """
+    legs_raw = final_state.get("trace_legs")
+    rerank_raw = final_state.get("trace_rerank")
+    if not legs_raw or rerank_raw is None:
+        return None
+    try:
+        legs = {
+            key: [LegHit(h["chunkId"], int(h["rank"]), float(h["score"])) for h in hits]
+            for key, hits in legs_raw.items()
+        }
+        rerank_ranking = [(r["chunkId"], float(r["score"])) for r in rerank_raw]
+        cited = {str(c.get("chunk_id")) for c in citations if c.get("chunk_id") is not None}
+        trace = build_trace(
+            legs=legs,
+            rerank_ranking=rerank_ranking,
+            top_k=int(final_state.get("rerank_top_k") or get_settings().rerank_top_k),
+            pool_meta=final_state.get("trace_pool_meta") or {},
+            cited_chunk_ids=cited,
+        )
+        return trace_to_dict(trace)
+    except Exception:
+        logger.warning("assemble_retrieval_payload failed", exc_info=True)
+        return None
+
+
 async def _stream_generator(
     graph: Any,
     initial: Any,
@@ -465,19 +498,21 @@ async def _stream_generator(
         decision=decision,
         correction_attempts=int(final_state.get("correction_attempts", 0)),
     )
-    yield _sse(
-        {
-            "type": "done",
-            "thread_id": thread_id,
-            "answer": final_state.get("answer"),
-            "citations": citations,
-            "retrieved": int(final_state.get("retrieved", 0)),
-            "used": int(final_state.get("used", 0)),
-            "timings": timings_payload,
-            "fallback_used": bool(final_state.get("fallback_used", False)),
-            "grade": final_state.get("grade"),
-        }
-    )
+    done_event: dict[str, Any] = {
+        "type": "done",
+        "thread_id": thread_id,
+        "answer": final_state.get("answer"),
+        "citations": citations,
+        "retrieved": int(final_state.get("retrieved", 0)),
+        "used": int(final_state.get("used", 0)),
+        "timings": timings_payload,
+        "fallback_used": bool(final_state.get("fallback_used", False)),
+        "grade": final_state.get("grade"),
+    }
+    retrieval_payload = assemble_retrieval_payload(final_state, citations)
+    if retrieval_payload is not None:
+        done_event["retrieval"] = retrieval_payload
+    yield _sse(done_event)
 
 
 @router.post("/ask/stream")
