@@ -201,7 +201,9 @@ def _row_to_retrieved_chunk(row: dict[str, Any]) -> RetrievedChunk:
         chunk_id=row["chunk_id"],
         metadata=metadata,
     )
-    return RetrievedChunk(chunk=chunk, score=float(row["score"]), source="graph")
+    return RetrievedChunk(
+        chunk=chunk, score=float(row["score"]), source="graph", origin_source="graph"
+    )
 
 
 def _chunk_to_param(chunk: Chunk, embedding: list[float]) -> dict[str, Any]:

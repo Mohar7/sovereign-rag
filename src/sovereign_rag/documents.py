@@ -74,6 +74,9 @@ class RetrievedChunk:
     chunk: Chunk
     score: float
     source: str  # "milvus_dense" | "milvus_bm25" | "milvus_hybrid" | "graph" | "reranked"
+    # The original retriever leg, preserved even after rerank rewrites `source`
+    # to "reranked". Drives Citation.kind and the inspector's provenance trace.
+    origin_source: str = ""
 
 
 __all__ = ["Chunk", "RetrievedChunk", "SourceDocument", "SourceType"]

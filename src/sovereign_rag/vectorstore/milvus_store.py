@@ -128,7 +128,7 @@ def hit_to_retrieved_chunk(hit: dict[str, Any], source: str) -> RetrievedChunk:
         chunk_id=str(entity.get(_F_CHUNK_ID, "")),
         metadata=metadata,
     )
-    return RetrievedChunk(chunk=chunk, score=score, source=source)
+    return RetrievedChunk(chunk=chunk, score=score, source=source, origin_source=source)
 
 
 def escape_filter_value(value: str) -> str:
