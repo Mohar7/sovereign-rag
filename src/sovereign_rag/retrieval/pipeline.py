@@ -48,6 +48,7 @@ class Citation:
     page: int | None
     score: float
     snippet: str
+    kind: str = "hybrid"  # "hybrid" | "graph" | "vector" | "web" — provenance for the UI
 
 
 @dataclass(slots=True)
@@ -209,6 +210,21 @@ class RAGPipeline:
 # ---------- pure helpers (unit-testable without services) ----------
 
 
+def citation_kind(origin_source: str, source_uri: str) -> str:
+    """Map a chunk's origin leg + uri to a UI citation kind.
+
+    A web-fallback document (http uri) is always ``web``; otherwise the kind
+    reflects which retriever leg first found the chunk.
+    """
+    if source_uri and source_uri.lower().startswith(("http://", "https://")):
+        return "web"
+    if origin_source == "graph":
+        return "graph"
+    if origin_source == "milvus_dense":
+        return "vector"
+    return "hybrid"
+
+
 def _dedup_by_chunk(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
     """Keep the highest-scoring instance of each chunk_id across retrievers."""
     best: dict[str, RetrievedChunk] = {}
@@ -235,9 +251,10 @@ def _format_context(retrieved: list[RetrievedChunk]) -> tuple[str, list[Citation
                 page=c.page,
                 score=rc.score,
                 snippet=c.raw_text[:240],
+                kind=citation_kind(rc.origin_source, str(c.metadata.get("source_uri", ""))),
             )
         )
     return "\n\n".join(lines), citations
 
 
-__all__ = ["AnswerResult", "Citation", "RAGPipeline"]
+__all__ = ["AnswerResult", "Citation", "RAGPipeline", "citation_kind"]

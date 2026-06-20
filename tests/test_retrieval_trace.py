@@ -4,6 +4,7 @@ import sovereign_rag.providers.reranker as reranker_mod
 from sovereign_rag.api.settings.schemas import SettingsPatch
 from sovereign_rag.config import Settings
 from sovereign_rag.documents import Chunk, RetrievedChunk
+from sovereign_rag.retrieval.pipeline import citation_kind
 from sovereign_rag.retrieval.trace import LegHit, build_trace, trace_to_dict
 
 
@@ -94,3 +95,12 @@ def test_trace_to_dict_is_camel_case() -> None:
     assert d["legs"]["dense"][0] == {"chunkId": "c1", "rank": 1, "score": 0.5}
     assert d["chunks"][0]["denseRank"] == 1 and d["chunks"][0]["rerankRank"] == 1
     assert d["chunks"][0]["inTopK"] is True
+
+
+def test_citation_kind_mapping() -> None:
+    assert citation_kind("milvus_hybrid", "https://x.com/a") == "web"
+    assert citation_kind("graph", "file:///x.pdf") == "graph"
+    assert citation_kind("milvus_dense", "doc_1") == "vector"
+    assert citation_kind("milvus_hybrid", "doc_1") == "hybrid"
+    assert citation_kind("milvus_bm25", "") == "hybrid"
+    assert citation_kind("", "") == "hybrid"
