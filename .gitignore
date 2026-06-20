@@ -60,3 +60,7 @@ design/
 .vscode/
 .DS_Store
 .envrc
+
+# Local-only ingest corpus + runtime progress (mkbank assistant)
+docs/context-docs/
+.ingest-context-progress.json

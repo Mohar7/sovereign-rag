@@ -14,9 +14,11 @@ import asyncio
 import logging
 from pathlib import Path
 
-from docling.datamodel.base_models import ConversionStatus
+from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
+from docling.datamodel.base_models import ConversionStatus, InputFormat
 from docling.datamodel.document import ConversionResult
-from docling.document_converter import DocumentConverter
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
 
 from sovereign_rag.documents import SourceDocument, SourceType
 
@@ -46,10 +48,25 @@ def _title_for(result: ConversionResult, path: Path) -> str:
     return path.stem
 
 
+def _build_converter() -> DocumentConverter:
+    """Docling converter with the PDF pipeline pinned to CPU.
+
+    Apple-Silicon MPS cannot perform the float64 dtype conversion Docling's PDF
+    layout/OCR models do — on auto/MPS it raises "Cannot convert a MPS Tensor to
+    float64". DOCX conversion uses no vision model, so it is unaffected and keeps
+    the default device; only ``InputFormat.PDF`` is overridden.
+    """
+    pdf_opts = PdfPipelineOptions(
+        accelerator_options=AcceleratorOptions(device=AcceleratorDevice.CPU)
+    )
+    return DocumentConverter(
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_opts)}
+    )
+
+
 def _convert(path: Path) -> ConversionResult:
     """Synchronous Docling conversion. Runs off the event loop via to_thread."""
-    converter = DocumentConverter()
-    return converter.convert(path)
+    return _build_converter().convert(path)
 
 
 async def parse_file(path: str | Path) -> SourceDocument:

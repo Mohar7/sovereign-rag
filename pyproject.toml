@@ -99,6 +99,11 @@ ignore = ["E501", "S101", "B008", "S105", "S104"]
 "src/sovereign_rag/ingestion/product_md.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/test_product_md_parser.py" = ["RUF001", "RUF002", "RUF003"]
 "scripts/ingest_product_md.py" = ["T20"]
+# context-docs corpus is Uzbek Cyrillic — the in-force filter and tests match
+# Cyrillic that ruff flags as visually ambiguous with Latin (о, с, а, …).
+"src/sovereign_rag/ingestion/context_docs.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_context_docs_ingestion.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/ingest_context_docs.py" = ["T20", "RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 python_version = "3.12"
