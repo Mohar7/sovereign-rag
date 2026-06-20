@@ -20,7 +20,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from sovereign_rag.config import get_settings
+from sovereign_rag.config import Settings, get_settings
 from sovereign_rag.documents import RetrievedChunk
 
 if TYPE_CHECKING:
@@ -60,70 +60,78 @@ def _ranker() -> CrossEncoder:
     )
 
 
-def rerank(
-    query: str, candidates: list[RetrievedChunk], top_k: int | None = None
-) -> list[RetrievedChunk]:
-    """Rerank ``candidates`` against ``query``; return the top_k by score.
+def rerank_scores(
+    query: str, candidates: list[RetrievedChunk]
+) -> list[tuple[RetrievedChunk, float]]:
+    """Cross-encode every candidate; return ``(chunk, score)`` sorted desc.
 
-    Honours three Settings knobs:
-
-    * ``rerank_top_k`` — hard cap on the returned count (legacy behaviour).
-    * ``rerank_score_floor`` — drops chunks below this raw score from the
-      result. 0 disables. The SettingsPanel slider exposes it as 0..1.
-    * ``adaptive_rerank`` — when ON, stops collecting once the running
-      score-mass crosses 0.85, even if we're below ``top_k``. Keeps the LLM
-      context lean for easy queries; ``top_k`` is still respected as the
-      upper bound.
-
-    The returned chunks carry the reranker score (not the original retrieval
-    score) and ``source="reranked"``, so downstream code can tell first-stage
-    scores from rerank scores.
+    The FULL ranking — no score-floor, no truncation. The inspector trace uses
+    this to show how the reranker reordered the whole candidate pool.
     """
     if not candidates:
         return []
-    s = get_settings()
-    top_k = top_k or s.rerank_top_k
-
     pairs: list[tuple[str, str]] = [(query, c.chunk.text) for c in candidates]
     # CrossEncoder.predict accepts a list of (str, str) pairs at runtime; its
     # stubbed signature describes the multimodal superset, hence the ignore.
     scores = _ranker().predict(pairs, show_progress_bar=False)  # type: ignore[arg-type]
-
-    paired = sorted(
-        zip(candidates, scores, strict=True),
-        key=lambda p: float(p[1]),
-        reverse=True,
+    return sorted(
+        zip(candidates, scores, strict=True), key=lambda p: float(p[1]), reverse=True
     )
 
-    # Apply the score floor before adaptive truncation so the floor takes
-    # precedence: a chunk that doesn't clear the bar never contributes mass.
-    if s.rerank_score_floor > 0:
-        paired = [(c, score) for c, score in paired if float(score) >= s.rerank_score_floor]
 
-    # Adaptive truncation: once cumulative softmax-ish mass crosses 0.85,
-    # stop collecting. Mass is the share of the head's total score (kept
-    # cheap; we don't softmax). top_k stays the upper bound.
-    if s.adaptive_rerank and paired:
-        total = sum(max(0.0, float(score)) for _, score in paired[:top_k]) or 1.0
+def select_top_k(
+    scored: list[tuple[RetrievedChunk, float]], *, settings: Settings, top_k: int
+) -> list[RetrievedChunk]:
+    """Apply score-floor + adaptive truncation + ``top_k`` to a scored ranking.
+
+    Output chunks carry the reranker score, ``source="reranked"`` and the
+    input's ``origin_source`` (so downstream still knows which retriever leg
+    first found each chunk).
+    """
+    paired = scored
+    # Floor before adaptive truncation so a chunk that doesn't clear the bar
+    # never contributes mass.
+    if settings.rerank_score_floor > 0:
+        paired = [(c, sc) for c, sc in paired if float(sc) >= settings.rerank_score_floor]
+    # Adaptive truncation: once cumulative score-mass crosses 0.85, stop
+    # collecting (top_k stays the upper bound).
+    if settings.adaptive_rerank and paired:
+        total = sum(max(0.0, float(sc)) for _, sc in paired[:top_k]) or 1.0
         running = 0.0
         kept: list[tuple[RetrievedChunk, float]] = []
-        for c, score in paired[:top_k]:
-            kept.append((c, score))
-            running += max(0.0, float(score))
+        for c, sc in paired[:top_k]:
+            kept.append((c, sc))
+            running += max(0.0, float(sc))
             if running / total >= 0.85:
                 break
         paired = kept
     else:
         paired = paired[:top_k]
-
     return [
         RetrievedChunk(
             chunk=original.chunk,
             score=float(score),
             source="reranked",
+            origin_source=original.origin_source,
         )
         for original, score in paired
     ]
 
 
-__all__ = ["rerank"]
+def rerank(
+    query: str, candidates: list[RetrievedChunk], top_k: int | None = None
+) -> list[RetrievedChunk]:
+    """Rerank ``candidates`` against ``query``; return the top_k by score.
+
+    Honours ``rerank_top_k`` (cap), ``rerank_score_floor`` (drop weak chunks),
+    and ``adaptive_rerank`` (stop once cumulative score-mass crosses 0.85). The
+    returned chunks carry the reranker score and ``source="reranked"``.
+    """
+    if not candidates:
+        return []
+    s = get_settings()
+    top_k = top_k or s.rerank_top_k
+    return select_top_k(rerank_scores(query, candidates), settings=s, top_k=top_k)
+
+
+__all__ = ["rerank", "rerank_scores", "select_top_k"]
