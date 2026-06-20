@@ -8,6 +8,7 @@ import type { CitationModel } from "@/lib/api"
  * be shared without tripping react-refresh's only-export-components rule.
  */
 export function pickKind(c: CitationModel): CitationKind {
+  if (c.kind) return c.kind
   if (c.source_uri && /^https?:\/\//i.test(c.source_uri)) return "web"
   return "hybrid"
 }
