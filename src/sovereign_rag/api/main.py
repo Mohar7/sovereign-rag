@@ -34,6 +34,7 @@ from sovereign_rag.api.health.router import router as health_router
 from sovereign_rag.api.ingest.router import root_router as ingest_root_router
 from sovereign_rag.api.ingest.router import router as ingest_router
 from sovereign_rag.api.library.router import router as library_router
+from sovereign_rag.api.reindex.router import router as reindex_router
 from sovereign_rag.api.runs import ensure_runs_table
 from sovereign_rag.api.runs.router import router as runs_router
 from sovereign_rag.api.settings import ensure_settings_table, load_and_apply_overrides
@@ -124,6 +125,7 @@ app.include_router(admin_router)
 # /api/* — the frontend's primary contract.
 app.include_router(health_router)
 app.include_router(settings_router)
+app.include_router(reindex_router)
 app.include_router(library_router)
 app.include_router(sources_router)
 app.include_router(threads_router)

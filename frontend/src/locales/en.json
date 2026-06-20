@@ -537,10 +537,17 @@
       },
       "embeddings": {
         "title": "Embeddings",
-        "subtitle": "Embedding provider + model. Pinned to the schema baked into Milvus — change via .env, then reindex.",
+        "subtitle": "Embedding provider + model. Changing the model re-embeds the whole corpus — the dimension is derived from the model.",
         "provider": "Provider",
         "model": "Model",
-        "dimension": "Dimension"
+        "dimension": "Dimension",
+        "save": "Re-embed",
+        "cancel": "Cancel",
+        "confirmBody": "Switch embeddings to {{model}}? This re-embeds the entire corpus and retrieval is unavailable until it finishes.",
+        "reindexing": "Re-embedding the corpus…",
+        "progress": "{{done}}/{{total}} chunks",
+        "done": "Re-embed complete",
+        "error": "Re-embed failed: {{message}}"
       },
       "indexing": {
         "title": "Indexing",

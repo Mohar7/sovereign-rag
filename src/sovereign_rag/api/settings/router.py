@@ -11,6 +11,7 @@ next graph run picks up the new model immediately.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -18,6 +19,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 
 from sovereign_rag.api.settings.schemas import (
+    EMBED_FIELDS,
     LLM_FIELDS,
     ModelChoice,
     SettingsPatch,
@@ -29,6 +31,7 @@ from sovereign_rag.api.settings.service import (
     persist_overrides,
 )
 from sovereign_rag.config import get_settings
+from sovereign_rag.embeddings_registry import dim_for_model
 
 logger = logging.getLogger(__name__)
 
@@ -115,9 +118,46 @@ async def settings_get() -> SettingsResponse:
     return _snapshot()
 
 
+# Strong refs to in-flight background reembed tasks so the event loop doesn't
+# garbage-collect them mid-run (a bare create_task is only weakly referenced).
+_BG_TASKS: set[asyncio.Task[Any]] = set()
+
+
+def _launch_reembed() -> None:
+    """Fire-and-forget the corpus re-embed; progress polled via /api/reindex/status."""
+    from sovereign_rag.reindex import get_reindex_state, reembed_corpus
+
+    # Flip to "running" synchronously so the first status poll never sees a stale
+    # "done"/"idle" from a previous run before the task gets scheduled.
+    get_reindex_state().status = "running"
+    task = asyncio.create_task(reembed_corpus())
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
+
+
 @router.patch("/settings", response_model=SettingsResponse)
 async def settings_patch(patch: SettingsPatch) -> SettingsResponse:
     changed = patch.model_dump(exclude_none=True)
+    # Embedding changes are a stateful migration, not a hot toggle: derive the
+    # dimension from the chosen model (never trust a client-sent dim) and, after
+    # persisting, kick off a corpus re-embed. Refuse if one is already running.
+    embed_touched = any(f in EMBED_FIELDS for f in changed)
+    if embed_touched:
+        from sovereign_rag.reindex import get_reindex_state
+
+        if get_reindex_state().status == "running":
+            raise HTTPException(409, "a reindex is already running")
+        s = get_settings()
+        provider = str(changed.get("embed_provider", s.embed_provider))
+        model = (
+            changed.get("openai_embed_model")
+            or changed.get("embed_model")
+            or (s.openai_embed_model if provider == "openai" else s.embed_model)
+        )
+        try:
+            changed["embed_dim"] = dim_for_model(provider, str(model))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
     # Persist first so a change that can't be saved fails loudly instead of
     # silently taking effect for this process only and vanishing on restart.
     if changed:
@@ -132,6 +172,9 @@ async def settings_patch(patch: SettingsPatch) -> SettingsResponse:
     # so the next ``get_chat_model()`` call builds with the new wire config.
     if any(f in LLM_FIELDS for f in applied):
         bust_llm_cache()
+    # An embedding change requires re-embedding the corpus at the new dimension.
+    if embed_touched:
+        _launch_reembed()
     return _snapshot()
 
 

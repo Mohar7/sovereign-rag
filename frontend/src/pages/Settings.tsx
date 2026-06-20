@@ -45,6 +45,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { GradeBandSlider } from "@/components/crag/grade-band-slider"
 import { Stepper } from "@/components/crag/stepper"
 import { ValueSlider } from "@/components/crag/value-slider"
+import { EmbeddingsSection } from "@/components/settings/embeddings-section"
 import { useHealth } from "@/hooks/use-ask"
 import { useModels, useSettings, useUpdateSettings } from "@/hooks/use-settings"
 import type { ModelChoice, ServiceStatus, SettingsResponse } from "@/lib/api"
@@ -402,19 +403,10 @@ function ModelTab({ draft, patch }: TabProps) {
         title={t("pages.settings.embeddings.title")}
         subtitle={t("pages.settings.embeddings.subtitle")}
       >
-        <ReadOnlyRow
-          label={t("pages.settings.embeddings.provider")}
-          value={draft.embed_provider}
-        />
-        <ReadOnlyRow
-          label={t("pages.settings.embeddings.model")}
-          value={draft.embed_model}
-          mono
-        />
-        <ReadOnlyRow
-          label={t("pages.settings.embeddings.dimension")}
-          value={String(draft.embed_dim)}
-          mono
+        <EmbeddingsSection
+          provider={draft.embed_provider}
+          model={draft.embed_model}
+          dim={draft.embed_dim}
         />
       </SectionCard>
     </div>

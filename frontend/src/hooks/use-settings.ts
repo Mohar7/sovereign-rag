@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   api,
+  type EmbedModel,
   type ModelChoice,
   type SettingsPatch,
   type SettingsResponse,
@@ -32,5 +33,13 @@ export function useModels(provider: "ollama" | "openai") {
     queryFn: () => api.listModels(provider),
     staleTime: 30_000,
     retry: 1,
+  })
+}
+
+export function useEmbedModels() {
+  return useQuery<EmbedModel[]>({
+    queryKey: ["embed-models"],
+    queryFn: api.getEmbedModels,
+    staleTime: 5 * 60_000,
   })
 }

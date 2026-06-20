@@ -62,6 +62,13 @@ class SettingsPatch(BaseModel):
     openai_chat_model_light: str | None = Field(default=None, max_length=200)
     openai_chat_model_nano: str | None = Field(default=None, max_length=200)
     llm_temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    # Embeddings — changing these triggers a re-embed migration. ``embed_dim`` is
+    # DERIVED from the model server-side (never sent by the client) but is accepted
+    # here so the server can persist/apply it through the same schema.
+    embed_provider: str | None = Field(default=None, pattern="^(openai|ollama)$")
+    openai_embed_model: str | None = Field(default=None, max_length=200)
+    embed_model: str | None = Field(default=None, max_length=200)
+    embed_dim: int | None = Field(default=None, ge=1, le=8192)
     # Retrieval
     retrieve_top_k: int | None = Field(default=None, ge=1, le=500)
     rerank_top_k: int | None = Field(default=None, ge=1, le=50)
@@ -115,4 +122,16 @@ LLM_FIELDS: frozenset[str] = frozenset(
 )
 
 
-__all__ = ["LLM_FIELDS", "ModelChoice", "SettingsPatch", "SettingsResponse"]
+# Fields that, when patched, require a corpus re-embed (the embedding model/dim
+# changed). ``embed_dim`` is intentionally NOT here — it is derived + persisted
+# alongside the model, and must not itself re-trigger the migration.
+EMBED_FIELDS: frozenset[str] = frozenset(
+    {
+        "embed_provider",
+        "openai_embed_model",
+        "embed_model",
+    },
+)
+
+
+__all__ = ["EMBED_FIELDS", "LLM_FIELDS", "ModelChoice", "SettingsPatch", "SettingsResponse"]

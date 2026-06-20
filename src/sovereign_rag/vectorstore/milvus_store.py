@@ -97,6 +97,32 @@ def chunk_to_row(chunk: Chunk, dense: list[float]) -> dict[str, Any]:
     }
 
 
+def row_to_chunk(row: dict[str, Any]) -> Chunk:
+    """Inverse of ``chunk_to_row`` (minus the vectors) — reconstruct a ``Chunk``.
+
+    Pure function. Used by ``export_chunks`` to read the corpus back for
+    re-embedding. ``page == -1`` is mapped back to ``None``.
+    """
+    raw_page = row.get(_F_PAGE, _PAGE_NONE)
+    page: int | None = None if raw_page is None or raw_page == _PAGE_NONE else int(raw_page)
+    metadata: dict[str, Any] = {}
+    title = row.get(_F_TITLE)
+    source_uri = row.get(_F_SOURCE_URI)
+    if title:
+        metadata["title"] = title
+    if source_uri:
+        metadata["source_uri"] = source_uri
+    return Chunk(
+        doc_id=str(row.get(_F_DOC_ID, "")),
+        text=str(row.get(_F_TEXT, "")),
+        raw_text=str(row.get(_F_RAW_TEXT, "")),
+        position=int(row.get(_F_POSITION, 0)),
+        page=page,
+        chunk_id=str(row.get(_F_CHUNK_ID, "")),
+        metadata=metadata,
+    )
+
+
 def hit_to_retrieved_chunk(hit: dict[str, Any], source: str) -> RetrievedChunk:
     """Map one Milvus search hit to a `RetrievedChunk`.
 
@@ -274,6 +300,34 @@ class MilvusHybridStore:
         deleted = _delete_count(result)
         logger.info("Deleted %d chunks for doc_id=%s", deleted, doc_id)
         return deleted
+
+    async def export_chunks(self, *, batch: int = 1000) -> list[Chunk]:
+        """Read every chunk back (text + metadata, no vectors) for re-embedding.
+
+        Paginated ``query`` with an empty filter. Returns ``[]`` if the
+        collection is absent. Used by the reindex pipeline to snapshot the
+        corpus text before dropping/recreating the collection at a new dim.
+        """
+        if not await self._client.has_collection(self._collection):
+            return []
+        await self.ensure_collection()
+        out: list[Chunk] = []
+        offset = 0
+        while True:
+            rows = await self._client.query(
+                collection_name=self._collection,
+                filter="",
+                output_fields=_OUTPUT_FIELDS,
+                limit=batch,
+                offset=offset,
+            )
+            if not rows:
+                break
+            out.extend(row_to_chunk(r) for r in rows)
+            if len(rows) < batch:
+                break
+            offset += batch
+        return out
 
     # ----- reads -----------------------------------------------------------
 

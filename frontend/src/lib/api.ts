@@ -413,7 +413,11 @@ export interface SettingsResponse {
   web_fallback_max_urls: number
 }
 
-export type SettingsPatch = Partial<SettingsResponse>
+// ``openai_embed_model`` is not part of the read response (which reports the
+// resolved ``embed_model``), but the backend accepts it on PATCH.
+export type SettingsPatch = Partial<SettingsResponse> & {
+  openai_embed_model?: string
+}
 
 export interface ModelChoice {
   id: string
@@ -421,6 +425,20 @@ export interface ModelChoice {
   family?: string | null
   size?: string | null
   note?: string | null
+}
+
+export interface EmbedModel {
+  id: string
+  provider: "openai" | "ollama"
+  dim: number
+  label: string
+}
+
+export interface ReindexStatus {
+  status: "idle" | "running" | "done" | "error"
+  total: number
+  doneCount: number
+  error: string | null
 }
 
 // ---------- api ----------
@@ -501,6 +519,8 @@ export const api = {
     }),
   listModels: (provider: "ollama" | "openai") =>
     request<ModelChoice[]>(`/api/models?provider=${provider}`),
+  getEmbedModels: () => request<EmbedModel[]>("/api/embed-models"),
+  getReindexStatus: () => request<ReindexStatus>("/api/reindex/status"),
 
   // run history
   runsList: (limit = 50) => request<RunRow[]>(`/api/runs?limit=${limit}`),

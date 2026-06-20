@@ -255,6 +255,7 @@ class Neo4jGraphStore:
         password: str | None = None,
         database: str | None = None,
         embed_dim: int | None = None,
+        driver: AsyncDriver | None = None,
     ) -> None:
         s = get_settings()
         self._uri = uri or s.neo4j_uri
@@ -268,7 +269,7 @@ class Neo4jGraphStore:
         # property-key / label / relation-type schema-cache warnings; we
         # surface real schema errors elsewhere via try/except, so quieting
         # this class costs us nothing and cleans up the logs.
-        self._driver: AsyncDriver = AsyncGraphDatabase.driver(
+        self._driver: AsyncDriver = driver or AsyncGraphDatabase.driver(
             self._uri,
             auth=self._auth,
             notifications_disabled_categories=["UNRECOGNIZED"],
@@ -321,6 +322,34 @@ class Neo4jGraphStore:
             CHUNK_VECTOR_INDEX,
             self._embed_dim,
         )
+
+    async def reembed_chunks(self, chunks: list[Chunk]) -> int:
+        """Recompute ``c.embedding`` for the given chunks at the current dim.
+
+        Drops + recreates the vector index (its dimension is fixed at creation),
+        then re-embeds each chunk's ``text`` and writes it by ``chunk_id`` in one
+        batched UNWIND. Entities and relationships are left untouched. Returns the
+        number of chunks written.
+        """
+        await self._driver.execute_query(
+            f"DROP INDEX {CHUNK_VECTOR_INDEX} IF EXISTS", database_=self._database
+        )
+        await self.ensure_schema()  # recreate the index at self._embed_dim
+        if not chunks:
+            return 0
+        vectors = await embed_texts([c.text for c in chunks])
+        rows = [{"id": c.chunk_id, "emb": v} for c, v in zip(chunks, vectors, strict=True)]
+        await self._driver.execute_query(
+            "UNWIND $rows AS row "
+            "MATCH (c:Chunk {chunk_id: row.id}) "
+            "CALL db.create.setNodeVectorProperty(c, 'embedding', row.emb)",
+            rows=rows,
+            database_=self._database,
+        )
+        logger.info(
+            "reembed_chunks: updated %d chunk embeddings (dim=%d)", len(rows), self._embed_dim
+        )
+        return len(rows)
 
     # -- extraction --------------------------------------------------------
     async def _extract(self, text: str) -> Extraction:

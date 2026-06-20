@@ -159,6 +159,21 @@ def bust_llm_cache() -> None:
         logger.warning("could not clear llm_factory cache: %s", exc)
 
 
+def bust_embeddings_cache() -> None:
+    """Clear ``providers.ollama.get_embeddings`` so the next embed rebuilds it.
+
+    Embeddings are ``lru_cache``d (one embedder per process); after the model
+    changes the cache must be cleared or the old embedder keeps being used.
+    """
+    try:
+        from sovereign_rag.providers.ollama import get_embeddings
+
+        get_embeddings.cache_clear()
+        logger.info("get_embeddings cache cleared")
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("could not clear embeddings cache: %s", exc)
+
+
 async def load_and_apply_overrides() -> list[str]:
     """Startup hook: read persisted overrides and layer them onto env defaults.
 
@@ -171,6 +186,10 @@ async def load_and_apply_overrides() -> list[str]:
     applied = apply_to_settings(get_settings(), clean)
     if any(field in LLM_FIELDS for field in applied):
         bust_llm_cache()
+    from sovereign_rag.api.settings.schemas import EMBED_FIELDS
+
+    if any(field in EMBED_FIELDS for field in applied):
+        bust_embeddings_cache()
     if applied:
         logger.info(
             "applied %d persisted setting override(s): %s",
@@ -182,6 +201,7 @@ async def load_and_apply_overrides() -> list[str]:
 
 __all__ = [
     "apply_to_settings",
+    "bust_embeddings_cache",
     "bust_llm_cache",
     "coerce_overrides",
     "ensure_settings_table",
